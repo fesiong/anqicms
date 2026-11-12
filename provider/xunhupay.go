@@ -271,9 +271,14 @@ func (w *Website) QueryXunhupayPayment(payment *model.Payment, account *model.Pa
 
 // RefundXunhupayPayment 原路退款。虎皮椒只支持整单退款，没有退款金额参数，
 // 所以部分退款必须挡在这里 —— 否则会出现「后台显示已退款、实际只退了一部分」。
-func (w *Website) RefundXunhupayPayment(payment *model.Payment, account *model.PaymentAccount, refundAmount int64, reason string) error {
+//
+// 返回三态而不是 error：REFUNDING（RD）是**已经受理、钱还没到**，
+// 原来它和 CD 一样 return nil，调用方于是立刻把订单标成已退款并记退款流水 ——
+// 与 PayPal 的 PENDING 被当成完成是同一个错误。RD 现在保持待处理，
+// 由虎皮椒的退款通知（同一个 notify_url）或人工跟进收敛。
+func (w *Website) RefundXunhupayPayment(payment *model.Payment, account *model.PaymentAccount, refundAmount int64, reason string) (refundSettleState, error) {
 	if refundAmount > 0 && refundAmount < payment.Amount {
-		return fmt.Errorf("xunhupay does not support partial refund (order %s, refund %s)",
+		return refundSettlePending, fmt.Errorf("xunhupay does not support partial refund (order %s, refund %s)",
 			strconv.FormatInt(payment.Amount, 10), strconv.FormatInt(refundAmount, 10))
 	}
 	params := map[string]string{
@@ -282,23 +287,26 @@ func (w *Website) RefundXunhupayPayment(payment *model.Payment, account *model.P
 	}
 	raw, res, err := w.xunhupayApi(account, XunhupayPathRefund, params)
 	if err != nil {
-		return err
+		return refundSettlePending, err
 	}
 	var result struct {
 		RefundStatus payFlexString `json:"refund_status"`
 		RefundFee    payFlexString `json:"refund_fee"`
 	}
 	if err := json.Unmarshal(raw, &result); err != nil {
-		return fmt.Errorf("xunhupay refund decode failed: %v", err)
+		return refundSettlePending, fmt.Errorf("xunhupay refund decode failed: %v", err)
 	}
 	status := string(result.RefundStatus)
-	switch status {
-	case XunhupayStatusRefunded, XunhupayStatusRefunding:
-		return nil
-	case XunhupayStatusRefundFailed:
-		return errors.New("xunhupay refund failed")
+	switch xunhupayRefundState(status) {
+	case refundSettleDone:
+		return refundSettleDone, nil
+	case refundSettleFailed:
+		return refundSettleFailed, errors.New("xunhupay refund failed")
 	default:
-		// errcode=0 但状态不是预期值：不要静默当成功
-		return fmt.Errorf("xunhupay refund unexpected status: %q (errcode %d, errmsg %s)", status, res.Errcode, res.Errmsg)
+		if status != XunhupayStatusRefunding {
+			// errcode=0 但状态不是预期值：不要静默当成功，也不要当失败（可能只是没见过的新状态）
+			return refundSettlePending, fmt.Errorf("xunhupay refund unexpected status: %q (errcode %d, errmsg %s)", status, res.Errcode, res.Errmsg)
+		}
+		return refundSettlePending, nil
 	}
 }

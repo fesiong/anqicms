@@ -1380,7 +1380,32 @@ func createBalancePayment(ctx iris.Context, payment *model.Payment, order *model
 	payment.PayWay = config.PayWayBalance
 	payment.PaidTime = time.Now().Unix()
 	payment.TerraceId = strconv.FormatInt(payment.PaidTime, 10)
-	tx.Save(payment)
+	// 用 paid_time = 0 的条件更新抢占这张支付单：用户双击「余额支付」/前端重试会并发打进来，
+	// 原来是无条件 Save，两次都会扣一次余额、记一条付款流水。
+	res := tx.Model(&model.Payment{}).
+		Where("`id` = ? AND `paid_time` = 0", payment.Id).
+		Updates(map[string]interface{}{
+			"pay_way":    payment.PayWay,
+			"paid_time":  payment.PaidTime,
+			"terrace_id": payment.TerraceId,
+		})
+	if res.Error != nil || res.RowsAffected == 0 {
+		tx.Rollback()
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("PaymentFailed"),
+		})
+		return
+	}
+	if order.PaidTime > 0 || order.Status == config.OrderStatusRefunded {
+		// 订单已被另一张支付单付掉/已退款：不能再扣一次余额
+		tx.Rollback()
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("PaymentFailed"),
+		})
+		return
+	}
 	order.PaymentId = payment.PaymentId
 	tx.Save(order)
 

@@ -122,6 +122,7 @@ type PaypalWebhookResource struct {
 	CreateTime string `json:"create_time"`
 	UpdateTime string `json:"update_time"`
 	State      string `json:"state"`
+	Status     string `json:"status"`
 	Amount     struct {
 		Total    string `json:"total"`
 		Currency string `json:"currency"`
@@ -138,6 +139,14 @@ type PaypalWebhookResource struct {
 			OrderId string `json:"order_id"`
 		} `json:"related_ids"`
 	} `json:"supplementary_data"`
+	// PAYMENT.CAPTURE.REFUNDED 的 resource 是 capture，真实退款金额在
+	// seller_receivable_breakdown.total_refunded_amount（部分退款时与 capture 金额不同）
+	SellerReceivableBreakdown struct {
+		TotalRefundedAmount struct {
+			Value        string `json:"value"`
+			CurrencyCode string `json:"currency_code"`
+		} `json:"total_refunded_amount"`
+	} `json:"seller_receivable_breakdown"`
 }
 
 // MarkPaymentPaid 把支付单标记为已支付，并推进订单状态。
@@ -157,6 +166,15 @@ func (w *Website) MarkPaymentPaid(payment *model.Payment, terraceId, buyerId, bu
 	order, err := w.GetOrderInfoByOrderId(payment.OrderId)
 	if err != nil {
 		return err
+	}
+	if order.Status == config.OrderStatusRefunded || order.RefundStatus == config.OrderStatusRefunded {
+		// 迟到的付款通知：钱已经退给用户了，再把订单改回「已付款」会在财务上凭空多一笔收入，
+		// 而且退款流水和付款流水会对不上。这里直接吞掉（返回 nil 让 PayPal 别再重投）。
+		//
+		// 这条必须排在「订单已支付 → 需要人工退款」之前：已退款订单的 paid_time 本来就有值，
+		// 排在后面会先撞上那条 error，把一次正常的重复通知变成 500 让 PayPal 无限重投。
+		logPaymentEvent(w.CachePath, payment.PaymentId, "payment", "订单已退款，忽略迟到的付款通知")
+		return nil
 	}
 	if order.PaidTime > 0 {
 		// 订单已被另一张支付单付掉，这张单得人工退款，不能当成支付成功
@@ -212,7 +230,8 @@ func (w *Website) MarkPaymentPaid(payment *model.Payment, terraceId, buyerId, bu
 
 // GetPaymentInfoByPaypalResource 按 webhook 资源定位支付单。
 // CHECKOUT.ORDER.* 的 resource.id 就是 order id（= payment.terrace_id）；
-// PAYMENT.CAPTURE.* 的 resource.id 是 capture id，得用 related_ids.order_id 换算。
+// PAYMENT.CAPTURE.* 的 resource.id 是 capture id，得用 related_ids.order_id 换算，
+// 再退一步用 payments.capture_id 兜底（某些捕获事件的 resource 不带 related_ids）。
 func (w *Website) GetPaymentInfoByPaypalResource(res *PaypalWebhookResource) (*model.Payment, error) {
 	if res == nil {
 		return nil, errors.New("paypal webhook resource is nil")
@@ -226,7 +245,22 @@ func (w *Website) GetPaymentInfoByPaypalResource(res *PaypalWebhookResource) (*m
 			return p, nil
 		}
 	}
+	if p, err2 := w.GetPaymentInfoByCaptureId(res.Id); err2 == nil {
+		return p, nil
+	}
 	return nil, err
+}
+
+// GetPaymentInfoByCaptureId 按 PayPal capture id 找支付单（capture id 在付款/退款通知里出现）。
+func (w *Website) GetPaymentInfoByCaptureId(captureId string) (*model.Payment, error) {
+	if captureId == "" {
+		return nil, errors.New("capture id is empty")
+	}
+	var payment model.Payment
+	if err := w.DB.Where("`capture_id` = ?", captureId).Take(&payment).Error; err != nil {
+		return nil, err
+	}
+	return &payment, nil
 }
 
 func (w *Website) GetPaymentWays() []string {
@@ -397,89 +431,120 @@ func (w *Website) SavePaymentAccount(req *request.PaymentAccountRequest) (*model
 	return &account, nil
 }
 
-func (w *Website) ProcessPaypalEvent(event *paypal.WebhookEvent) {
-	// 添加超时控制
+// ProcessPaypalEvent 处理一条已验签通过的 PayPal 回调。
+//
+// 返回 error = 这条通知没处理成功（调用方应回非 2xx 让 PayPal 重投）；
+// 返回 nil = 已处理，或确定无需处理（未知事件 / 重复事件）。
+//
+// 幂等靠「状态迁移」而不是内存标记：MarkPaymentPaid 用 paid_time = 0 做闸门，
+// SuccessRefundOrder 用 order.status <> 已退款 做闸门。所以重投、后台操作与通知并发，
+// 都只会产生一笔付款流水 / 一笔退款流水。
+func (w *Website) ProcessPaypalEvent(event *paypal.WebhookEvent) error {
+	if event == nil {
+		return errors.New("paypal webhook event is nil")
+	}
+	if w.isDuplicateEvent(event.Id) {
+		logPaymentEvent(w.CachePath, event.Id, event.EventType, "duplicate event, skipped")
+		return nil
+	}
+	if err := w.handlePaypalEvent(event); err != nil {
+		// 处理失败不写去重标记：否则 PayPal 重投回来的这条会被当成重复事件直接吞掉，
+		// 一次临时故障就变成永久的丢单。
+		return err
+	}
+	w.markEventProcessed(event.Id)
+	return nil
+}
+
+func (w *Website) handlePaypalEvent(event *paypal.WebhookEvent) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// 使用事件ID进行幂等性检查
-	if w.isDuplicateEvent(ctx, event.Id) {
-		xlog.Warnf("Duplicate event detected: %s", event.Id)
-		return
-	}
-	// 获取payment信息
 	var resp PaypalWebhookResource
-	err := json.Unmarshal(event.Resource, &resp)
-	if err != nil {
-		xlog.Errorf("Failed to unmarshal resource: %v, %v", err, string(event.Resource))
-		return
+	if err := json.Unmarshal(event.Resource, &resp); err != nil {
+		return fmt.Errorf("解析 paypal resource 失败: %w", err)
 	}
 	payment, err := w.GetPaymentInfoByPaypalResource(&resp)
 	if err != nil {
-		xlog.Errorf("Failed to get payment info: %v", err)
-		return
+		return fmt.Errorf("未找到支付单（resource id=%s）: %w", resp.Id, err)
 	}
-
 	account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
 	if err != nil {
-		xlog.Errorf("Failed to get account info: %v", err)
-		return
+		return fmt.Errorf("未找到支付账号: %w", err)
 	}
-	var client *paypal.Client
-	client, err = paypal.NewClient(account.PayConfig.AppId, account.PayConfig.AppSecret, account.PayConfig.Sandbox == false)
+	client, err := newPaypalClient(account)
 	if err != nil {
-		// 处理token获取失败，换另一个账号
-		return
+		return fmt.Errorf("初始化 paypal client 失败: %w", err)
 	}
 	library.DebugLog(w.CachePath, "paypal_webhook", string(event.Resource))
-	// 根据事件类型路由处理
+
 	switch event.EventType {
 	case "CHECKOUT.ORDER.APPROVED":
-		// 执行capture
-		captureRes, err := client.OrderCapture(context.Background(), payment.TerraceId, nil)
-		if err != nil {
-			log.Println("capture err", err)
-			return
+		// 用户已授权，立刻扣款（否则 PayPal 那边只是 APPROVED，钱没到账）
+		captureRes, cErr := client.OrderCapture(ctx, payment.TerraceId, nil)
+		if cErr != nil {
+			return fmt.Errorf("capture 订单失败: %w", cErr)
 		}
-		library.DebugLog(w.CachePath, "paypalCapture", captureRes.Response)
-		if captureRes.Code == 0 {
-			// todo
-		} else {
-			log.Println("captureRes err", captureRes.Error)
+		if captureRes.Code != paypal.Success {
+			return fmt.Errorf("capture 订单失败: %s", captureRes.Error)
 		}
+		w.savePaypalCaptureId(payment, firstPaypalCaptureId(captureRes.Response))
+		return nil
 	case "PAYMENT.CAPTURE.COMPLETED":
-		// 付款捕获完成（资金已到账）
+		// 先记住 capture id —— 退款接口只认它
+		w.savePaypalCaptureId(payment, resp.Id)
 		payment.PayWay = config.PayWayPaypal
-		err = w.TraceQuery(payment)
+		return w.TraceQuery(payment)
 	case "PAYMENT.CAPTURE.DENIED":
-		order, err := w.GetOrderInfoByOrderId(payment.OrderId)
-		if err == nil {
-			_ = w.SetOrderCanceled(order)
+		order, oErr := w.GetOrderInfoByOrderId(payment.OrderId)
+		if oErr != nil {
+			return oErr
 		}
+		if order.PaidTime > 0 || order.Status == config.OrderStatusRefunded {
+			// 已付款/已退款的订单不能因为一条 DENIED 通知被取消掉
+			logPaymentEvent(w.CachePath, event.Id, event.EventType,
+				fmt.Sprintf("order %s paid/refunded, ignore DENIED", order.OrderId))
+			return nil
+		}
+		return w.SetOrderCanceled(order)
 	case "PAYMENT.CAPTURE.REFUNDED":
-		//order, err := w.GetOrderInfoByOrderId(payment.OrderId)
-		//if err == nil {
-		//	err = w.ApplyOrderRefund(order)
-		//	err = w.SetOrderRefund(order, 1)
-		//}
+		return w.handlePaypalCaptureRefunded(payment, &resp)
 	case "CHECKOUT.ORDER.COMPLETED":
 		payment.PayWay = config.PayWayPaypal
-		err = w.TraceQuery(payment)
+		return w.TraceQuery(payment)
 	default:
-		xlog.Warnf("Unhandled event type: %s", event.EventType)
+		logPaymentEvent(w.CachePath, event.Id, event.EventType, "unhandled event type")
+		return nil
 	}
 }
 
-func (w *Website) isDuplicateEvent(ctx context.Context, eventId string) bool {
-	var eventIdExists bool
-	err := w.Cache.Get(eventId, &eventIdExists)
-	if err != nil {
+// isDuplicateEvent 事件是否已经处理过（只读）。
+//
+// 原来的实现「查到了也返回 false、没查到也只 Set 不返回」= 永远不去重。
+// 现在读和写分开：处理成功后才 markEventProcessed，处理失败不写，
+// 这样 PayPal 重投才有意义。缓存不是原子的（读与写之间有窗口），
+// 最终一致性由 MarkPaymentPaid / SuccessRefundOrder 的状态闸门兜住。
+func (w *Website) isDuplicateEvent(eventId string) bool {
+	if eventId == "" || w.Cache == nil {
 		return false
 	}
-	// 保留30秒的缓存
-	_ = w.Cache.Set(eventId, true, 30)
-
+	var seen bool
+	if err := w.Cache.Get(w.paypalEventKey(eventId), &seen); err == nil && seen {
+		return true
+	}
 	return false
+}
+
+func (w *Website) markEventProcessed(eventId string) {
+	if eventId == "" || w.Cache == nil {
+		return
+	}
+	// PayPal 的通知重投最长持续 3 天，缓存留 7 天
+	_ = w.Cache.Set(w.paypalEventKey(eventId), true, 7*24*3600)
+}
+
+func (w *Website) paypalEventKey(eventId string) string {
+	return "paypal_event_" + eventId
 }
 
 func (w *Website) UpdatePaypalWebhook(account *model.PaymentAccount) {

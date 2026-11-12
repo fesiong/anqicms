@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 	"github.com/go-pay/gopay"
 	"github.com/go-pay/gopay/alipay"
 	"github.com/go-pay/gopay/paypal"
-	"github.com/go-pay/gopay/wechat"
 	"github.com/stripe/stripe-go/v82"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -496,96 +494,49 @@ func (w *Website) SetOrderCanceled(order *model.Order) error {
 }
 
 func (w *Website) SetOrderRefund(order *model.Order, status int) error {
-	refund, err := w.GetOrderRefundByOrderId(order.OrderId)
+	// 后台可能在没有「用户申请」的情况下直接退款（PayPal 后台发起退款再回站点操作也一样），
+	// 缺申请单就补一张，别在第一步就 record not found。
+	refund, err := w.ensureOrderRefund(order, order.Amount)
 	if err != nil {
 		return err
 	}
+	// refundSettled 表示某个渠道分支已经自己完成了订单/流水的收尾，跳过公共收尾，
+	// 否则会给同一笔退款再记一次账。
+	refundSettled := false
 	// todo 金钱原路退回
 	if status == 1 {
 		payment, err := w.GetPaymentInfoByPaymentId(order.PaymentId)
 		if err != nil {
 			return err
 		}
-		if payment.PayWay == config.PayWayWechat {
-			// 公众号支付
-			account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
-			if err != nil {
-				return err
-			}
-			client := wechat.NewClient(account.PayConfig.AppId, account.PayConfig.Account, account.PayConfig.ApiKey, !account.PayConfig.Sandbox)
-			err = client.AddCertPemFilePath(w.DataPath+"cert/"+account.PayConfig.CertPath, w.DataPath+"cert/"+account.PayConfig.PublicCertPath)
-			if err != nil {
-				log.Println("微信证书错误：", err.Error())
-				return err
-			}
-
-			bm := make(gopay.BodyMap)
-			bm.Set("nonce_str", config.GenerateRandString(32)).
-				Set("out_trade_no", order.PaymentId).
-				Set("out_refund_no", refund.RefundId).
-				Set("total_fee", order.Amount).
-				Set("refund_fee", refund.Amount).
-				Set("sign_type", wechat.SignType_HMAC_SHA256)
-
-			wxRsp, _, err := client.Refund(context.Background(), bm)
-			if err != nil {
-				refund.Remark = err.Error()
-				w.DB.Model(refund).UpdateColumn("remark", refund.Remark)
-				return err
-			}
-
-			refund.Remark = wxRsp.ErrCodeDes
-			w.DB.Model(refund).UpdateColumn("remark", refund.Remark)
-
-			if wxRsp.ReturnCode == gopay.FAIL {
-				return errors.New(wxRsp.ReturnMsg)
-			}
-			if wxRsp.ResultCode == gopay.FAIL {
+		if payment.PayWay == config.PayWayWechat || payment.PayWay == config.PayWayWeapp {
+			// 公众号/小程序支付共用一条退款链路：微信 V2 退款是**异步**的，
+			// 接口返回 SUCCESS 只代表受理，真实结果要回查 refund_status / 退款通知。
+			// RefundWechatPayment 内部用 out_refund_no=refund.RefundId 保证重试幂等，
+			// total_fee 用实付金额（不是 order.Amount，订单改价后两者不等会报金额不符）。
+			state, rErr := w.RefundWechatPayment(context.Background(), payment, refund)
+			if rErr != nil {
 				refund.Status = config.OrderRefundStatusFailed
-				w.DB.Model(refund).UpdateColumn("status", refund.Status)
-				return errors.New(wxRsp.ErrCodeDes)
+				refund.Remark = truncateRunes(rErr.Error(), 255)
+				w.DB.Model(refund).UpdateColumns(map[string]interface{}{
+					"status": refund.Status,
+					"remark": refund.Remark,
+				})
+				return rErr
 			}
-		} else if payment.PayWay == config.PayWayWeapp {
-			// 小程序支付
-			account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
-			if err != nil {
-				return err
+			refundSettled = true
+			if aErr := w.ApplyRefundGatewayState(refund, order, state, refund.TerraceId, wxRefundRemark(state)); aErr != nil {
+				return aErr
 			}
-			client := wechat.NewClient(account.PayConfig.AppId, account.PayConfig.Account, account.PayConfig.ApiKey, !account.PayConfig.Sandbox)
-			err = client.AddCertPemFilePath(w.DataPath+"cert/"+account.PayConfig.CertPath, w.DataPath+"cert/"+account.PayConfig.PublicCertPath)
-			if err != nil {
-				log.Println("微信证书错误：", err.Error())
-				return err
-			}
-
-			bm := make(gopay.BodyMap)
-			bm.Set("nonce_str", config.GenerateRandString(32)).
-				Set("out_trade_no", order.PaymentId).
-				Set("out_refund_no", refund.RefundId).
-				Set("total_fee", order.Amount).
-				Set("refund_fee", refund.Amount).
-				Set("sign_type", wechat.SignType_HMAC_SHA256)
-
-			wxRsp, _, err := client.Refund(context.Background(), bm)
-			if err != nil {
-				refund.Remark = err.Error()
-				w.DB.Model(refund).UpdateColumn("remark", refund.Remark)
-				return err
-			}
-
-			refund.Remark = wxRsp.ErrCodeDes
-			w.DB.Model(refund).UpdateColumn("remark", refund.Remark)
-
-			if wxRsp.ReturnCode == gopay.FAIL {
-				return errors.New(wxRsp.ReturnMsg)
-			}
-			if wxRsp.ResultCode == gopay.FAIL {
-				refund.Status = config.OrderRefundStatusFailed
-				w.DB.Model(refund).UpdateColumn("status", refund.Status)
-				return errors.New(wxRsp.ErrCodeDes)
+			if state != refundSettleDone {
+				// 受理成功但还在退：保持待处理，等通知或 SyncPendingRefunds 收尾
+				return nil
 			}
 		} else if payment.PayWay == config.PayWayAlipay {
 			// 支付宝支付
+			if refund.Amount <= 0 || refund.Amount > payment.Amount {
+				return fmt.Errorf("退款金额 %d 非法（支付金额 %d）", refund.Amount, payment.Amount)
+			}
 			account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
 			if err != nil {
 				return err
@@ -622,7 +573,10 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 			}
 			//请求参数
 			bm := make(gopay.BodyMap)
-			bm.Set("out_trade_no", order.PaymentId)
+			// out_trade_no 必须是下单时传给支付宝的那个号（= payment.PaymentId），
+			// 不是 order.PaymentId：两者在「支付单已建、订单还没回写」的窗口里不相等。
+			bm.Set("out_trade_no", payment.PaymentId)
+			// out_request_no 是支付宝的退款幂等键：同一次重试必须传同一个值，否则会重复出金
 			bm.Set("out_request_no", refund.RefundId)
 			bm.Set("refund_amount", fmt.Sprintf("%.2f", float64(refund.Amount)/100))
 
@@ -645,64 +599,78 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 				w.DB.Model(refund).UpdateColumn("status", refund.Status)
 				return errors.New(refund.Remark)
 			}
+			// fund_change=N 表示本次没有资金变动（同一个 out_request_no 重试时的正常返回），
+			// 对本地来说就是「已退款」，不用当成失败。
 		} else if payment.PayWay == config.PayWayPaypal {
-			// paypal refund
-			account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
-			if err != nil {
+			// PayPal 退款：/v2/payments/captures/{capture_id}/refund 只认 capture id，
+			// 而 payment.terrace_id 存的是下单时的 order id（createPaypalPayment 写入）。
+			// 直接把它当 capture id 传过去，PayPal 会报 404 "The specified resource does not exist"。
+			// capture id 的解析、幂等键、PENDING 状态都收在 RefundPaypalPayment 里。
+			completed, pErr := w.RefundPaypalPayment(context.Background(), payment, refund)
+			if pErr != nil {
+				refund.Status = config.OrderRefundStatusFailed
+				w.DB.Model(refund).UpdateColumn("status", refund.Status)
+				refund.Remark = truncateRunes(pErr.Error(), 255)
+				w.DB.Model(refund).UpdateColumn("remark", refund.Remark)
+				return pErr
+			}
+			if !completed {
+				// PayPal 已受理但仍在 PENDING：保持「待处理」，等 PAYMENT.CAPTURE.REFUNDED
+				// 通知或下次重试来收尾。这里绝不能往下走标成已退款。
+				return nil
+			}
+			// 已完成：走统一入口（内部有条件更新闸门，通知同时到达也只记一笔流水）
+			refund.Status = config.OrderRefundStatusDone
+			if err = w.SuccessRefundOrder(refund, order); err != nil {
 				return err
 			}
-			client, err := paypal.NewClient(account.PayConfig.AppId, account.PayConfig.AppSecret, !account.PayConfig.Sandbox)
-			if err != nil {
-				return err
-			}
-			bm := make(gopay.BodyMap)
-			if payment.Amount > refund.Amount {
-				// refund amount is less than capture amount
-				bm.Set("note_to_payer", refund.Remark).
-					SetBodyMap("amount", func(bm gopay.BodyMap) {
-						bm.Set("currency_code", "USD"). // the same as capture
-										Set("value", fmt.Sprintf("%.2f", float32(refund.Amount)/100))
-					})
-			}
-			ppRsp, err := client.PaymentCaptureRefund(context.Background(), payment.TerraceId, bm)
-			if err != nil {
-				return err
-			}
-			if ppRsp.Code != http.StatusOK && ppRsp.Code != http.StatusCreated {
-				return errors.New(ppRsp.ErrorResponse.Message)
-			}
-
-			// refund success
+			refundSettled = true
 		} else if payment.PayWay == config.PayWayStripe {
-			// stripe refund
-			// todo stripe
-			account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
-			if err != nil {
-				return err
+			// Stripe 退款：部分退款必须显式带 amount、必须用幂等键、必须落退款单 id。
+			// 原来 Amount 是注释掉的（永远全额退）、没有幂等键（超时重试退第二笔）、
+			// 也没有回写 refund.TerraceId（事后无法对账）。
+			state, sErr := w.RefundStripePayment(context.Background(), payment, refund)
+			if sErr != nil {
+				refund.Status = config.OrderRefundStatusFailed
+				refund.Remark = truncateRunes(sErr.Error(), 255)
+				w.DB.Model(refund).UpdateColumns(map[string]interface{}{
+					"status": refund.Status,
+					"remark": refund.Remark,
+				})
+				return sErr
 			}
-			client := stripe.NewClient(account.PayConfig.AppId)
-
-			params := &stripe.RefundCreateParams{
-				//Amount: stripe.Int64(payment.Amount),
-				//Currency: stripe.String(string(stripe.CurrencyUSD)),
-				PaymentIntent: stripe.String(payment.TerraceId),
+			refundSettled = true
+			if aErr := w.ApplyRefundGatewayState(refund, order, state, refund.TerraceId, stripeRefundRemark(state)); aErr != nil {
+				return aErr
 			}
-			r, err := client.V1Refunds.Create(context.Background(), params)
-			if err != nil {
-				return fmt.Errorf("stripe create refund payment error: %v", err)
+			if state != refundSettleDone {
+				return nil
 			}
-			if r.Status == "failed" {
-				return errors.New("stripe create refund payment error")
-			}
-			// 更新id
-			// refund success
 		} else if payment.PayWay == config.PayWayXunhupay {
 			account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
 			if err != nil {
 				return err
 			}
-			if err = w.RefundXunhupayPayment(payment, account, refund.Amount, refund.Remark); err != nil {
-				return err
+			if refund.Amount <= 0 || refund.Amount > payment.Amount {
+				return fmt.Errorf("退款金额 %d 非法（支付金额 %d）", refund.Amount, payment.Amount)
+			}
+			state, xErr := w.RefundXunhupayPayment(payment, account, refund.Amount, refund.Remark)
+			if xErr != nil {
+				refund.Status = config.OrderRefundStatusFailed
+				refund.Remark = truncateRunes(xErr.Error(), 255)
+				w.DB.Model(refund).UpdateColumns(map[string]interface{}{
+					"status": refund.Status,
+					"remark": refund.Remark,
+				})
+				return xErr
+			}
+			refundSettled = true
+			if aErr := w.ApplyRefundGatewayState(refund, order, state, refund.TerraceId, ""); aErr != nil {
+				return aErr
+			}
+			if state != refundSettleDone {
+				// RD 退款中：保持待处理，等虎皮椒的退款通知
+				return nil
 			}
 		} else if payment.PayWay == config.PayWayNowpayment {
 			// NOWPayments 没有退款 API（退款只能走 payout 手动出金），这里**不能**静默通过：
@@ -713,10 +681,13 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 			// 不用处理
 		}
 
-		refund.Status = config.OrderRefundStatusDone
-		err = w.SuccessRefundOrder(refund, order)
-		if err != nil {
-			return err
+		if !refundSettled {
+			// PayPal 分支已完成自己的收尾（见上），其余渠道走公共收尾
+			refund.Status = config.OrderRefundStatusDone
+			err = w.SuccessRefundOrder(refund, order)
+			if err != nil {
+				return err
+			}
 		}
 	} else {
 		// 不同意
@@ -834,6 +805,10 @@ func (w *Website) SuccessPaidOrder(order *model.Order, payment *model.Payment) e
 		//支付成功
 		return nil
 	}
+	if order.Status == config.OrderStatusRefunded || order.RefundStatus == config.OrderStatusRefunded {
+		// 已退款的订单不允许被任何渠道的迟到通知改回「已付款」
+		return nil
+	}
 	originStatus := order.Status
 
 	order.PaidTime = time.Now().Unix()
@@ -937,7 +912,36 @@ func (w *Website) SuccessPaidOrder(order *model.Order, payment *model.Payment) e
 	return nil
 }
 
+// markRefundRecordSettled 只收尾退款单（状态/时间），不写财务流水。
+// 并发里落败的那一次用它，保证退款单最终也是「已完成」，但不会重复记账。
+func (w *Website) markRefundRecordSettled(refund *model.OrderRefund) {
+	if refund == nil || refund.Id == 0 {
+		return
+	}
+	updates := map[string]interface{}{"status": config.OrderRefundStatusDone}
+	if refund.RefundTime == 0 {
+		refund.RefundTime = time.Now().Unix()
+		updates["refund_time"] = refund.RefundTime
+	}
+	refund.Status = config.OrderRefundStatusDone
+	w.DB.Model(&model.OrderRefund{}).Where("id = ?", refund.Id).Updates(updates)
+}
+
+// SuccessRefundOrder 把订单推进到「已退款」并写退款流水。
+//
+// 幂等：后台退款（SetOrderRefund）与 PAYMENT.CAPTURE.REFUNDED 通知会并发调用这里，
+// 原来用 `if order.Status == 已退款 { return }` 做检查，两次调用都能读到「未退款」而都往下写，
+// 结果同一笔退款记两条 finance。这里改成条件 UPDATE 抢闸门：只有把 status 真正推到
+// 「已退款」的那一次（RowsAffected > 0）才写流水，另一次只把退款单收尾。
 func (w *Website) SuccessRefundOrder(refund *model.OrderRefund, order *model.Order) error {
+	if refund == nil {
+		return errors.New("refund is nil")
+	}
+	if refund.Status == config.OrderRefundStatusFailed {
+		// 网关明确拒绝/关闭了退款：绝不能因为「调用方忘了判断」就把订单算成已退款。
+		// 虎皮椒 UD、Stripe failed 都曾经直接落到这里，一笔没退成功的单也记了退款流水。
+		return fmt.Errorf("refund %s status failed, refuse to mark order refunded", refund.RefundId)
+	}
 	var err error
 	if order == nil {
 		order, err = w.GetOrderInfoByOrderId(refund.OrderId)
@@ -945,15 +949,26 @@ func (w *Website) SuccessRefundOrder(refund *model.OrderRefund, order *model.Ord
 			return err
 		}
 	}
-	if order.Status == config.OrderStatusRefunded {
-		// already refunded
-		return nil
-	}
 
 	tx := w.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
 	//退款成功，则标记订单完成
+	res := tx.Model(&model.Order{}).
+		Where("`id` = ? AND `status` <> ?", order.Id, config.OrderStatusRefunded).
+		UpdateColumn("status", config.OrderStatusRefunded)
+	if res.Error != nil {
+		tx.Rollback()
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		// 已经有人完成了这次迁移：不再记流水、不再退库存，只把退款单状态收尾（幂等）
+		tx.Rollback()
+		w.markRefundRecordSettled(refund)
+		return nil
+	}
 	order.Status = config.OrderStatusRefunded
-	tx.Model(order).UpdateColumn("status", order.Status)
 	//refund
 	if refund.Status == config.OrderRefundStatusWaiting {
 		refund.Status = config.OrderRefundStatusDone
@@ -961,7 +976,7 @@ func (w *Website) SuccessRefundOrder(refund *model.OrderRefund, order *model.Ord
 	if refund.RefundTime == 0 {
 		refund.RefundTime = time.Now().Unix()
 	}
-	w.DB.Updates(refund)
+	tx.Updates(refund)
 	// todo 如果订单已成功的退款，需要额外处理佣金问题
 	// 退款后，如果有赠送佣金，要扣除
 	var userCommission model.Commission
@@ -2128,37 +2143,14 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 		}
 
 		if aliRsp.Response.TradeStatus == "TRADE_SUCCESS" {
-			// this is a pay order
-			payment.PaidTime = time.Now().Unix()
-			payment.TerraceId = aliRsp.Response.TradeNo
-			payment.BuyerId = aliRsp.Response.BuyerUserId
+			buyerId := aliRsp.Response.BuyerUserId
 			if aliRsp.Response.BuyerOpenId != "" {
-				payment.BuyerId = aliRsp.Response.BuyerOpenId
+				buyerId = aliRsp.Response.BuyerOpenId
 			}
-			payment.BuyerInfo = aliRsp.Response.BuyerLogonId
-			w.DB.Save(payment)
-			order, err2 := w.GetOrderInfoByOrderId(payment.OrderId)
-			if err2 != nil {
-				return err2
-			}
-			order.PaymentId = payment.PaymentId
-			w.DB.Model(order).UpdateColumn("payment_id", payment.PaymentId)
-			//生成用户支付记录
-			var userBalance int64
-			err = w.DB.Model(&model.User{}).Where("`id` = ?", payment.UserId).Pluck("balance", &userBalance).Error
-			//状态更改了，增加一条记录到用户
-			finance := model.Finance{
-				UserId:      payment.UserId,
-				Direction:   config.FinanceOutput,
-				Amount:      payment.Amount,
-				AfterAmount: userBalance,
-				Action:      config.FinanceActionBuy,
-				OrderId:     payment.OrderId,
-				Status:      1,
-			}
-			w.DB.Create(&finance)
-			//支付成功逻辑处理
-			_ = w.SuccessPaidOrder(order, payment)
+			// 统一走 MarkPaymentPaid：它的 paid_time = 0 条件更新是「只记一笔付款流水」的闸门。
+			// 原来这里是直接 Save + Create(finance)，和支付宝重发的通知并发时会记两条。
+			payment.PayWay = config.PayWayAlipay
+			return w.MarkPaymentPaid(payment, aliRsp.Response.TradeNo, buyerId, aliRsp.Response.BuyerLogonId)
 		}
 	} else if payment.PayWay == config.PayWayWechat {
 		// 微信就不管了
@@ -2169,63 +2161,49 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 		if err != nil {
 			return err
 		}
-		client, err := paypal.NewClient(account.PayConfig.AppId, account.PayConfig.AppSecret, !account.PayConfig.Sandbox)
+		client, err := newPaypalClient(account)
 		if err != nil {
 			log.Println("client err", err)
 			return err
 		}
-		bm := make(gopay.BodyMap)
-		ppRsp, err := client.OrderDetail(context.Background(), payment.TerraceId, bm)
+		ppRsp, err := client.OrderDetail(context.Background(), payment.TerraceId, make(gopay.BodyMap))
 		if err != nil {
 			return err
 		}
-		if ppRsp.Code == 0 {
-			status := ppRsp.Response.Status
-			if ppRsp.Response.Status == "APPROVED" {
-				// 需要 capture
-				captureRes, err := client.OrderCapture(context.Background(), payment.TerraceId, nil)
-				if err != nil {
-					log.Println("capture err", err)
-					return err
-				}
-				library.DebugLog(w.CachePath, "paypalCapture", captureRes.Response)
-				if captureRes.Code == 0 {
-					status = captureRes.Response.Status
-				} else {
-					log.Println("captureRes err", captureRes.Error)
-				}
+		if ppRsp.Code != paypal.Success || ppRsp.Response == nil {
+			return fmt.Errorf("查询 PayPal 订单失败（order_id=%s）：%s", payment.TerraceId, ppRsp.Error)
+		}
+		detail := ppRsp.Response
+		status := detail.Status
+		if status == "APPROVED" {
+			// 需要 capture
+			captureRes, cErr := client.OrderCapture(context.Background(), payment.TerraceId, nil)
+			if cErr != nil {
+				log.Println("capture err", cErr)
+				return cErr
 			}
-			if status == "COMPLETED" && payment.PaidTime == 0 {
-				// 更新payment
-				payment.PayWay = config.PayWayPaypal
-				payment.PaidTime = time.Now().Unix()
-				payment.BuyerId = ppRsp.Response.Payer.PayerId
-				buf, _ := json.Marshal(ppRsp.Response.PaymentSource)
-				payment.BuyerInfo = string(buf)
-				w.DB.Save(payment)
-				order, err2 := w.GetOrderInfoByOrderId(payment.OrderId)
-				if err2 != nil {
-					return err2
-				}
-				order.PaymentId = payment.PaymentId
-				w.DB.Model(order).UpdateColumn("payment_id", payment.PaymentId)
-				//生成用户支付记录
-				var userBalance int64
-				err = w.DB.Model(&model.User{}).Where("`id` = ?", payment.UserId).Pluck("balance", &userBalance).Error
-				//状态更改了，增加一条记录到用户
-				finance := model.Finance{
-					UserId:      payment.UserId,
-					Direction:   config.FinanceOutput,
-					Amount:      payment.Amount,
-					AfterAmount: userBalance,
-					Action:      config.FinanceActionBuy,
-					OrderId:     payment.OrderId,
-					Status:      1,
-				}
-				w.DB.Create(&finance)
-				//支付成功逻辑处理
-				_ = w.SuccessPaidOrder(order, payment)
+			library.DebugLog(w.CachePath, "paypalCapture", captureRes.Response)
+			if captureRes.Code == paypal.Success && captureRes.Response != nil {
+				detail = captureRes.Response
+				status = detail.Status
+			} else {
+				log.Println("captureRes err", captureRes.Error)
 			}
+		}
+		if status == "COMPLETED" {
+			// 记录 capture id（退款只认它）与买家信息
+			w.savePaypalCaptureId(payment, firstPaypalCaptureId(detail))
+			buyerId := ""
+			if detail.Payer != nil {
+				buyerId = detail.Payer.PayerId
+			}
+			buf, _ := json.Marshal(detail.PaymentSource)
+			// buyer_info 是 varchar(255)，超长会让整条更新失败
+			buyerInfo := truncateRunes(string(buf), 255)
+			payment.PayWay = config.PayWayPaypal
+			// 统一走 MarkPaymentPaid：它的 paid_time = 0 条件更新是「只记一笔付款流水」的闸门，
+			// 也会拒掉「订单已退款」的迟到通知。
+			return w.MarkPaymentPaid(payment, payment.TerraceId, buyerId, buyerInfo)
 		}
 	} else if payment.PayWay == config.PayWayStripe {
 		// 从Stripe获取最新状态
@@ -2244,40 +2222,13 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 		buf, _ := json.Marshal(pi)
 		library.DebugLog(w.CachePath, "stripe", string(buf))
 		if pi.Status == stripe.PaymentIntentStatusSucceeded {
-			// 已完成
-			// 更新payment
+			// 同上：Stripe webhook 与前台轮询都会走到这里，必须用同一个记账闸门
 			payment.PayWay = config.PayWayStripe
-			payment.PaidTime = time.Now().Unix()
-			payment.BuyerId = pi.PaymentMethod.ID
-			payment.BuyerInfo = "" // todo
-			w.DB.Model(payment).UpdateColumns(map[string]interface{}{
-				"paid_time":  payment.PaidTime,
-				"buyer_id":   payment.BuyerId,
-				"buyer_info": payment.BuyerInfo,
-				"pay_way":    payment.PayWay,
-			})
-			order, err2 := w.GetOrderInfoByOrderId(payment.OrderId)
-			if err2 != nil {
-				return err2
+			buyerId := ""
+			if pi.PaymentMethod != nil {
+				buyerId = pi.PaymentMethod.ID
 			}
-			order.PaymentId = payment.PaymentId
-			w.DB.Model(order).UpdateColumn("payment_id", payment.PaymentId)
-			//生成用户支付记录
-			var userBalance int64
-			err = w.DB.Model(&model.User{}).Where("`id` = ?", payment.UserId).Pluck("balance", &userBalance).Error
-			//状态更改了，增加一条记录到用户
-			finance := model.Finance{
-				UserId:      payment.UserId,
-				Direction:   config.FinanceOutput,
-				Amount:      payment.Amount,
-				AfterAmount: userBalance,
-				Action:      config.FinanceActionBuy,
-				OrderId:     payment.OrderId,
-				Status:      1,
-			}
-			w.DB.Create(&finance)
-			//支付成功逻辑处理
-			_ = w.SuccessPaidOrder(order, payment)
+			return w.MarkPaymentPaid(payment, "", buyerId, "")
 		}
 	} else if payment.PayWay == config.PayWayXunhupay {
 		account, err := w.GetPaymentAccountById(payment.PaymentAccountId)

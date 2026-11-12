@@ -321,6 +321,8 @@ func (w *Website) InitModelData() {
 	_ = w.ensureModuleKindColumn()
 	// 用户组-可投稿栏目关系表：同样不能只靠 AutoMigrateDB（见 ensureUserGroupCategoryTable）。
 	_ = w.ensureUserGroupCategoryTable()
+	// PayPal 退款字段（payments.capture_id / order_refunds.terrace_id）：退款链路缺列直接报错。
+	_ = w.ensurePaypalColumns()
 	// 商品属性拆表（3.7.1 回填 + 3.8.0 删列），顺序与失败闸门见 initArchiveSchema。
 	w.initArchiveSchema()
 	// 检查默认模型，如果没有，则添加, 默认的模型：1 文章，2 产品
