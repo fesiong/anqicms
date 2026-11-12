@@ -53,7 +53,7 @@ import {
   ProFormTextArea,
   ProFormTimePicker,
 } from '@ant-design/pro-components';
-import { FormattedMessage, history, injectIntl } from '@umijs/max';
+import { FormattedMessage, history, injectIntl, useIntl } from '@umijs/max';
 import {
   Badge,
   Button,
@@ -69,9 +69,12 @@ import {
 } from 'antd';
 import dayjs from 'dayjs';
 import React from 'react';
-import { IntlShape } from 'react-intl';
 import { getRuntimeShopMode } from '@/utils/shopMode';
 import './index.less';
+
+// react-intl 不是本项目的直接依赖（pnpm 严格布局下业务侧根本解析不到），
+// 为一个类型去引一份带 Context 的运行时库不划算，直接从 umi 的 useIntl 推导。
+type IntlShape = ReturnType<typeof useIntl>;
 const MarkdownEditor = React.lazy(() => import('@/components/markdown'));
 const NewAiEditor = React.lazy(() => import('@/components/newAiEditor'));
 const SimpleEditor = React.lazy(() => import('@/components/simpleEditor'));

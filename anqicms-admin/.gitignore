@@ -16,9 +16,11 @@ yarn-error.log
 
 /coverage
 .idea
+# 包管理器统一用 pnpm：锁文件必须入库（保证可复现构建），另外两家的锁文件禁止再出现。
+# 曾经三家锁文件都被忽略，clone 后装依赖拿到的是浮动版本。
+!pnpm-lock.yaml
 yarn.lock
 package-lock.json
-pnpm-lock.yaml
 *bak
 .atomcode
 .trae
