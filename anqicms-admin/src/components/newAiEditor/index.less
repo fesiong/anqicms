@@ -8,6 +8,28 @@
 .iframe-wrapper iframe {
   height: 500px;
 }
+/* 通用 iframe 嵌入节点（iframeExtension.ts） */
+.anqi-iframe-wrapper {
+  position: relative;
+  width: 100%;
+  margin: 12px 0;
+  .anqi-iframe-frame {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+  /* 未选中时遮罩顶住 iframe：点一下等于选中节点，否则 iframe 吞掉指针事件、删不掉 */
+  .anqi-iframe-mask {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+  }
+  /* 选中后撤掉遮罩，iframe 才能播放/滚动 */
+  &.ProseMirror-selectednode .anqi-iframe-mask {
+    display: none;
+  }
+}
 .aieditor__prose {
   padding: 32px clamp(28px, 5vw, 72px) 46px;
 }

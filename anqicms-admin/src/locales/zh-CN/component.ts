@@ -47,6 +47,8 @@ export default {
   'component.editor.video.title': '插入视频',
   'component.editor.video.required': '请输入视频地址',
   'component.editor.video.select': '从资源库中选择',
+  'component.editor.video.iframe.invalid':
+    '嵌入地址必须以 http(s):// 或 / 开头',
   'component.editor.placeholder': '请输入内容...',
   'component.editor.submit': '提交',
   'component.attachment.dialog.ok': '确定',

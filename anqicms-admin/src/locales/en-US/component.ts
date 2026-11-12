@@ -49,6 +49,8 @@ export default {
   'component.editor.video.title': 'Insert video',
   'component.editor.video.required': 'Please enter the video URL',
   'component.editor.video.select': 'Select from media library',
+  'component.editor.video.iframe.invalid':
+    'The embed URL must start with http(s):// or /',
   'component.editor.placeholder': 'Enter content...',
   'component.editor.submit': 'Submit',
   'component.attachment.dialog.ok': 'OK',
