@@ -41,11 +41,14 @@ func GetWebsiteList(ctx iris.Context) {
 	list := make([]request.WebsiteDetailResponse, 0, len(dbSites))
 	for _, site := range dbSites {
 		item := request.WebsiteDetailResponse{
-			Id:       site.Id,
-			RootPath: site.RootPath,
-			Name:     site.Name,
-			Status:   site.Status,
-			Mysql:    request.SafeMysql(site.Mysql),
+			Id:          site.Id,
+			RootPath:    site.RootPath,
+			Name:        site.Name,
+			Status:      site.Status,
+			Mysql:       request.SafeMysql(site.Mysql),
+			BaseUrl:     site.BaseUrl,
+			Initialed:   site.Status == 1,
+			CreatedTime: site.CreatedTime,
 		}
 		if site.Id == 1 {
 			item.Mysql = request.SafeMysql(config.Server.Mysql)
