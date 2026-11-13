@@ -462,35 +462,81 @@ func (w *Website) SetOrderFinished(order *model.Order) error {
 	return nil
 }
 
+// cancelableOrderStatuses 允许被取消的订单状态。
+// 已取消(-1)/已完成(3)/已退款(9) 都不在内：否则重复点「取消」会一遍遍回补库存。
+var cancelableOrderStatuses = []int{
+	config.OrderStatusWaiting,
+	config.OrderStatusPaid,
+	config.OrderStatusDelivering,
+	config.OrderStatusRefunding,
+}
+
+// SetOrderCanceled 取消订单并回补库存。
+//
+// 幂等：状态更新用 `status IN (可取消状态)` 条件更新抢闸门，只有把订单真正推到
+// 「已取消」的那一次（RowsAffected > 0）才回补库存，且回补与状态更新在同一个事务里。
+// 原来是无条件 UpdateColumns + 无条件回补，用户对同一单点两次取消，库存就加两遍
+// （实测 98 → 96 → 98 → 100），并发请求更严重。
 func (w *Website) SetOrderCanceled(order *model.Order) error {
+	if order == nil {
+		return errors.New("order is nil")
+	}
+	if order.Status == config.OrderStatusCanceled {
+		// 已经是取消状态：直接成功返回，不再碰库存
+		return nil
+	}
+	finishedTime := time.Now().Unix()
+	tx := w.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	res := tx.Model(&model.Order{}).
+		Where("`id` = ? AND `status` IN ?", order.Id, cancelableOrderStatuses).
+		UpdateColumns(map[string]interface{}{
+			"status":        config.OrderStatusCanceled,
+			"finished_time": finishedTime,
+		})
+	if res.Error != nil {
+		tx.Rollback()
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		// 并发/重复取消：别人已经改过状态，这里只核对结果，绝不重复回补库存
+		tx.Rollback()
+		if cur, err := w.GetOrderInfoByOrderId(order.OrderId); err == nil {
+			if cur.Status == config.OrderStatusCanceled {
+				order.Status = config.OrderStatusCanceled
+				order.FinishedTime = cur.FinishedTime
+				return nil
+			}
+			return fmt.Errorf("order %s status %d cannot be canceled", order.OrderId, cur.Status)
+		}
+		return nil
+	}
 	order.Status = config.OrderStatusCanceled
-	order.FinishedTime = time.Now().Unix()
-	w.DB.Model(order).UpdateColumns(map[string]interface{}{
-		"status":        order.Status,
-		"finished_time": order.FinishedTime,
-	})
-	w.DB.Model(&model.Payment{}).Where("order_id = ?", order.OrderId).Update("status", config.OrderStatusCanceled)
-	// 退还库存
+	order.FinishedTime = finishedTime
+	tx.Model(&model.Payment{}).Where("order_id = ?", order.OrderId).Update("status", config.OrderStatusCanceled)
+	// 退还库存（与状态更新同一事务，失败一起回滚）
 	if order.Type != config.OrderTypeVip {
 		var details []*model.OrderDetail
-		w.DB.Where("order_id = ?", order.OrderId).Find(&details)
+		tx.Where("order_id = ?", order.OrderId).Find(&details)
 		for _, detail := range details {
 			if detail.GoodsSkuId > 0 {
-				w.DB.Model(&model.ArchiveSku{}).Where("id = ?", detail.GoodsSkuId).UpdateColumn("stock", gorm.Expr("stock + ?", detail.Quantity))
+				tx.Model(&model.ArchiveSku{}).Where("id = ?", detail.GoodsSkuId).UpdateColumn("stock", gorm.Expr("stock + ?", detail.Quantity))
 			}
 			if detail.GoodsId > 0 {
-				w.DB.Model(&model.Archive{}).Where("id = ?", detail.GoodsId).UpdateColumn("stock", gorm.Expr("stock + ?", detail.Quantity))
+				tx.Model(&model.Archive{}).Where("id = ?", detail.GoodsId).UpdateColumn("stock", gorm.Expr("stock + ?", detail.Quantity))
 			}
 			// 退回属性值扣减的库存
 			var records []*model.OrderOptionStock
-			w.DB.Where("order_detail_id = ?", detail.Id).Find(&records)
+			tx.Where("order_detail_id = ?", detail.Id).Find(&records)
 			for _, record := range records {
-				w.DB.Model(&model.ArchiveOptionValue{}).Where("id = ?", record.OptionValueId).UpdateColumn("stock", gorm.Expr("stock + ?", record.Quantity))
+				tx.Model(&model.ArchiveOptionValue{}).Where("id = ?", record.OptionValueId).UpdateColumn("stock", gorm.Expr("stock + ?", record.Quantity))
 			}
 		}
 	}
 
-	return nil
+	return tx.Commit().Error
 }
 
 func (w *Website) SetOrderRefund(order *model.Order, status int) error {
@@ -865,7 +911,9 @@ func (w *Website) SuccessPaidOrder(order *model.Order, payment *model.Payment) e
 	if err != nil {
 		user = &model.User{Id: uint(order.UserId)}
 		orderAddress, err := w.GetOrderAddressById(order.AddressId)
-		if err == nil {
+		// GetOrderAddressById(0) 返回的是 (nil, nil)：访客订单/用户被删时 AddressId 就是 0，
+		// 只判 err 会直接空指针 panic —— 已付款的回调反而回 500，PayPal 于是无限重投。
+		if err == nil && orderAddress != nil {
 			user.Email = orderAddress.Email
 			user.Phone = orderAddress.Phone
 			user.UserName = orderAddress.Name
