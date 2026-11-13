@@ -130,7 +130,7 @@ type PlatformAdapter interface {
 
 [INFERRED] 只预留两样，不多建一张表：
 
-1. **`Sender` 接口**：`Send(ctx context.Context, req SendRequest) (SendResult, error)`，平台无关。未来 `NotificationDelivery` 的执行器直接调它，**绕开 OTP 状态机**（通知不需要验证码、不需要一次性消费、不需要失败次数上限）。
+1. **`Sender` 接口**：`Send(ctx context.Context, p Profile, req SendRequest) (SendResult, error)`（签名以 §5.1 为准），平台无关。未来 `NotificationDelivery` 的执行器直接调它，**绕开 OTP 状态机**（通知不需要验证码、不需要一次性消费、不需要失败次数上限）。
 2. **场景码命名空间**：本期占用 `login`／`register`／`reset`／`bind_old`／`bind_new` 五个；通知场景统一用 `notify.` 前缀，常量表里留注释说明命名规则，不预先定义具体通知场景。
 
 不预留投递规则表、通知模板表、重试队列、租约。这些在真正做通知时按当时的需求建，提前建只会留下没人用的空表。
@@ -283,6 +283,15 @@ type SmsTwilioRegion struct {
 6. `SaveSettingValue` + `AddAdminLog`。
 
 ⚠️ `MergeJSONPayload` 只处理**顶层字段**。`aliyun`／`tencent`／`twilio` 是嵌套对象，整体出现在 payload 里就会整体替换。因此前端提交这三个对象时必须带**完整子树**（含未改动的掩码哨兵），不能只传改动的叶子字段。这一条要写进前端表单约定与 MCP desc。
+
+⚠️ **`null` 的两种行为不同，必须区分**（`library/merge.go:40` 直接调 `json.Unmarshal`）：
+
+| 提交形态 | 实际效果 |
+|---|---|
+| 顶层 `"aliyun": null` | **无效果**。Go 的 json 把 null 解进结构体值是 no-op，基底原值保留 |
+| 嵌套 `"aliyun": {"templates": null}` | **清空**。null 解进 map 会把它设成 nil，该厂商所有场景模板丢失 |
+
+所以前端**不得**提交 `templates: null`／`texts: null`：要么带完整 map，要么整个厂商对象不出现在 payload 里。这一条要有测试钉住，因为它是静默数据丢失，界面上看不出来。
 
 ### 3.6 阿里云模板变量名
 
@@ -621,8 +630,8 @@ Twilio 到中国大陆的到达率不可靠，这是它只用于国际号码的�
  5. IP 滑窗（小时 / 日）                   超限 → ErrSmsIpLimited
  6. sms.Resolve(cfg, region, scene)        Twilio+86 / 缺凭据 / 缺签名 / 场景模板空 → 对应错误
  7. DB 事务（不做任何网络 IO）：
-      a. sms_logs 当日同号码计数 ≥ DailyLimitPerPhone → ErrSmsPhoneLimited
-      b. sms_codes 最新活跃行 CreatedTime + ResendInterval > now → ErrSmsResendTooSoon（带剩余秒数）
+      a. sms_logs 当日同号码计数 ≥ DailyLimitPerPhone → ErrSmsPhoneLimited（**跨场景合计**，不带 scene 条件）
+      b. sms_codes 最新活跃行 CreatedTime + ResendInterval > now → ErrSmsResendTooSoon（带剩余秒数，**按场景**）
       c. 删除同 (site, country, phone, scene) 的已过期 / 已消费行
       d. crypto/rand 生成码 → HMAC → 插入 sms_codes(send_status=0)
       e. 插入 sms_logs(status=0 pending)
@@ -691,7 +700,7 @@ Twilio 到中国大陆的到达率不可靠，这是它只用于国际号码的�
 
 ### 7.1 前台端点
 
-[INFERRED] 全部挂在 `route/base.go` 的 `/api` party（已有 `middleware.ParseUserToken`）。响应统一 `{code, msg, data}`，`code` 用 `config.StatusSuccess` / `config.StatusFailed`。
+[INFERRED] 全部挂在 `route/base.go` 的 `/api` party（已有 `middleware.ParseUserToken`）。响应统一 `{code, msg, data}`，`code` 用 `config.StatusOK`（值为 0）／`config.StatusFailed`（值为 -1）。仓库没有 `StatusSuccess` 常量，前后台都用 `StatusOK`。
 
 #### `POST /api/sms/send`
 
