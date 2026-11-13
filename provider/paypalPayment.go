@@ -37,7 +37,9 @@ const (
 	// PayPal-Request-Id 是 PayPal 的幂等键：同一笔退款重试必须复用同一个值，
 	// 否则网络超时后的重试会被当成一笔新退款，重复出金。
 	paypalRequestIdHeader = "PayPal-Request-Id"
-	paypalVerifyPath      = "/v1/notify-webhook/verify-webhook-signature"
+	// ⚠️ 是 notifications 不是 notify-webhook：写成 /v1/notify-webhook/... 会得到
+	// 404 Not Found（PayPal 没有这个路由），所有真实通知都会验签失败。
+	paypalVerifyPath = "/v1/notifications/verify-webhook-signature"
 )
 
 func paypalBaseURL(isProd bool) string {
@@ -112,7 +114,7 @@ func (h PaypalSignatureHeaders) Empty() bool {
 		h.TransmissionSig == "" || h.TransmissionTime == ""
 }
 
-// BuildPaypalVerifyBody 拼 /v1/notify-webhook/verify-webhook-signature 的请求体。
+// BuildPaypalVerifyBody 拼 /v1/notifications/verify-webhook-signature 的请求体。
 //
 // webhook_event 必须是**原始字节**：PayPal 的签名里带着 crc32(原始通知正文)，
 // 这里如果塞反序列化后的结构体/Map，JSON 会被重新编码（map 还会随机化字段顺序），
@@ -220,6 +222,39 @@ func (w *Website) VerifyPaypalWebhook(account *model.PaymentAccount, headers Pay
 	if res.VerificationStatus != "SUCCESS" {
 		return fmt.Errorf("paypal webhook verify failed: status=%q (sandbox=%v, webhook_id=%s)",
 			res.VerificationStatus, account.PayConfig.Sandbox, webhookId)
+	}
+	return nil
+}
+
+// paypalIssueIs 判断 PayPal 错误响应里是否含指定 issue（如 ORDER_ALREADY_CAPTURED）。
+func paypalIssueIs(res *paypal.ErrorResponse, issue string) bool {
+	if res == nil {
+		return false
+	}
+	if res.Name == issue {
+		return true
+	}
+	for _, d := range res.Details {
+		if d.Issue == issue {
+			return true
+		}
+	}
+	return false
+}
+
+// finishPaypalApproved 处理「订单其实已经扣过款」的 APPROVED 通知。
+//
+// 走 TraceQuery 记账（内部是 MarkPaymentPaid 的 paid_time=0 闸门，重投只空转）。
+// 查询失败**不能**回 500：PayPal 会因为 500 一直重投，而真正的记账还有
+// PAYMENT.CAPTURE.COMPLETED 通知兜底，这里只记日志。
+func (w *Website) finishPaypalApproved(payment *model.Payment) error {
+	if payment == nil {
+		return nil
+	}
+	payment.PayWay = config.PayWayPaypal
+	if err := w.TraceQuery(payment); err != nil {
+		logPaymentEvent(w.CachePath, payment.PaymentId, "CHECKOUT.ORDER.APPROVED",
+			"订单已扣款但查询收尾失败（本次按成功应答，等待 CAPTURE.COMPLETED）: "+err.Error())
 	}
 	return nil
 }
@@ -493,30 +528,37 @@ func (w *Website) CompleteGatewayRefund(payment *model.Payment, amount int64, te
 
 // handlePaypalCaptureRefunded 处理 PAYMENT.CAPTURE.REFUNDED。
 //
-// 这类事件的 resource 是 capture（id 是 capture id，不是退款单 id），金额取
-// seller_receivable_breakdown.total_refunded_amount，拿不到就退回本地退款单金额。
+// 这个事件的 resource 是 **refund 对象**（不是 capture）：id 是退款单 id（R-…），
+// 所属 capture 在 links[rel=up] 里，金额是 amount.total（本次退款额）。
+// 老实现按 capture 解析，既找不到支付单（refund id 与 order id / capture id 都不等），
+// 金额也一律回落到本地退款单，通知永远 404 被无限重投。
 func (w *Website) handlePaypalCaptureRefunded(payment *model.Payment, res *PaypalWebhookResource) error {
 	if res == nil {
 		return errors.New("paypal refund resource is nil")
 	}
 	amount := int64(0)
-	if res.SellerReceivableBreakdown.TotalRefundedAmount.Value != "" {
-		if fen, ok := yuanToFen(res.SellerReceivableBreakdown.TotalRefundedAmount.Value); ok {
-			amount = fen
-		}
+	// capture 形态才有 seller_receivable_breakdown.total_refunded_amount（累计已退额）；
+	// 真实退款通知走下面的 amount.total（本次退款额，部分退款时两者不同）。
+	if fen, ok := yuanToFen(res.SellerReceivableBreakdown.TotalRefundedAmount.Value); ok {
+		amount = fen
 	}
-	if amount <= 0 && res.Status == "REFUNDED" {
+	if amount <= 0 {
 		if fen, ok := yuanToFen(res.Amount.Total); ok {
 			amount = fen
 		}
 	}
 	if amount <= 0 {
-		// 部分退款时 capture 金额不等于退款金额，宁可回落到本地退款单金额
+		// 部分退款时拿不到金额，宁可回落到本地退款单金额
 		if refund, err := w.GetOrderRefundByOrderId(payment.OrderId); err == nil {
 			amount = refund.Amount
 		}
 	}
-	return w.CompleteGatewayRefund(payment, amount, "")
+	// 退款单号只有 refund 对象才有；capture 形态（带 related_ids）不能把它当退款单号写库
+	terraceRefundId := ""
+	if res.SupplementaryData.RelatedIds.OrderId == "" {
+		terraceRefundId = res.Id
+	}
+	return w.CompleteGatewayRefund(payment, amount, terraceRefundId)
 }
 
 // yuanToFen "50.00" -> 5000，解析失败返回 ok=false。

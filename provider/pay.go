@@ -139,14 +139,49 @@ type PaypalWebhookResource struct {
 			OrderId string `json:"order_id"`
 		} `json:"related_ids"`
 	} `json:"supplementary_data"`
-	// PAYMENT.CAPTURE.REFUNDED 的 resource 是 capture，真实退款金额在
-	// seller_receivable_breakdown.total_refunded_amount（部分退款时与 capture 金额不同）
+	// PAYMENT.CAPTURE.REFUNDED 的 resource 是 refund 对象，真实退款金额在
+	// amount.total；capture 形态则在 seller_receivable_breakdown.total_refunded_amount
+	// （部分退款时与 capture 金额不同）
 	SellerReceivableBreakdown struct {
 		TotalRefundedAmount struct {
 			Value        string `json:"value"`
 			CurrencyCode string `json:"currency_code"`
 		} `json:"total_refunded_amount"`
 	} `json:"seller_receivable_breakdown"`
+	// 退款对象的 links 里 rel=up 指向所属 capture（…/v2/payments/captures/{capture_id}），
+	// 这是退款通知定位支付单的**唯一**线索：refund id 既不是 order id 也不是 capture id。
+	Links []PaypalWebhookLink `json:"links"`
+}
+
+type PaypalWebhookLink struct {
+	Href   string `json:"href"`
+	Rel    string `json:"rel"`
+	Method string `json:"method"`
+}
+
+// UpLinkCaptureId 从 links[rel=up] 里解析出 capture id（退款事件用）。
+func (res *PaypalWebhookResource) UpLinkCaptureId() string {
+	if res == nil {
+		return ""
+	}
+	const marker = "/captures/"
+	for _, l := range res.Links {
+		if l.Rel != "up" || l.Href == "" {
+			continue
+		}
+		idx := strings.LastIndex(l.Href, marker)
+		if idx < 0 {
+			continue
+		}
+		id := l.Href[idx+len(marker):]
+		if q := strings.IndexAny(id, "?#"); q >= 0 {
+			id = id[:q]
+		}
+		if id = strings.Trim(id, "/ "); id != "" {
+			return id
+		}
+	}
+	return ""
 }
 
 // MarkPaymentPaid 把支付单标记为已支付，并推进订单状态。
@@ -231,7 +266,9 @@ func (w *Website) MarkPaymentPaid(payment *model.Payment, terraceId, buyerId, bu
 // GetPaymentInfoByPaypalResource 按 webhook 资源定位支付单。
 // CHECKOUT.ORDER.* 的 resource.id 就是 order id（= payment.terrace_id）；
 // PAYMENT.CAPTURE.* 的 resource.id 是 capture id，得用 related_ids.order_id 换算，
-// 再退一步用 payments.capture_id 兜底（某些捕获事件的 resource 不带 related_ids）。
+// 再退一步用 payments.capture_id 兜底（某些捕获事件的 resource 不带 related_ids）；
+// PAYMENT.CAPTURE.REFUNDED 的 resource 是 **refund**：id 是退款单 id，两者都不等，
+// 只能顺着 links[rel=up] 找到 capture，或按 order_refunds.terrace_id 反查订单。
 func (w *Website) GetPaymentInfoByPaypalResource(res *PaypalWebhookResource) (*model.Payment, error) {
 	if res == nil {
 		return nil, errors.New("paypal webhook resource is nil")
@@ -248,7 +285,29 @@ func (w *Website) GetPaymentInfoByPaypalResource(res *PaypalWebhookResource) (*m
 	if p, err2 := w.GetPaymentInfoByCaptureId(res.Id); err2 == nil {
 		return p, nil
 	}
+	// 退款通知：resource 是 refund，所属 capture 在 links[rel=up] 里
+	if captureId := res.UpLinkCaptureId(); captureId != "" {
+		if p, err2 := w.GetPaymentInfoByCaptureId(captureId); err2 == nil {
+			return p, nil
+		}
+	}
+	// 最后按退款单反查：后台退款时已把 PayPal Refund ID 写进 order_refunds.terrace_id
+	if p, err2 := w.GetPaymentInfoByRefundTerraceId(res.Id); err2 == nil {
+		return p, nil
+	}
 	return nil, err
+}
+
+// GetPaymentInfoByRefundTerraceId 按 PayPal 退款单号定位支付单。
+func (w *Website) GetPaymentInfoByRefundTerraceId(refundId string) (*model.Payment, error) {
+	if refundId == "" {
+		return nil, errors.New("paypal refund id is empty")
+	}
+	var refund model.OrderRefund
+	if err := w.DB.Where("`terrace_id` = ?", refundId).Take(&refund).Error; err != nil {
+		return nil, err
+	}
+	return w.GetPaymentInfoByOrderId(refund.OrderId)
 }
 
 // GetPaymentInfoByCaptureId 按 PayPal capture id 找支付单（capture id 在付款/退款通知里出现）。
@@ -480,12 +539,24 @@ func (w *Website) handlePaypalEvent(event *paypal.WebhookEvent) error {
 
 	switch event.EventType {
 	case "CHECKOUT.ORDER.APPROVED":
-		// 用户已授权，立刻扣款（否则 PayPal 那边只是 APPROVED，钱没到账）
+		// 用户已授权，需要立刻扣款（否则 PayPal 那边只是 APPROVED，钱没到账）。
+		// ⚠️ PayPal 会重投本事件：钱已扣过时再 capture 会返回 ORDER_ALREADY_CAPTURED，
+		// 老实现把它当失败回 500，PayPal 于是继续重投，形成死循环。先看订单状态。
+		if detail, dErr := client.OrderDetail(ctx, payment.TerraceId, make(gopay.BodyMap)); dErr == nil &&
+			detail.Code == paypal.Success && detail.Response != nil &&
+			detail.Response.Status == "COMPLETED" {
+			w.savePaypalCaptureId(payment, firstPaypalCaptureId(detail.Response))
+			return w.finishPaypalApproved(payment)
+		}
 		captureRes, cErr := client.OrderCapture(ctx, payment.TerraceId, nil)
 		if cErr != nil {
 			return fmt.Errorf("capture 订单失败: %w", cErr)
 		}
 		if captureRes.Code != paypal.Success {
+			// 并发的另一条通知/查单刚扣完：按已扣款收尾，不要回 500
+			if paypalIssueIs(captureRes.ErrorResponse, "ORDER_ALREADY_CAPTURED") {
+				return w.finishPaypalApproved(payment)
+			}
 			return fmt.Errorf("capture 订单失败: %s", captureRes.Error)
 		}
 		w.savePaypalCaptureId(payment, firstPaypalCaptureId(captureRes.Response))
