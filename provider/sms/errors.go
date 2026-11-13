@@ -26,6 +26,11 @@ func (e *SendError) Error() string {
 	return fmt.Sprintf("[%s] %s: %s", e.Class, e.Code, e.Message)
 }
 
+// Unwrap 让下游只用 errors.Is(err, ErrSmsSendFailed) 就能落到通用翻译文案，
+// 不必依赖每个 controller 记得做类型分派（裁决 R10）。
+// 需要平台原始码落日志时仍走 errors.As 取 *SendError——Error() 的格式因此不变。
+func (e *SendError) Unwrap() error { return ErrSmsSendFailed }
+
 // ClassifyHTTPStatus 按 HTTP 状态码分类（规格 §10.1）：
 // 429／408／425 与 ≥500 → transient；其余 4xx → permanent；
 // 2xx／3xx 及未知一律 transient。

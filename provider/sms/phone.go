@@ -36,6 +36,8 @@ var (
 
 // NormalizePhone 归一化并校验手机号（规格 §6.2）：
 // 先折全角数字 → 再去格式字符 → 再校验。所有失败路径返回 ErrSmsPhoneInvalid。
+// 五条规则之外追加一道区号表成员校验（country_codes.go），保证 (Country, Local)
+// 对 E164 单射。
 // 归一化是幂等的：NormalizePhone(p.Country, p.Local) 与首次结果逐字段相等，
 // 否则查重键会漂移。
 func NormalizePhone(country, local string) (Phone, error) {
@@ -60,6 +62,13 @@ func NormalizePhone(country, local string) (Phone, error) {
 	}
 	// 国内号码额外校验（带锚点，不复用 VerifyCellphoneFormat）。
 	if country == "86" && !rePhoneDomestic.MatchString(local) {
+		return Phone{}, ErrSmsPhoneInvalid
+	}
+	// 追加的第 6 道闸门（裁决 R8，规格 §6.2 五条规则与三条正则保持不变）：
+	// 区号必须是 ITU 已分配的地理码。区号表是前缀无关集，因此同一串 E164
+	// 只有唯一一种 (Country, Local) 切分——否则换切分就能乘出多份号码日限
+	// 与重发冷却预算，Region() 还会把大陆号误判成 international。
+	if _, ok := countryCodes[country]; !ok {
 		return Phone{}, ErrSmsPhoneInvalid
 	}
 	return Phone{Country: country, Local: local}, nil
