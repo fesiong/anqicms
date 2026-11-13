@@ -622,6 +622,13 @@ func (g *SitemapGenerator) Load() {
 }
 
 func (g *SitemapGenerator) AddLoc(loc string, lastMod string, alternates []AlternateLink) {
+	// hreflang 必须复制一份再保存。
+	// 调用方（BuildSitemap/AddonSitemap）为了省分配，用的是
+	// `alternates = alternates[:0]` + append 复用同一底层数组；
+	// 直接存切片头会让已经写入的条目被后续 append 原地改写，
+	// 结果是一个 sitemap 文件里所有 url 都指向最后一条的 alternate 地址。
+	// 护栏：TestSitemapAddLocKeepsAlternates。
+	alternates = append([]AlternateLink(nil), alternates...)
 	g.Urls = append(g.Urls, SitemapUrl{
 		Loc:     loc,
 		Lastmod: lastMod,
