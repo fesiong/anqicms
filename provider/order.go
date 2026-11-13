@@ -1148,7 +1148,23 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		return nil, errors.New(w.Tr("PleaseSelectTheProduct"))
 	}
 	if len(req.Details) == 0 {
-		req.Details = []request.OrderDetail{{GoodsId: req.GoodsId, GoodsSkuId: req.GoodsSkuId, Quantity: req.Quantity}}
+		req.Details = []request.OrderDetail{{
+			GoodsId:          req.GoodsId,
+			GoodsSkuId:       req.GoodsSkuId,
+			Quantity:         req.Quantity,
+			QuantityProvided: req.QuantityProvided,
+		}}
+	}
+	// ⚠️ 数量必须在算金额、写明细、扣库存之前统一校验：负数会让 detailAmount 变负
+	// （生成 -US$0.50 的订单），`stock - (-1)` 反而给库存 +1，sold_count 还会溢出报错。
+	for i := range req.Details {
+		if req.Details[i].Quantity == 0 && !req.Details[i].QuantityProvided {
+			req.Details[i].Quantity = 1
+		}
+		if req.Details[i].Quantity <= 0 {
+			return nil, fmt.Errorf("%s (goods_id=%d, quantity=%d)",
+				w.Tr("InvalidQuantity"), req.Details[i].GoodsId, req.Details[i].Quantity)
+		}
 	}
 	var couponCode *model.CouponCode
 	// 使用优惠券
@@ -1287,9 +1303,6 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 			tx.Rollback()
 			return nil, err
 		}
-		if req.Details[0].Quantity == 0 {
-			req.Details[0].Quantity = 1
-		}
 		//计算价格
 		price := group.Price
 		originPrice := price
@@ -1337,9 +1350,9 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 			tx.Rollback()
 			return nil, err
 		}
-		w.DB.Model(&model.CommunicationOrder{}).Where("id = ?", communicationOrder.Id).UpdateColumn("order_id", order.OrderId)
-		if req.Details[0].Quantity == 0 {
-			req.Details[0].Quantity = 1
+		if uErr := tx.Model(&model.CommunicationOrder{}).Where("id = ?", communicationOrder.Id).UpdateColumn("order_id", order.OrderId).Error; uErr != nil {
+			tx.Rollback()
+			return nil, uErr
 		}
 		//计算价格
 		price := communicationOrder.QuotePrice
@@ -1390,9 +1403,6 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 				tx.Rollback()
 				return nil, err
 			}
-			if v.Quantity == 0 {
-				v.Quantity = 1
-			}
 			if archive.MinQuantity > 0 && v.Quantity < archive.MinQuantity {
 				v.Quantity = archive.MinQuantity
 			}
@@ -1426,17 +1436,25 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 					if err == nil {
 						price = activitySku.Price
 						// 减库存
-						tx.Model(&model.ActivitySku{}).Where("id = ?", activitySku.Id).UpdateColumns(map[string]interface{}{
+						if uErr := tx.Model(&model.ActivitySku{}).Where("id = ?", activitySku.Id).UpdateColumns(map[string]interface{}{
 							"stock":      gorm.Expr("stock - ?", v.Quantity),
 							"sold_count": gorm.Expr("sold_count + ?", v.Quantity),
-						})
+						}).Error; uErr != nil {
+							tx.Rollback()
+							return nil, uErr
+						}
 					}
 				}
 				// 减库存
-				tx.Model(&model.ArchiveSku{}).Where("id = ?", archiveSku.Id).UpdateColumns(map[string]interface{}{
+				// ⚠️ 必须检查 Error：sold_count 是无符号列，数量非法时这条 UPDATE 会在
+				// 数据库层报 Out of range，以前忽略返回值就变成「库报错、接口成功」。
+				if uErr := tx.Model(&model.ArchiveSku{}).Where("id = ?", archiveSku.Id).UpdateColumns(map[string]interface{}{
 					"stock":      gorm.Expr("stock - ?", v.Quantity),
 					"sold_count": gorm.Expr("sold_count + ?", v.Quantity),
-				})
+				}).Error; uErr != nil {
+					tx.Rollback()
+					return nil, uErr
+				}
 				skuValues = archiveSku.Values
 			} else {
 				// 如果数量超了,则不允许下单
@@ -1536,12 +1554,19 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 						originOptionPrice += optionValue.Price
 					}
 					// 减库存
-					tx.Model(&model.ArchiveOptionValue{}).Where("id = ?", optionValue.Id).UpdateColumns(map[string]interface{}{
+					if uErr := tx.Model(&model.ArchiveOptionValue{}).Where("id = ?", optionValue.Id).UpdateColumns(map[string]interface{}{
 						"stock":      gorm.Expr("stock - ?", v.Quantity),
 						"sold_count": gorm.Expr("sold_count + ?", v.Quantity),
-					})
-					// 3. 记录扣减记录（用于退款恢复）
-					w.CreateOrderOptionStockRecords(order.OrderId, orderDetail.Id, optionValue.Id, v.Quantity)
+					}).Error; uErr != nil {
+						tx.Rollback()
+						return nil, uErr
+					}
+					// 3. 记录扣减记录（用于退款恢复）—— 必须跟着同一个事务走，
+					// 否则订单回滚了扣减记录还在，退款时会多回补一次库存
+					if rErr := w.createOrderOptionStockRecords(tx, order.OrderId, orderDetail.Id, optionValue.Id, v.Quantity); rErr != nil {
+						tx.Rollback()
+						return nil, rErr
+					}
 				}
 				// 更新价格
 				price += optionPrice
@@ -1549,23 +1574,32 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 			}
 			// 减库存：stock 留在主表、sold_count 已迁到 archive_products，
 			// 一条 UPDATE 跨不了两张表，所以拆成两步（同一事务）。
-			tx.Model(&model.Archive{}).Where("id = ?", archive.Id).
-				UpdateColumn("stock", gorm.Expr("stock - ?", v.Quantity))
+			if uErr := tx.Model(&model.Archive{}).Where("id = ?", archive.Id).
+				UpdateColumn("stock", gorm.Expr("stock - ?", v.Quantity)).Error; uErr != nil {
+				tx.Rollback()
+				return nil, uErr
+			}
 			// 用 upsert：侧表没有行时（商品没配任何属性）也要能记销量，
 			// 直接 Update 会命中 0 行，销量永远不动。
-			tx.Clauses(clause.OnConflict{
+			if uErr := tx.Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "archive_id"}},
 				DoUpdates: clause.Assignments(map[string]interface{}{"sold_count": gorm.Expr("sold_count + ?", v.Quantity)}),
 			}).Create(&model.ArchiveProduct{
 				ArchiveId:   archive.Id,
 				SoldCount:   int64(v.Quantity),
 				ProductType: config.ProductTypeNormal,
-			})
+			}).Error; uErr != nil {
+				tx.Rollback()
+				return nil, uErr
+			}
 			if activity != nil {
-				tx.Model(&model.Activity{}).Where("id = ?", activity.Id).UpdateColumns(map[string]interface{}{
+				if uErr := tx.Model(&model.Activity{}).Where("id = ?", activity.Id).UpdateColumns(map[string]interface{}{
 					"stock":      gorm.Expr("stock - ?", v.Quantity),
 					"sold_count": gorm.Expr("sold_count + ?", v.Quantity),
-				})
+				}).Error; uErr != nil {
+					tx.Rollback()
+					return nil, uErr
+				}
 			}
 			// 优惠
 			// 批发价格设置
@@ -1621,8 +1655,9 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 	order.UserDiscount = userDiscountAmount
 	if couponCode != nil {
 		if couponCode.Status != 0 {
+			// 返回 (nil, nil) 会让上层把 null 当成功订单返回（code=0 但没订单）
 			tx.Rollback()
-			return nil, err
+			return nil, errors.New(w.Tr("CouponCodeCanNotUse"))
 		}
 		couponMoney := couponCode.GetMoney(order.Amount)
 		order.CouponCodeId = couponCode.Code
@@ -1631,7 +1666,10 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		// 使用coupon Code
 		couponCode.OrderId = order.OrderId
 		couponCode.UserId = int64(userId)
-		_ = w.UseCouponCode(couponCode)
+		if err = w.UseCouponCode(tx, couponCode); err != nil {
+			tx.Rollback()
+			return nil, err
+		}
 	}
 
 	if calcQuantity > 0 {
@@ -2471,8 +2509,16 @@ func (w *Website) getOrderStatus(status int) string {
 
 // CreateOrderOptionStockRecords 记录属性值库存扣减记录（用于退款恢复）
 func (w *Website) CreateOrderOptionStockRecords(orderId string, detailId uint, optionValueId int64, quantity int) error {
+	return w.createOrderOptionStockRecords(w.DB, orderId, detailId, optionValueId, quantity)
+}
+
+// createOrderOptionStockRecords 事务内版本：下单时必须和库存扣减一起提交/回滚。
+func (w *Website) createOrderOptionStockRecords(tx *gorm.DB, orderId string, detailId uint, optionValueId int64, quantity int) error {
 	if orderId == "" || optionValueId == 0 || quantity <= 0 {
 		return nil
+	}
+	if tx == nil {
+		tx = w.DB
 	}
 
 	record := model.OrderOptionStock{
@@ -2482,5 +2528,5 @@ func (w *Website) CreateOrderOptionStockRecords(orderId string, detailId uint, o
 		Quantity:      quantity,
 	}
 
-	return w.DB.Create(&record).Error
+	return tx.Create(&record).Error
 }

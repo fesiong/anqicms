@@ -328,7 +328,26 @@ func ApiGetOrderCheckout(ctx iris.Context) {
 		return
 	}
 	if len(req.Details) == 0 {
-		req.Details = []request.OrderDetail{{GoodsId: req.GoodsId, GoodsSkuId: req.GoodsSkuId, Quantity: req.Quantity}}
+		req.Details = []request.OrderDetail{{
+			GoodsId:          req.GoodsId,
+			GoodsSkuId:       req.GoodsSkuId,
+			Quantity:         req.Quantity,
+			QuantityProvided: req.QuantityProvided,
+		}}
+	}
+	// 数量非法直接拒绝：结算页先给出 -US$0.50 这种金额没有意义，
+	// 校验规则与 ApiCreateOrder 保持一致（省略 = 1 件，显式 0/负数 = 非法）。
+	for i := range req.Details {
+		if req.Details[i].Quantity == 0 && !req.Details[i].QuantityProvided {
+			req.Details[i].Quantity = 1
+		}
+		if req.Details[i].Quantity <= 0 {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("InvalidQuantity"),
+			})
+			return
+		}
 	}
 	var activity *model.Activity
 	if req.ActivityId > 0 {

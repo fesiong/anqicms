@@ -651,6 +651,7 @@
 "PaymentTime:": "支付時間："
 "PayingMemberId:": "支付會員ID："
 "PleaseSelectTheProduct": "請選擇商品"
+"InvalidQuantity": "商品數量必須大於 0"
 "CrossStoreOrderingIsNotSupported": "不支持跨店下單"
 "Wait": "等"
 "NewOrderNotification": "新訂單通知"
