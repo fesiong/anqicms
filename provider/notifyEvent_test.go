@@ -180,6 +180,32 @@ func newNotifyTestTemplate(t *testing.T, w *Website, key, subject, content, over
 	return tpl
 }
 
+// notifyTestOrderAddress 造一条归属该用户的收货地址。
+//
+// v3.8.5 起实物订单下单必须带有效地址（见 checkCreateOrderAddress），通知相关用例
+// 关心的不是地址，但下单路径已经不给「无地址」放行。userId 传 0 用于匿名订单：
+// 地址归属 0，不会因为配置地址而把访客变成注册用户。
+func notifyTestOrderAddress(t *testing.T, w *Website, userId uint) uint {
+	t.Helper()
+	suffix := notifyTestSuffix()
+	addr := &model.OrderAddress{
+		UserId:      userId,
+		Name:        "通知测试收货人" + suffix,
+		Phone:       "13800000000",
+		AddressInfo: "某路 " + suffix + " 号",
+		Status:      1,
+	}
+	if err := w.DB.Create(addr).Error; err != nil {
+		t.Fatalf("创建测试收货地址失败：%v", err)
+	}
+	t.Cleanup(func() {
+		if err := w.DB.Unscoped().Delete(&model.OrderAddress{}, addr.Id).Error; err != nil {
+			t.Logf("清理测试收货地址 %d 失败：%v", addr.Id, err)
+		}
+	})
+	return addr.Id
+}
+
 func newNotifyTestProduct(t *testing.T, w *Website) *model.Archive {
 	t.Helper()
 	suffix := notifyTestSuffix()
@@ -453,8 +479,9 @@ func TestNotificationFailureDoesNotBlockCreateOrder(t *testing.T) {
 	archive := newNotifyTestProduct(t, w)
 
 	order, err := w.CreateOrder(0, &request.OrderRequest{
-		Type:    config.OrderTypeGoods,
-		Details: []request.OrderDetail{{GoodsId: archive.Id, Quantity: 1}},
+		Type:      config.OrderTypeGoods,
+		Details:   []request.OrderDetail{{GoodsId: archive.Id, Quantity: 1}},
+		AddressId: notifyTestOrderAddress(t, w, 0),
 	})
 	if err != nil {
 		t.Fatalf("通知模板渲染失败不得让下单失败：%v", err)
@@ -493,8 +520,9 @@ func TestSuccessPaidOrderEmitsEventOnce(t *testing.T) {
 	archive := newNotifyTestProduct(t, w)
 
 	order, err := w.CreateOrder(user.Id, &request.OrderRequest{
-		Type:    config.OrderTypeGoods,
-		Details: []request.OrderDetail{{GoodsId: archive.Id, Quantity: 1}},
+		Type:      config.OrderTypeGoods,
+		Details:   []request.OrderDetail{{GoodsId: archive.Id, Quantity: 1}},
+		AddressId: notifyTestOrderAddress(t, w, user.Id),
 	})
 	if err != nil {
 		t.Fatalf("创建订单失败：%v", err)
@@ -572,8 +600,9 @@ func TestAnonymousOrderEmitsCreatedEvent(t *testing.T) {
 	archive := newNotifyTestProduct(t, w)
 
 	order, err := w.CreateOrder(0, &request.OrderRequest{
-		Type:    config.OrderTypeGoods,
-		Details: []request.OrderDetail{{GoodsId: archive.Id, Quantity: 1}},
+		Type:      config.OrderTypeGoods,
+		Details:   []request.OrderDetail{{GoodsId: archive.Id, Quantity: 1}},
+		AddressId: notifyTestOrderAddress(t, w, 0),
 	})
 	if err != nil {
 		t.Fatalf("匿名下单失败：%v", err)

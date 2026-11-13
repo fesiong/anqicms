@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/jinzhu/now"
@@ -284,14 +285,45 @@ func (w *Website) SetOrderDeliver(req *request.OrderDeliveryRequest) error {
 }
 
 func (w *Website) SetOrderFinished(order *model.Order) error {
-	tx := w.DB.Begin()
-	order.Status = config.OrderStatusCompleted
-	order.FinishedTime = time.Now().Unix()
-	err := tx.Save(order).Error
-	if err != nil {
-		tx.Rollback()
-		return err
+	if order == nil {
+		return errors.New("order is nil")
 	}
+	if order.Status == config.OrderStatusCompleted {
+		// 已完成：幂等返回，绝不再走一遍分钱，否则每次点「完成」都给卖家加一次余额
+		return nil
+	}
+	finishedTime := time.Now().Unix()
+	tx := w.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	// 状态闸门与分钱同一事务：只有真正把订单推到「已完成」的那一次才记账。
+	res := tx.Model(&model.Order{}).
+		Where("`id` = ? AND `status` IN ?", order.Id, finishedOrderStatuses).
+		UpdateColumns(map[string]interface{}{
+			"status":        config.OrderStatusCompleted,
+			"finished_time": finishedTime,
+		})
+	if res.Error != nil {
+		tx.Rollback()
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		// 并发/重复调用：状态已经不是可完成态，核对真实状态后收场
+		tx.Rollback()
+		if cur, err := w.GetOrderInfoByOrderId(order.OrderId); err == nil {
+			if cur.Status == config.OrderStatusCompleted {
+				order.Status = config.OrderStatusCompleted
+				order.FinishedTime = cur.FinishedTime
+				return nil
+			}
+			return errors.New(w.Tr("TheOrderIsNotOperational"))
+		}
+		return errors.New(w.Tr("TheOrderIsNotOperational"))
+	}
+	order.Status = config.OrderStatusCompleted
+	order.FinishedTime = finishedTime
+	var err error
 	// 处理订单完成，并开始分钱
 	// seller
 	if order.SellerAmount > 0 {
@@ -462,13 +494,42 @@ func (w *Website) SetOrderFinished(order *model.Order) error {
 	return nil
 }
 
-// cancelableOrderStatuses 允许被取消的订单状态。
-// 已取消(-1)/已完成(3)/已退款(9) 都不在内：否则重复点「取消」会一遍遍回补库存。
+// cancelableOrderStatuses 允许被「取消」的订单状态，只有待支付。
+//
+// ⚠️ 已付款(1)/已发货(2)/退款中(8) 都不能靠「取消」收场：取消只回补库存、不退款，
+// 客户实测已付款订单调用 /api/order/cancel 返回成功，订单变已取消、库存 96→97，
+// 钱却还留在网关里。这类订单必须走 SetOrderRefund 原路退款。
+// 已取消(-1)/已完成(3)/已退款(9) 也不在内：否则重复点「取消」会一遍遍回补库存。
 var cancelableOrderStatuses = []int{
 	config.OrderStatusWaiting,
+}
+
+// finishedOrderStatuses 允许被「完成」的订单状态。
+//
+// 已支付在此列：PluginOrder.NoProcess 与 VIP 订单在支付成功回调里直接完成（order.go 的
+// SuccessPaidOrder）；已发货在此列：用户确认收货与超时自动完成都从 2 出发。
+// ⚠️ 待支付(0)/已取消(-1)/已退款(9) 一律拒绝——完成会给卖家记佣金、加余额，
+// 允许未付款订单完成等于凭空造钱（客户实测：未付款、已取消订单调用 /api/order/finish
+// 均返回成功，状态直接变已完成）。
+var finishedOrderStatuses = []int{
 	config.OrderStatusPaid,
 	config.OrderStatusDelivering,
-	config.OrderStatusRefunding,
+}
+
+// refundableOrderStatuses 允许申请退款的订单状态，本质是「钱已经收到了」。
+var refundableOrderStatuses = []int{
+	config.OrderStatusPaid,
+	config.OrderStatusDelivering,
+	config.OrderStatusCompleted,
+}
+
+func intInSlice(v int, list []int) bool {
+	for _, item := range list {
+		if v == item {
+			return true
+		}
+	}
+	return false
 }
 
 // SetOrderCanceled 取消订单并回补库存。
@@ -509,9 +570,9 @@ func (w *Website) SetOrderCanceled(order *model.Order) error {
 				order.FinishedTime = cur.FinishedTime
 				return nil
 			}
-			return fmt.Errorf("order %s status %d cannot be canceled", order.OrderId, cur.Status)
 		}
-		return nil
+		// 已付款/已发货/已完成/已退款：取消不是它们该走的出口，让调用方改用退款流程
+		return errors.New(w.Tr("TheOrderIsNotOperational"))
 	}
 	order.Status = config.OrderStatusCanceled
 	order.FinishedTime = finishedTime
@@ -757,6 +818,15 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 }
 
 func (w *Website) ApplyOrderRefund(order *model.Order) error {
+	if order == nil {
+		return errors.New("order is nil")
+	}
+	// ⚠️ 只有「钱已经收到」的订单能申请退款。待支付/已取消/已退款一律拒绝：
+	// 客户实测未付款、已取消、已退款订单调用 /api/order/refund 都能建出退款申请，
+	// 后续一旦有人点「同意」，就会给没付过钱的订单退出一笔真金白银。
+	if !intInSlice(order.Status, refundableOrderStatuses) {
+		return errors.New(w.Tr("TheOrderIsNotOperational"))
+	}
 	// 用户申请退款
 	refund, err := w.GetOrderRefundByOrderId(order.OrderId)
 	if err == nil {
@@ -1104,6 +1174,69 @@ func (w *Website) SuccessRefundOrder(refund *model.OrderRefund, order *model.Ord
 	return err
 }
 
+// checkCreateOrderAddress 校验实物订单的收货地址。
+//
+// 只有需要发货的订单才要求地址：系统关闭了交易流程（NoProcess）、VIP 订单、以及对账
+// 明细里全是虚拟/服务/订阅商品时不校验。其余订单一律要求「内联地址填全」或
+// 「address_id 指向自己的地址」——下单会立刻扣库存，地址不合法等于先锁货再永远发不出去。
+func (w *Website) checkCreateOrderAddress(userId uint, req *request.OrderRequest) error {
+	if !w.orderNeedsShipping(req) {
+		return nil
+	}
+	if req.Address != nil {
+		// 至少要能联系到人、能投递：姓名 + 电话 + 详细地址
+		if strings.TrimSpace(req.Address.Name) == "" && strings.TrimSpace(req.Address.LastName) == "" {
+			return errors.New(w.Tr("IncorrectRecipientAddress"))
+		}
+		if strings.TrimSpace(req.Address.Phone) == "" || strings.TrimSpace(req.Address.AddressInfo) == "" {
+			return errors.New(w.Tr("IncorrectRecipientAddress"))
+		}
+		return nil
+	}
+	if req.AddressId == 0 {
+		return errors.New(w.Tr("IncorrectRecipientAddress"))
+	}
+	// 地址必须存在且属于下单人：否则可以拿别人的地址下单，还能读到对方姓名电话
+	addr, err := w.GetOrderAddressById(req.AddressId)
+	if err != nil || addr == nil || addr.UserId != userId {
+		return errors.New(w.Tr("AddressDoesNotExist"))
+	}
+
+	return nil
+}
+
+// orderNeedsShipping 判断这笔订单是否需要收货地址。
+//
+// 虚拟(4)/服务(5)/订阅(6) 商品不需要物流；只要订单里有一件实物就要地址。
+// 侧表没有行的商品按普通实物处理（3.8.0 之后商品属性都在 archive_products）。
+func (w *Website) orderNeedsShipping(req *request.OrderRequest) bool {
+	if w.PluginOrder == nil || w.PluginOrder.NoProcess {
+		return false
+	}
+	if req.Type == config.OrderTypeVip || req.Type == config.OrderTypeCommunication {
+		return false
+	}
+	goodsIds := make([]int64, 0, len(req.Details))
+	for _, detail := range req.Details {
+		if detail.GoodsId > 0 {
+			goodsIds = append(goodsIds, detail.GoodsId)
+		}
+	}
+	if len(goodsIds) == 0 {
+		return false
+	}
+	var noShipping int64
+	w.DB.Model(&model.ArchiveProduct{}).
+		Where("`archive_id` IN ? AND `product_type` IN ?", goodsIds, []int{
+			config.ProductTypeVirtual,
+			config.ProductTypeService,
+			config.ProductTypeSubscription,
+		}).
+		Count(&noShipping)
+
+	return noShipping < int64(len(goodsIds))
+}
+
 func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Order, error) {
 	user, err := w.GetUserInfoById(userId)
 	if err != nil && w.PluginOrder.NoNeedLogin == false {
@@ -1206,6 +1339,13 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		if couponCode != nil && activity.CanUseCoupon == false {
 			return nil, errors.New(w.Tr("CouponCannotBeUsed"))
 		}
+	}
+	// ⚠️ 实物订单必须有可用的收货地址，且在扣库存/建单之前校验：
+	// 客户实测省略地址（address_id 缺省或传 0）、传不存在的 ID、传其他买家的地址，
+	// 接口都会建单并扣库存，订单 address_id 落成 0；内联只填姓名也能建单，
+	// 保存出一条没有电话和详细地址的「半成品地址」，发货时才发现无法投递。
+	if err = w.checkCreateOrderAddress(userId, req); err != nil {
+		return nil, err
 	}
 	tx := w.DB.Begin()
 	var orderAddress *model.OrderAddress

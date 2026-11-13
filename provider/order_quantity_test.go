@@ -138,6 +138,8 @@ func TestCreateOrderOmittedQuantityDefaultsToOne(t *testing.T) {
 
 	req := &request.OrderRequest{
 		Details: []request.OrderDetail{{GoodsId: goods.Id}}, // 没传 quantity
+		// 实物订单必须有收货地址（v3.8.5 起在扣库存前校验）
+		Address: &request.OrderAddressRequest{Name: "张三", Phone: "13800000001", AddressInfo: "某路 1 号"},
 	}
 	order, err := w.CreateOrder(buyer.Id, req)
 	if err != nil {

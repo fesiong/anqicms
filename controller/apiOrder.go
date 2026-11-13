@@ -984,6 +984,24 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 		})
 		return
 	}
+	// ⚠️ 只有「待支付 + 自己的订单」才能生成付款链接。
+	// 客户实测：订单取消后连续调用两次 /api/order/payment 都成功，还生成了两个不同的
+	// PayPal 订单（同一 payment 的 terrace_id 被覆盖），买家可能付到一张已取消的单上。
+	// 另外这里原本没有归属校验，任何登录用户都能给别人的订单发起支付。
+	if order.UserId != userId {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("TheOrderIsNotOperational"),
+		})
+		return
+	}
+	if order.Status != config.OrderStatusWaiting || order.PaidTime > 0 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("TheOrderIsNotOperational"),
+		})
+		return
+	}
 
 	payment, err := currentSite.GeneratePayment(order, &req)
 	if err != nil {
@@ -993,7 +1011,6 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 		})
 		return
 	}
-	// 推送事件
 	currentSite.CreateEvent(provider.EventOrderCheckout, map[string]interface{}{
 		"order_id": order.OrderId,
 		"amount":   float32(order.Amount) / 100,
@@ -1268,6 +1285,26 @@ func createPaypalPayment(ctx iris.Context, payment *model.Payment, order *model.
 		return
 	}
 
+	// ⚠️ 同一笔 payment 已有 PayPal 订单时优先复用：原来每次都新开一单并把
+	// payments.terrace_id 覆盖掉，买家用旧链接付款后通知对不上，等于凭空多出一个订单。
+	if payment.TerraceId != "" {
+		if detailRsp, dErr := client.OrderDetail(ctx, payment.TerraceId, make(gopay.BodyMap)); dErr == nil &&
+			detailRsp.Code == paypal.Success && detailRsp.Response != nil &&
+			detailRsp.Response.Status != "COMPLETED" && detailRsp.Response.Status != "VOIDED" {
+			if jumpUrl := paypalApproveLink(detailRsp.Response.Links); jumpUrl != "" {
+				ctx.JSON(iris.Map{
+					"code": config.StatusOK,
+					"msg":  "",
+					"data": iris.Map{
+						"pay_way":  config.PayWayPaypal,
+						"jump_url": jumpUrl,
+					},
+				})
+				return
+			}
+		}
+	}
+
 	var purchases = []*paypal.PurchaseUnit{
 		{
 			ReferenceId: payment.PaymentId,
@@ -1328,6 +1365,20 @@ func createPaypalPayment(ctx iris.Context, payment *model.Payment, order *model.
 			"jump_url": ppRsp.Response.Links[1].Href,
 		},
 	})
+}
+
+// paypalApproveLink 从 PayPal 订单的 links 里取买家付款页地址。
+// 新版返回 rel=payer-action，旧版是 rel=approve，两种都认。
+func paypalApproveLink(links []*paypal.Link) string {
+	for _, l := range links {
+		if l == nil || l.Href == "" {
+			continue
+		}
+		if l.Rel == "payer-action" || l.Rel == "approve" {
+			return l.Href
+		}
+	}
+	return ""
 }
 
 func createStripePayment(ctx iris.Context, payment *model.Payment, order *model.Order) {
