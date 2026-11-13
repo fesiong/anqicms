@@ -239,7 +239,7 @@ type SmsTwilioRegion struct {
 
 [INFERRED] 唯一入口 `sms.Resolve(cfg *config.PluginSmsConfig, region, scene string) (*sms.Profile, error)`，实现 §1.1(a) 的口径。**必须带 `scene`**：模板是按场景配的，不带场景就无法判定「该场景模板为空」并提前拒发。
 
-1. `Provider == ""` → `ErrSmsDisabled`。
+1. `Provider == ""` → `ErrSmsServiceNotEnabled`。
 2. 按 `phone_country == "86"` 判定 region；`86` 为国内，其余（含 `852`／`853`／`886`）为国际。
 3. `Provider == twilio && region == domestic` → `ErrSmsRegionUnsupported`，**明确拒发**，不静默降级。
 4. 国际 profile 的**凭据字段**逐个判空，空则取国内同名字段；`SignName` 与 `Templates`／`Texts` **永不继承**。
@@ -623,8 +623,8 @@ Twilio 到中国大陆的到达率不可靠，这是它只用于国际号码的�
 ### 6.3 发码流程
 
 ```
- 1. Provider 非空？                        否 → ErrSmsDisabled
- 2. scene 在 Scenes 白名单？               否 → ErrSmsSceneDisabled（后台 test 场景跳过此步）
+ 1. Provider 非空？                        否 → ErrSmsServiceNotEnabled
+ 2. scene 在 Scenes 白名单？               否 → ErrSmsSceneNotEnabled（后台 test 场景跳过此步）
  3. 号码归一化 + 格式校验                  失败 → ErrSmsPhoneInvalid
  4. Safe.Captcha == 1 时校验图形验证码      失败 → 图形验证码错误
  5. IP 滑窗（小时 / 日）                   超限 → ErrSmsIpLimited
@@ -966,8 +966,8 @@ Twilio tab 顶部固定提示：**仅支持国际号码，`+86` 号码将被拒�
 
 | 错误 | 触发条件 | 对外提示口径 |
 |---|---|---|
-| `ErrSmsDisabled` | `Provider == ""` | 短信服务未启用 |
-| `ErrSmsSceneDisabled` | 场景不在 `Scenes` | 该场景未开启 |
+| `ErrSmsServiceNotEnabled` | `Provider == ""` | 短信服务未启用 |
+| `ErrSmsSceneNotEnabled` | 场景不在 `Scenes` | 该场景未开启 |
 | `ErrSmsPhoneInvalid` | 归一化或格式校验失败 | 手机号格式不正确 |
 | `ErrSmsRegionUnsupported` | Twilio + `+86` | 当前短信服务商不支持中国大陆号码 |
 | `ErrSmsCredentialMissing` | 解析后仍缺必填凭据 | 短信服务未配置完整 |

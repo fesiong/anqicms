@@ -553,8 +553,8 @@ func smsTestPhone(t *testing.T, w *Website) (country, local string)
 
 第一轮测试：
 
-- `TestSmsSendDisabled`：`Provider=""` → `errors.Is(err, sms.ErrSmsDisabled)`，且 `sms_logs` 无新行。
-- `TestSmsSendSceneWhitelist`：`Scenes=["login"]` → `register` 落 `ErrSmsSceneDisabled`；`test` **允许**（后台场景不受白名单限制）；`notify.order` 落 `ErrSmsSceneDisabled`。
+- `TestSmsSendDisabled`：`Provider=""` → `errors.Is(err, sms.ErrSmsServiceNotEnabled)`，且 `sms_logs` 无新行。
+- `TestSmsSendSceneWhitelist`：`Scenes=["login"]` → `register` 落 `ErrSmsSceneNotEnabled`；`test` **允许**（后台场景不受白名单限制）；`notify.order` 落 `ErrSmsSceneNotEnabled`。
 - `TestSmsSendDailyLimitAcrossScenes`（**审查重点 2**）：`DailyLimitPerPhone=3`，依次发 `login`／`register`／`reset` 各一次全部成功，第四次（任意场景）落 `ErrSmsPhoneLimited`，`sms_logs` 该号当日行数 == 3。**反向对照**：把计数查询加上 `scene` 条件后重跑必须变红。
 - `TestSmsSendResendIntervalPerScene`：`ResendInterval=60`，`login` 连发两次 → 第二次 `ErrSmsResendTooSoon` 且 `errors.As` 取到 `*sms.WaitError`、`Seconds` 在 1..60；紧接着发 `register` → **成功**（重发间隔按场景）。
 - `TestSmsSendRegionUnsupported`：`Provider=twilio` + `("86", ...)` → `ErrSmsRegionUnsupported`，假 sender `calls == 0`。
