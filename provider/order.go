@@ -297,9 +297,16 @@ func (w *Website) SetOrderFinished(order *model.Order) error {
 	if tx.Error != nil {
 		return tx.Error
 	}
+	// 实物订单必须已发货才能完成：已付款只是钱到了，货还在仓库里。
+	// 客户实测在「已付款、未发货」的实物订单上调用 /api/order/finish 会直接变已完成，
+	// 后台因此把待发货订单显示成已完成，运营漏发货、客服误判，还会提前给卖家结算。
+	allowedStatuses := finishedOrderStatuses
+	if w.orderNeedsDelivery(order) {
+		allowedStatuses = []int{config.OrderStatusDelivering}
+	}
 	// 状态闸门与分钱同一事务：只有真正把订单推到「已完成」的那一次才记账。
 	res := tx.Model(&model.Order{}).
-		Where("`id` = ? AND `status` IN ?", order.Id, finishedOrderStatuses).
+		Where("`id` = ? AND `status` IN ?", order.Id, allowedStatuses).
 		UpdateColumns(map[string]interface{}{
 			"status":        config.OrderStatusCompleted,
 			"finished_time": finishedTime,
@@ -504,10 +511,12 @@ var cancelableOrderStatuses = []int{
 	config.OrderStatusWaiting,
 }
 
-// finishedOrderStatuses 允许被「完成」的订单状态。
+// finishedOrderStatuses 允许被「完成」的订单状态（不需要物流的订单）。
 //
 // 已支付在此列：PluginOrder.NoProcess 与 VIP 订单在支付成功回调里直接完成（order.go 的
 // SuccessPaidOrder）；已发货在此列：用户确认收货与超时自动完成都从 2 出发。
+// ⚠️ 这只是「无物流订单」的白名单：实物订单在 SetOrderFinished 里会被
+// orderNeedsDelivery 收窄成「仅已发货(2)」，否则未发货就能确认收货。
 // ⚠️ 待支付(0)/已取消(-1)/已退款(9) 一律拒绝——完成会给卖家记佣金、加余额，
 // 允许未付款订单完成等于凭空造钱（客户实测：未付款、已取消订单调用 /api/order/finish
 // 均返回成功，状态直接变已完成）。
@@ -1177,32 +1186,55 @@ func (w *Website) SuccessRefundOrder(refund *model.OrderRefund, order *model.Ord
 // checkCreateOrderAddress 校验实物订单的收货地址。
 //
 // 只有需要发货的订单才要求地址：系统关闭了交易流程（NoProcess）、VIP 订单、以及对账
-// 明细里全是虚拟/服务/订阅商品时不校验。其余订单一律要求「内联地址填全」或
-// 「address_id 指向自己的地址」——下单会立刻扣库存，地址不合法等于先锁货再永远发不出去。
+// 明细里全是虚拟/服务/订阅商品时不校验。其余订单一律要求「能解析出一个属于下单人的地址」
+// ——下单会立刻扣库存，地址不合法等于先锁货再永远发不出去。
+//
+// ⚠️ 结账页会同时提交 address_id 和保存接口返回的完整 address 对象。判断顺序必须
+// 「已有地址优先」：只按内联对象是否填全来判，会把这些本来有效的请求判成
+// 「收件地址不正确」（v3.8.4 实测：同一地址只传 address_id 能下单，两个都传就失败）。
 func (w *Website) checkCreateOrderAddress(userId uint, req *request.OrderRequest) error {
 	if !w.orderNeedsShipping(req) {
 		return nil
 	}
-	if req.Address != nil {
-		// 至少要能联系到人、能投递：姓名 + 电话 + 详细地址
-		if strings.TrimSpace(req.Address.Name) == "" && strings.TrimSpace(req.Address.LastName) == "" {
-			return errors.New(w.Tr("IncorrectRecipientAddress"))
-		}
-		if strings.TrimSpace(req.Address.Phone) == "" || strings.TrimSpace(req.Address.AddressInfo) == "" {
-			return errors.New(w.Tr("IncorrectRecipientAddress"))
+	if addressId := createOrderAddressId(req); addressId > 0 {
+		// 地址必须存在且属于下单人：否则可以拿别人的地址下单，还能读到对方姓名电话
+		addr, err := w.GetOrderAddressById(addressId)
+		if err != nil || addr == nil || addr.UserId != userId {
+			return errors.New(w.Tr("AddressDoesNotExist"))
 		}
 		return nil
 	}
-	if req.AddressId == 0 {
+	// 没有可复用的已有地址：内联地址必须填全，否则会存出一条无法投递的半成品地址
+	if !addressIsDeliverable(req.Address) {
 		return errors.New(w.Tr("IncorrectRecipientAddress"))
-	}
-	// 地址必须存在且属于下单人：否则可以拿别人的地址下单，还能读到对方姓名电话
-	addr, err := w.GetOrderAddressById(req.AddressId)
-	if err != nil || addr == nil || addr.UserId != userId {
-		return errors.New(w.Tr("AddressDoesNotExist"))
 	}
 
 	return nil
+}
+
+// createOrderAddressId 取出结账请求里「已有地址」的 id。
+//
+// 三种传法都要支持：只传 address_id、只传带 id 的地址对象、两个都传。
+// 两者同时出现时以内联对象的 id 为准，因为落库走的是 SaveOrderAddress（按 id 更新）。
+func createOrderAddressId(req *request.OrderRequest) uint {
+	if req.Address != nil && req.Address.Id > 0 {
+		return req.Address.Id
+	}
+	return req.AddressId
+}
+
+// addressIsDeliverable 判断内联地址是否填全：至少能联系到人、能投递。
+func addressIsDeliverable(addr *request.OrderAddressRequest) bool {
+	if addr == nil {
+		return false
+	}
+	if strings.TrimSpace(addr.Name) == "" && strings.TrimSpace(addr.LastName) == "" {
+		return false
+	}
+	if strings.TrimSpace(addr.Phone) == "" || strings.TrimSpace(addr.AddressInfo) == "" {
+		return false
+	}
+	return true
 }
 
 // orderNeedsShipping 判断这笔订单是否需要收货地址。
@@ -1222,6 +1254,62 @@ func (w *Website) orderNeedsShipping(req *request.OrderRequest) bool {
 			goodsIds = append(goodsIds, detail.GoodsId)
 		}
 	}
+
+	return w.goodsNeedShipping(goodsIds)
+}
+
+// orderNeedsDelivery 判断已落库的订单是否需要物流（发货）。
+//
+// 与 orderNeedsShipping 的区别是数据来源：这里读 order_details，用于状态流转时
+// 判断「能不能直接完成」——实物订单只有已发货(2)才能确认收货。
+func (w *Website) orderNeedsDelivery(order *model.Order) bool {
+	if order == nil {
+		return false
+	}
+	if w.PluginOrder == nil || w.PluginOrder.NoProcess {
+		return false
+	}
+	if order.Type == config.OrderTypeVip || order.Type == config.OrderTypeCommunication {
+		return false
+	}
+	var details []*model.OrderDetail
+	w.DB.Where("`order_id` = ?", order.OrderId).Find(&details)
+	goodsIds := make([]int64, 0, len(details))
+	seen := make(map[int64]bool, len(details))
+	for _, detail := range details {
+		if detail.GoodsId > 0 && !seen[detail.GoodsId] {
+			seen[detail.GoodsId] = true
+			goodsIds = append(goodsIds, detail.GoodsId)
+		}
+	}
+
+	return w.goodsNeedShipping(goodsIds)
+}
+
+// preheatOrderArchiveUrlToken 在开事务前补齐订单商品的 url_token。
+//
+// GetUrl(PatternArchive, ...) 发现商品 url_token 为空时会写一次 archives，而那次写走的
+// 是非事务连接。如果它发生在下单事务中途（订单通知要用商品链接），MariaDB 会把事务后续
+// 的库存更新判成「Record has changed since last read in table 'archives'」(errno 1020)，
+// 整单失败——刚导入、还没生成 url_token 的商品，下单时必然踩到。
+func (w *Website) preheatOrderArchiveUrlToken(req *request.OrderRequest) {
+	for _, detail := range req.Details {
+		if detail.GoodsId <= 0 {
+			continue
+		}
+		var archive model.Archive
+		if err := w.DB.Where("`id` = ?", detail.GoodsId).Take(&archive).Error; err != nil {
+			continue
+		}
+		if archive.UrlToken == "" {
+			_ = w.UpdateArchiveUrlToken(&archive)
+		}
+	}
+}
+
+// goodsNeedShipping 判断一组商品里是否含需要物流的实物。
+// 虚拟(4)/服务(5)/订阅(6) 不需要；侧表没有行的商品按实物处理（保守：宁可要求发货）。
+func (w *Website) goodsNeedShipping(goodsIds []int64) bool {
 	if len(goodsIds) == 0 {
 		return false
 	}
@@ -1347,9 +1435,12 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 	if err = w.checkCreateOrderAddress(userId, req); err != nil {
 		return nil, err
 	}
+	w.preheatOrderArchiveUrlToken(req)
 	tx := w.DB.Begin()
 	var orderAddress *model.OrderAddress
-	if w.PluginOrder.NoProcess == false && req.Address != nil {
+	// ⚠️ 内联地址不完整时绝不能保存：SaveOrderAddress 是全字段覆盖写，
+	// 结账页把「id + 部分字段」回传过来时，会把用户已保存的地址清成空姓名/空电话。
+	if w.PluginOrder.NoProcess == false && addressIsDeliverable(req.Address) {
 		//保存订单地址
 		orderAddress, err = w.SaveOrderAddress(tx, userId, req.Address)
 		if err != nil {
@@ -1421,8 +1512,13 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 	}
 	if orderAddress != nil {
 		order.AddressId = orderAddress.Id
-	} else if req.AddressId > 0 {
-		orderAddress, _ = w.GetOrderAddressById(req.AddressId)
+	} else if addressId := createOrderAddressId(req); addressId > 0 {
+		// 只传 address_id、或内联对象不完整（跳过保存）时，订单仍要挂上已有地址，
+		// 否则会落成 address_id=0 的「无地址订单」，发货时无从下手。
+		if loaded, loadErr := w.GetOrderAddressById(addressId); loadErr == nil && loaded != nil {
+			orderAddress = loaded
+			order.AddressId = loaded.Id
+		}
 	}
 	err = tx.Save(&order).Error
 	if err != nil {
@@ -1816,21 +1912,33 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		order.ShippingQuantity = calcQuantity
 		order.ShippingWeight = calcWeight
 		order.ShippingVolume = calcVolume
-		// 计算运费
-		var orderAddress *model.OrderAddress
-		if req.Address != nil {
-			orderAddress = &model.OrderAddress{
-				CountryCode:  req.Address.CountryCode,
-				Country:      req.Address.Country,
-				ProvinceCode: req.Address.ProvinceCode,
-				Province:     req.Address.Province,
-				City:         req.Address.City,
-				Postcode:     req.Address.Postcode,
-			}
-		} else if req.AddressId > 0 {
-			orderAddress, _ = w.GetOrderAddressById(req.AddressId)
+		// 计算运费：内联地址的省市区优先（结账页刚选的），缺的字段用已解析地址补齐。
+		// 不能因为「内联对象不完整但仍然传了」就按空地址算运费。
+		feeAddress := &model.OrderAddress{}
+		if orderAddress != nil {
+			*feeAddress = *orderAddress
 		}
-		order.ShippingFee = w.CalculateShippingFee(orderAddress, order.Amount, calcQuantity, calcWeight, calcVolume)
+		if req.Address != nil {
+			if req.Address.CountryCode != "" {
+				feeAddress.CountryCode = req.Address.CountryCode
+			}
+			if req.Address.Country != "" {
+				feeAddress.Country = req.Address.Country
+			}
+			if req.Address.ProvinceCode != "" {
+				feeAddress.ProvinceCode = req.Address.ProvinceCode
+			}
+			if req.Address.Province != "" {
+				feeAddress.Province = req.Address.Province
+			}
+			if req.Address.City != "" {
+				feeAddress.City = req.Address.City
+			}
+			if req.Address.Postcode != "" {
+				feeAddress.Postcode = req.Address.Postcode
+			}
+		}
+		order.ShippingFee = w.CalculateShippingFee(feeAddress, order.Amount, calcQuantity, calcWeight, calcVolume)
 		if shippingDiscount > 0 {
 			originShippingFee := order.ShippingFee
 			order.ShippingFee = int64(float64(originShippingFee) * (float64(shippingDiscount) / 100))
@@ -1984,9 +2092,11 @@ func (w *Website) SaveOrderAddress(tx *gorm.DB, userId uint, req *request.OrderA
 	orderAddress.LastName = req.LastName
 	orderAddress.Phone = req.Phone
 	orderAddress.Email = req.Email
+	orderAddress.ProvinceCode = req.ProvinceCode
 	orderAddress.Province = req.Province
 	orderAddress.City = req.City
 	orderAddress.Town = req.Town
+	orderAddress.CountryCode = req.CountryCode
 	orderAddress.Country = req.Country
 	orderAddress.AddressInfo = req.AddressInfo
 	orderAddress.Company = req.Company
