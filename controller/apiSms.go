@@ -105,3 +105,77 @@ func ApiSmsSend(ctx iris.Context) {
 		"data": result,
 	})
 }
+
+// ApiSmsPasswordReset 处理 POST /api/sms/password/reset（规格 §7.1 / 裁决 R93）。
+// 独立端点，不搅动既有 POST /api/password/reset 的 email-token 逻辑。
+// 顺序：ReadJSON → 密码 ≥6 位 → 归一化 → 校验 reset 场景码 → 按 (区号,号码) 查用户
+// → EncryptPassword + Save（接 .Error）。
+func ApiSmsPasswordReset(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.ApiSmsPasswordResetRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		respondSmsError(ctx, currentSite, err)
+		return
+	}
+	req.Password = strings.TrimSpace(req.Password)
+	if len(req.Password) < 6 {
+		// 沿用既有 ApiResetUserPassword 的键（R93）。
+		respondSmsError(ctx, currentSite, errors.New("PleaseFillInAPasswordOfMoreThan6Digits"))
+		return
+	}
+	p, err := sms.NormalizePhone(req.PhoneCountry, req.Phone)
+	if err != nil {
+		respondSmsError(ctx, currentSite, err)
+		return
+	}
+	if err = currentSite.VerifySmsCode(p.Country, p.Local, sms.SceneReset, req.Code); err != nil {
+		respondSmsError(ctx, currentSite, err)
+		return
+	}
+	user, err := currentSite.GetUserInfoByPhoneCountry(p.Country, p.Local)
+	if err != nil {
+		// R93：查不到用户时与「错码第 5 次」经 respondSmsError 得到逐字相同的文案，
+		// 且 errors.As 命中才会把 0 作为 %d 传入；不泄露注册状态，也绝不返回
+		// 用户不存在类区分提示，更不能返回裸的错码哨兵（该键文案含 %d，无参会
+		// 输出 %!(NOVERB)，违反 R82）。
+		respondSmsError(ctx, currentSite, &sms.AttemptsError{Remaining: 0})
+		return
+	}
+	if err = user.EncryptPassword(req.Password); err != nil {
+		respondSmsError(ctx, currentSite, err)
+		return
+	}
+	if err = currentSite.DB.Save(user).Error; err != nil {
+		respondSmsError(ctx, currentSite, err)
+		return
+	}
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+	})
+}
+
+// ApiSmsPhoneBind 处理 POST /api/sms/phone/bind（规格 §7.1 / 裁决 R94）。
+// 由 route/base.go 的 middleware.UserAuth 保护；userId 取登录态，为 0 直接拒。
+// 错误统一走 respondSmsError，成功只回 {code, msg}，不回显号码。
+func ApiSmsPhoneBind(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.ApiSmsPhoneBindRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		respondSmsError(ctx, currentSite, err)
+		return
+	}
+	userId := ctx.Values().GetUintDefault("userId", 0)
+	if userId == 0 {
+		respondSmsError(ctx, currentSite, sms.ErrSmsSceneNotEnabled)
+		return
+	}
+	if err := currentSite.BindUserPhone(userId, req.OldCode, req.NewPhoneCountry, req.NewPhone, req.NewCode); err != nil {
+		respondSmsError(ctx, currentSite, err)
+		return
+	}
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+	})
+}

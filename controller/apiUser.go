@@ -11,6 +11,7 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/provider/sms"
 	"kandaoni.com/anqicms/request"
 )
 
@@ -47,6 +48,24 @@ func ApiRegister(ctx iris.Context) {
 	}
 	if req.UserName == "" && req.Email != "" {
 		req.UserName = strings.Split(req.Email, "@")[0]
+	}
+	// R90：传了 phone 就必须先按 §6.2 六道闸门归一化校验（含 ITU 区号成员），
+	// 拒绝伪造区号；成功后回填已校验的区号/号码并置内部标记 PhoneNormalized，
+	// 再强制校验 register 场景短信码，失败整单拒。code 为空也不得旁路（空码
+	// 会在 HMAC 比对处落错码错误）。不传 phone 时整段不进入，行为与 BASE 逐字一致。
+	if req.Phone != "" {
+		p, e := sms.NormalizePhone(req.PhoneCountry, req.Phone)
+		if e != nil {
+			respondSmsError(ctx, currentSite, e)
+			return
+		}
+		req.PhoneCountry = p.Country
+		req.Phone = p.Local
+		req.PhoneNormalized = true
+		if e = currentSite.VerifySmsCode(p.Country, p.Local, sms.SceneRegister, req.Code); e != nil {
+			respondSmsError(ctx, currentSite, e)
+			return
+		}
 	}
 	user, err := currentSite.RegisterUser(&req)
 	if err != nil {

@@ -70,6 +70,10 @@ func Register(app *iris.Application, systemFiles embed.FS) {
 		// 前端api
 		api.Post("/login", controller.ApiLogin)
 		api.Post("/sms/send", controller.ApiSmsSend)
+		// 短信找回密码：独立端点，不挂 AccountProbeGuard（其预算语义围绕三个邮箱探针，R94）。
+		api.Post("/sms/password/reset", controller.ApiSmsPasswordReset)
+		// 手机号换绑：要求登录态（R94）。
+		api.Post("/sms/phone/bind", middleware.UserAuth, controller.ApiSmsPhoneBind)
 		// 下面三个端点都能判断「某个邮箱是否已注册」，共用一份按 IP 的预算：
 		// register 报「已注册」、verify/email 报「用户不存在」、state=exist 回布尔值。
 		api.Post("/register", middleware.AccountProbeGuard, controller.ApiRegister)
