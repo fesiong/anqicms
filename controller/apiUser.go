@@ -152,6 +152,14 @@ func ApiLogin(ctx iris.Context) {
 			})
 			return
 		}
+	} else if req.Platform == config.PlatformSms {
+		// 短信验证码登录（未注册自动注册，规格 §7.1 / §6.5）。
+		// 统一走 respondSmsError（R81）：不得把审核/封禁提示吞成 TplTr("LoginFailed")。
+		user, err = currentSite.LoginViaSms(&req)
+		if err != nil {
+			respondSmsError(ctx, currentSite, err)
+			return
+		}
 	} else {
 		// login via user_name/email/cellphone and password
 		if currentSite.Safe.Captcha == 1 {

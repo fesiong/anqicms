@@ -114,9 +114,10 @@ type ApiRegisterRequest struct {
 	Introduce     string `json:"introduce"`
 	Email         string `json:"email"`
 	Phone         string `json:"phone"`
+	PhoneCountry  string `json:"phone_country"`
 	CaptchaId     string `json:"captcha_id"`
 	Captcha       string `json:"captcha"`
-	Code          string `json:"code"`  //phone verify code
+	Code          string `json:"code"`  // 本期真正承载短信验证码（register 场景，规格 §7.1）
 	State         string `json:"state"` // 注册状态
 	ResetPassword bool   `json:"reset_password"`
 
@@ -125,7 +126,7 @@ type ApiRegisterRequest struct {
 
 type ApiLoginRequest struct {
 	InviteId      uint   `json:"invite_id"` // 邀请用户ID
-	Code          string `json:"code"`      //微信临时凭证,或者是验证码
+	Code          string `json:"code"`      // 本期真正承载短信验证码（sms 平台登录，规格 §7.1）
 	AnonymousCode string `json:"anonymousCode"`
 	Platform      string `json:"platform"`
 	Avatar        string `json:"avatar"`
@@ -138,6 +139,7 @@ type ApiLoginRequest struct {
 	Iv            string `json:"iv"`
 	Signature     string `json:"signature"`
 	RawData       string `json:"rawData"`
+	PhoneCountry  string `json:"phone_country"`
 
 	Remember  bool   `json:"remember"` // keep login state
 	UserName  string `json:"user_name"`

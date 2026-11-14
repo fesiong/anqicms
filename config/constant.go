@@ -164,6 +164,7 @@ const (
 	PlatformGoogle   = "google"   // google +
 	PlatformInWechat = "inwechat" // in the wechat browser
 	PlatformWebsite  = "website"  // normal login way, like email/cellphone/username
+	PlatformSms      = "sms"      // phone + sms verification code login
 )
 
 const (
