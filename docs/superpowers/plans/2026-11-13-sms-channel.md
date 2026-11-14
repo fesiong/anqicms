@@ -621,7 +621,7 @@ git commit -m "feat(短信): OTP 发放流程，五层防刷与发送留痕"
 
 **Interfaces：** `func (w *Website) VerifySmsCode(country, phone, scene, code string) error`。
 
-- [ ] **步骤 1：编写失败的测试**
+- [x] **步骤 1：编写失败的测试**
 
 复用任务 8 的 `setupSmsTest`／`smsTestPhone`／假 sender。
 
@@ -634,12 +634,12 @@ git commit -m "feat(短信): OTP 发放流程，五层防刷与发送留痕"
 - `TestSmsVerifyReplay`：正确码校验成功后再校验一次 → `ErrSmsCodeNotFound`（`consumed_at=0` 过滤掉了）。
 - `TestSmsVerifyConcurrent`（**审查重点 3**）：两条子用例 —— ① 20 个 goroutine 同时用**正确码**校验 → **恰好 1 个成功**，其余全 `ErrSmsCodeNotFound`；② 20 个 goroutine 同时用**错码**校验、`MaxVerifyAttempts=5` → 库里 `attempts` 最终 == 20（每次失败都落库，不被并发覆盖），且成功次数为 0。**反向对照**：把行锁 `FOR UPDATE` 去掉后重跑 ① 必须变红。
 
-- [ ] **步骤 2：运行测试验证失败**
+- [x] **步骤 2：运行测试验证失败**
 
 运行：`go test ./provider/ -run 'TestSmsVerify' -v`
 预期：编译失败，`undefined: VerifySmsCode`。
 
-- [ ] **步骤 3：实现 `provider/smsVerify.go`**
+- [x] **步骤 3：实现 `provider/smsVerify.go`**
 
 按规格 §6.4 八步。取行语句逐字：
 ```
@@ -648,12 +648,12 @@ ORDER BY id DESC LIMIT 1 FOR UPDATE
 ```
 用 `clause.Locking{Strength: "UPDATE"}`，整段包在 `w.DB.Transaction` 里。比对用 `crypto/subtle.ConstantTimeCompare`。判定顺序不可换：无行 → 过期 → 发送失败 → 已锁定 → 比对。`Attempts++` 与 `ConsumedAt` 都在同一事务内写回。
 
-- [ ] **步骤 4：运行测试验证通过**
+- [x] **步骤 4：运行测试验证通过**
 
 运行：`go test ./provider/ -run 'TestSmsVerify' -v && go build ./... && go vet ./provider/`
 预期：八条 PASS。
 
-- [ ] **步骤 5：Commit**
+- [x] **步骤 5：Commit**
 
 ```bash
 gofmt -w provider/smsVerify.go provider/smsVerify_test.go
