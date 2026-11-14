@@ -753,7 +753,7 @@ func (w *Website) BindUserPhone(userId uint, oldCode, newCountry, newPhone, newC
 ```
 请求结构 `ApiSmsPasswordResetRequest{PhoneCountry, Phone, Code, Password}`、`ApiSmsPhoneBindRequest{OldCode, NewPhoneCountry, NewPhone, NewCode}`，json tag 按规格 §7.1。
 
-- [ ] **步骤 1：编写失败的测试**
+- [x] **步骤 1：编写失败的测试**
 
 `provider/smsBind_test.go`（真库）：
 
@@ -769,17 +769,17 @@ func (w *Website) BindUserPhone(userId uint, oldCode, newCountry, newPhone, newC
 - `TestApiSmsResetHidesRegistrationState`：断言 reset 发码路径对未注册号码返回与已注册号码**同一文案**，不出现 `UserDoesNotExist` 之类的区分提示。
 - `TestApiSmsPhoneBindRequiresLogin`：断言路由挂了 `middleware.UserAuth`。
 
-- [ ] **步骤 2：运行测试验证失败**
+- [x] **步骤 2：运行测试验证失败**
 
 运行：`go test ./provider/ -run 'TestBindUserPhone' -v` 与 `go test ./controller/ -run 'TestApiRegister|TestApiSms' -v`
 预期：均 FAIL。
 
-- [ ] **步骤 3：实现 `provider/smsBind.go`**
+- [x] **步骤 3：实现 `provider/smsBind.go`**
 
 `BindUserPhone` 在**一个** `w.DB.Transaction` 内：取当前用户 → `phone != ""` 时先 `VerifySmsCode(旧号, SceneBindOld, oldCode)` → `VerifySmsCode(新号, SceneBindNew, newCode)` → 新号唯一性查重（`WHERE phone = ?` 单列 + 应用层比区号，**排除自己**）→ 更新 `phone`／`phone_country`。任一步失败整体回滚。
 ⚠️ 校验函数内部自带事务，嵌套调用必须走同一个 `tx`：给 `smsVerify.go` 抽一个 `verifySmsCodeTx(tx *gorm.DB, ...)` 内部函数，`VerifySmsCode` 与 `BindUserPhone` 都调它。**否则外层回滚不会撤销内层已提交的 `consumed_at`。**
 
-- [ ] **步骤 4：实现两个 handler 与注册扩展**
+- [x] **步骤 4：实现两个 handler 与注册扩展**
 
 `ApiSmsPasswordReset`：校验 scene=`reset` 的码 → 查用户 → 新密码 ≥6 位 → 更新密码。查不到用户时的提示语与验证码错误**完全一致**，不做区分。
 `ApiSmsPhoneBind`：`middleware.UserAuth` 保护，转调 `BindUserPhone`。
@@ -787,12 +787,12 @@ func (w *Website) BindUserPhone(userId uint, oldCode, newCountry, newPhone, newC
 `route/base.go` 加 `api.Post("/sms/password/reset", controller.ApiSmsPasswordReset)` 与 `api.Post("/sms/phone/bind", middleware.UserAuth, controller.ApiSmsPhoneBind)`。
 **不动**既有 `POST /api/password/reset` 的 email-token 逻辑。
 
-- [ ] **步骤 5：运行测试验证通过 + 重生成清单**
+- [x] **步骤 5：运行测试验证通过 + 重生成清单**
 
 运行：`go test ./provider/ -run 'TestBindUserPhone|TestSmsVerify' -v && go test ./controller/ -run 'TestApiRegister|TestApiSms' -v && go build ./... && go run ./cmd/apicatalog && go run ./cmd/apicatalog -check`
 预期：全部 PASS（含任务 9 的回归）。
 
-- [ ] **步骤 6：Commit**
+- [x] **步骤 6：Commit**
 
 ```bash
 gofmt -w provider/smsBind.go provider/smsBind_test.go controller/apiSmsBind_test.go
