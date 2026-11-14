@@ -37,6 +37,21 @@ func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
 // Allow 记录一次调用并返回是否放行。被拒绝的调用不记账，
 // 因此持续重试不会顺延窗口。
 func (r *RateLimiter) Allow(key string) bool {
+	return r.allow(key, true)
+}
+
+// Check 只判断窗口内是否还有名额，绝不写 hits（不记新账、不消耗额度）。
+// 与 Allow 共用同一私有 helper 的早返回、窗口清理与判定口径；
+// collectGarbage 幂等，不改语义。用于组合限流的「先双检查、再双记账」（R69）。
+func (r *RateLimiter) Check(key string) bool {
+	return r.allow(key, false)
+}
+
+// allow 是 Allow / Check 的共享实现：record=true 为 Allow 语义（放行才记一次账），
+// record=false 为 Check 语义（只在内存里算 kept 做判定，不写 hits）。
+// 两者共用同一套早返回（r==nil / limit<=0 / window<=0 一律放行，配置错误兜底）、
+// 同样的窗口清理、同样的「放行才记账」判定；Allow 既有行为一字不变。
+func (r *RateLimiter) allow(key string, record bool) bool {
 	if r == nil || r.limit <= 0 || r.window <= 0 {
 		return true
 	}
@@ -55,10 +70,12 @@ func (r *RateLimiter) Allow(key string) bool {
 	}
 
 	allowed := len(kept) < r.limit
-	if allowed {
-		kept = append(kept, now)
+	if record {
+		if allowed {
+			kept = append(kept, now)
+		}
+		r.hits[key] = kept
 	}
-	r.hits[key] = kept
 	r.collectGarbage(now, cutoff)
 
 	return allowed

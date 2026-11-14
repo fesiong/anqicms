@@ -110,16 +110,16 @@ func setupSmsTest(t *testing.T) *Website {
 }
 
 // s8CleanupWhere 是 R60 逐字口径：只删「本用例号段 且 created_time >= 用例开始时刻」的行。
-func s8CleanupWhere() (string, []interface{}) {
+// 返回完整 5 元素 args（含 start），避免调用处手工重建导致单边失配（R70）。
+func s8CleanupWhere(start int64) (string, []interface{}) {
 	return "((`phone_country` = ? AND `phone` LIKE ?) OR (`phone_country` = ? AND `phone` LIKE ?)) AND `created_time` >= ?",
-		[]interface{}{s8IntlCountry, s8IntlPhonePrefix + "%", s8CnCountry, s8CnPhonePrefix + "%"}
+		[]interface{}{s8IntlCountry, s8IntlPhonePrefix + "%", s8CnCountry, s8CnPhonePrefix + "%", start}
 }
 
 // s8Cleanup：三处 DELETE 全部接 .Error，失败 t.Errorf；删除/残留核对带断言而非仅 t.Logf。
 func s8Cleanup(t *testing.T, w *Website, start int64, baseCodes, baseLogs, baseUsers int64) {
 	t.Helper()
-	where, _ := s8CleanupWhere()
-	args := []interface{}{s8IntlCountry, s8IntlPhonePrefix + "%", s8CnCountry, s8CnPhonePrefix + "%", start}
+	where, args := s8CleanupWhere(start)
 
 	// 每处 DELETE 必须接 .Error 并在失败时 t.Errorf（R58 minor 的教训）。
 	for _, table := range []string{"sms_codes", "sms_logs", "users"} {
@@ -744,6 +744,98 @@ func TestSmsIpLimitRejectedDoesNotExtendWindow(t *testing.T) {
 	if err := sendOnce(); err != nil {
 		t.Errorf("窗口滑过后应重新放行（被拒调用不该顺延窗口），却报 %v", err)
 	}
+}
+
+// TestSmsIpBudgetNoCrossDimensionAccounting（R69）：小时 / 日两个窗口不得互相记账。
+// 旧实现第 5 步无条件各调一次 Allow，被一个窗口拒绝的请求仍会消耗另一个窗口名额
+// （过度拒绝）；新实现先双 Check、都通过才双 Allow，任一拒绝则两个窗口都不记账。
+// 两个方向限额都取小值（hour=2/day=3 与 hour=3/day=2），不许用 1000 回避交叉。
+func TestSmsIpBudgetNoCrossDimensionAccounting(t *testing.T) {
+	w := setupSmsTest(t)
+
+	// 方向一：hour 先满（hour=2 < day=3）→ 被 hour 拒后 day 命中数不得增长。
+	t.Run("被小时拒后日窗口不记账", func(t *testing.T) {
+		cfg := s8TwilioConfig("login")
+		cfg.HourlyLimitPerIp = 2
+		cfg.DailyLimitPerIp = 3
+		s8UseConfig(t, w, cfg)
+		s8ResetIpBudget(w, 2, 3)
+		defer s8ResetIpBudget(w, 2, 3)
+		budget := smsIpBudgetFor(w.Id, 2, 3)
+
+		sendOnce := func() error {
+			country, local := smsTestPhone(t, w)
+			_, err := w.sendSmsCodeWithSender(SmsSendInput{
+				PhoneCountry: country, Phone: local, Scene: "login", Ip: s8TestIp,
+			}, &fakeSmsSender{})
+			return err
+		}
+
+		// 前 2 次成功（hour=2 放行，day=3 也放行）。
+		for i := 0; i < 2; i++ {
+			if err := sendOnce(); err != nil {
+				t.Fatalf("小时限额内第 %d 次应成功：%v", i+1, err)
+			}
+		}
+		dayBefore := s8LimiterHits(budget.day, s8TestIp)
+		if len(dayBefore) != 2 {
+			t.Fatalf("白盒自检：2 次成功后 day hits 应为 2，实际 %d（检查器不得空转）", len(dayBefore))
+		}
+
+		// 第 3 次被 hour 拒（hour 已满，day 仍有 1 个名额）。
+		if err := sendOnce(); !errors.Is(err, sms.ErrSmsIpLimited) {
+			t.Fatalf("hour 满后第 3 次应落 ErrSmsIpLimited，得到 %v", err)
+		}
+		// 关键断言：被 hour 拒的请求不得消耗 day 名额。
+		dayAfter := s8LimiterHits(budget.day, s8TestIp)
+		if !s8TimesEqual(dayBefore, dayAfter) {
+			t.Errorf("被 hour 拒后 day 命中数增长（跨维度记账）：before=%d after=%d", len(dayBefore), len(dayAfter))
+		} else {
+			t.Logf("[R69 GREEN 方向一] 被 hour 拒后 day hits 保持 %d 个不变（旧无条件双 Allow 会变成 3）", len(dayAfter))
+		}
+	})
+
+	// 方向二：day 先满（hour=3 > day=2）→ 被 day 拒后 hour 命中数不得增长。
+	t.Run("被日拒后小时窗口不记账", func(t *testing.T) {
+		cfg := s8TwilioConfig("login")
+		cfg.HourlyLimitPerIp = 3
+		cfg.DailyLimitPerIp = 2
+		s8UseConfig(t, w, cfg)
+		s8ResetIpBudget(w, 3, 2)
+		defer s8ResetIpBudget(w, 3, 2)
+		budget := smsIpBudgetFor(w.Id, 3, 2)
+
+		sendOnce := func() error {
+			country, local := smsTestPhone(t, w)
+			_, err := w.sendSmsCodeWithSender(SmsSendInput{
+				PhoneCountry: country, Phone: local, Scene: "login", Ip: s8TestIp,
+			}, &fakeSmsSender{})
+			return err
+		}
+
+		// 前 2 次成功（day=2 放行，hour=3 也放行）。
+		for i := 0; i < 2; i++ {
+			if err := sendOnce(); err != nil {
+				t.Fatalf("日限额内第 %d 次应成功：%v", i+1, err)
+			}
+		}
+		hourBefore := s8LimiterHits(budget.hour, s8TestIp)
+		if len(hourBefore) != 2 {
+			t.Fatalf("白盒自检：2 次成功后 hour hits 应为 2，实际 %d（检查器不得空转）", len(hourBefore))
+		}
+
+		// 第 3 次被 day 拒（day 已满，hour 仍有 1 个名额）。
+		if err := sendOnce(); !errors.Is(err, sms.ErrSmsIpLimited) {
+			t.Fatalf("day 满后第 3 次应落 ErrSmsIpLimited，得到 %v", err)
+		}
+		// 关键断言：被 day 拒的请求不得消耗 hour 名额。
+		hourAfter := s8LimiterHits(budget.hour, s8TestIp)
+		if !s8TimesEqual(hourBefore, hourAfter) {
+			t.Errorf("被 day 拒后 hour 命中数增长（跨维度记账）：before=%d after=%d", len(hourBefore), len(hourAfter))
+		} else {
+			t.Logf("[R69 GREEN 方向二] 被 day 拒后 hour hits 保持 %d 个不变（旧无条件双 Allow 会变成 3）", len(hourAfter))
+		}
+	})
 }
 
 func TestSmsDoesNotReuseCodeCache(t *testing.T) {

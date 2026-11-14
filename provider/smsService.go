@@ -13,11 +13,32 @@ import (
 )
 
 // smsIpBudget 是某站点在给定限额配置下的 IP 限流预算。
-// 必须是独立单例，不复用 middleware.accountProbeLimiter：共用会让短信请求把
+// 必须是独立单例，不复用 middleware 的邮箱枚举探测预算：共用会让短信请求把
 // 邮箱枚举探测的预算吃掉，两个功能互相污染（R62）。
 type smsIpBudget struct {
+	mu   sync.Mutex
 	hour *library.RateLimiter
 	day  *library.RateLimiter
+}
+
+// Allow 对小时 / 日两个窗口做原子的双阶段判定（R69）：
+// 全程持 b.mu，先对两个窗口各做一次 Check（只判断、不记账），都通过才对两个窗口
+// 各做一次 Allow（放行才记账）。任一窗口拒绝则直接返回 false、两个窗口都不记账，
+// 消除「被一个窗口拒绝的请求仍消耗另一个窗口名额」的过度拒绝。
+// 持 b.mu 消除 Check→Allow 之间的 TOCTOU（同一 siteId+限额配置共用同一实例）；
+// 加锁顺序固定 b.mu → hour.mu → day.mu，避免死锁。
+func (b *smsIpBudget) Allow(ip string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	hourOK := b.hour.Check(ip)
+	dayOK := b.day.Check(ip)
+	if !hourOK || !dayOK {
+		return false
+	}
+	b.hour.Allow(ip)
+	b.day.Allow(ip)
+	return true
 }
 
 // smsIpBudgets 是独立的 sync.Map 单例（R62）。

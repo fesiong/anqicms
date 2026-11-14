@@ -95,9 +95,7 @@ func (w *Website) sendSmsCodeWithSender(in SmsSendInput, sender sms.Sender) (*Sm
 
 	// 第 5 步：IP 滑窗（小时 / 日），超限 → ErrSmsIpLimited。
 	budget := smsIpBudgetFor(w.Id, snapshot.HourlyLimitPerIp, snapshot.DailyLimitPerIp)
-	hourOK := budget.hour.Allow(in.Ip)
-	dayOK := budget.day.Allow(in.Ip)
-	if !hourOK || !dayOK {
+	if !budget.Allow(in.Ip) {
 		return nil, sms.ErrSmsIpLimited
 	}
 
