@@ -100,7 +100,15 @@ func (w *Website) sendSmsCodeWithSender(in SmsSendInput, sender sms.Sender) (*Sm
 	}
 
 	// 第 6 步：区域解析与凭据继承（Twilio+86 / 缺凭据 / 缺签名 / 场景模板空 → 对应错误）。
-	profile, err := sms.Resolve(&snapshot, region, in.Scene)
+	// R113：后台 test 场景的模板取该 region 下 login 场景的模板（规格 §7.2）。
+	// 只换模板解析用的 scene，sms_codes.scene / sms_logs.scene 仍写 in.Scene（即 test），
+	// 避免把测试发送误记成登录发送；login 为空时 Resolve 明确报 ErrSmsTemplateMissing，
+	// 绝不静默套用别的场景。
+	resolveScene := in.Scene
+	if in.Scene == sms.SceneTest {
+		resolveScene = sms.SceneLogin
+	}
+	profile, err := sms.Resolve(&snapshot, region, resolveScene)
 	if err != nil {
 		return nil, err
 	}

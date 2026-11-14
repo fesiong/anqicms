@@ -1377,3 +1377,83 @@ func s8Good() { w.DB.Where("created_time < ?", cutoff).Limit(1000).Delete(&model
 		t.Log("恢复：带 Limit(1000) 的源码喂同一检查器 → 判合规（绿）")
 	})
 }
+
+// ---------------------------------------------------------------------------
+// 任务 13 / R113 真库回归（纯追加，不改上方任务 8 既有行）：
+// test 场景的模板必须取该 region 的 login 模板，而不是 Templates["test"]。
+// 两条都走测试接缝 sendSmsCodeWithSender + fakeSmsSender，全程不触网。
+// ---------------------------------------------------------------------------
+
+// TestSmsSendTestSceneUsesLoginTemplate（R113 回归①）：给 login / test 配不同文案，
+// test 发码成功后 sms_logs.template_id 必须等于 login 模板值。
+// 修复前 Resolve(..., SceneTest) 命中 Texts["test"]，会把 test 模板值写进日志 → 判红。
+func TestSmsSendTestSceneUsesLoginTemplate(t *testing.T) {
+	w := setupSmsTest(t)
+	const loginTpl = "LOGIN_ONLY {{code}}"
+	const testTpl = "TEST_ONLY {{code}}"
+	cfg := &config.PluginSmsConfig{
+		Provider: config.SmsProviderTwilio,
+		Scenes:   []string{"login"},
+		Twilio: config.SmsTwilioConfig{
+			International: config.SmsTwilioRegion{
+				AccountSid: "AC_fake000000000000000000000000",
+				AuthToken:  "fake-auth-token",
+				From:       "+15550000000",
+				Texts: map[string]string{
+					"login": loginTpl,
+					"test":  testTpl, // 与 login 不同值：修复前会被误用
+				},
+			},
+		},
+	}
+	s8UseConfig(t, w, cfg)
+	country, local := smsTestPhone(t, w)
+
+	_, err := w.sendSmsCodeWithSender(SmsSendInput{
+		PhoneCountry: country, Phone: local, Scene: sms.SceneTest, Ip: s8TestIp,
+	}, &fakeSmsSender{res: sms.SendResult{BizId: "B-r113-a"}})
+	if err != nil {
+		t.Fatalf("test 场景发码应成功：%v", err)
+	}
+
+	var logRow model.SmsLog
+	if e := w.DB.Where("site_id = ? AND phone_country = ? AND phone = ? AND scene = ? AND created_time >= ?",
+		w.Id, country, local, sms.SceneTest, s8TestStart.Load()).
+		Order("id DESC").First(&logRow).Error; e != nil {
+		t.Fatalf("读回 sms_logs 失败：%v", e)
+	}
+	if logRow.TemplateId != loginTpl {
+		t.Errorf("sms_logs.template_id = %q，期望 login 模板 %q（修复前会误用 test 模板 %q）",
+			logRow.TemplateId, loginTpl, testTpl)
+	}
+}
+
+// TestSmsSendTestSceneRequiresLoginTemplate（R113 回归②）：删掉 login 模板、只留 test 模板，
+// test 发码必须报 ErrSmsTemplateMissing，钉住「不静默套用别的场景」。
+// 修复前 Resolve(..., SceneTest) 命中 Texts["test"] 而成功返回 → 判红。
+func TestSmsSendTestSceneRequiresLoginTemplate(t *testing.T) {
+	w := setupSmsTest(t)
+	cfg := &config.PluginSmsConfig{
+		Provider: config.SmsProviderTwilio,
+		Scenes:   []string{"login"},
+		Twilio: config.SmsTwilioConfig{
+			International: config.SmsTwilioRegion{
+				AccountSid: "AC_fake000000000000000000000000",
+				AuthToken:  "fake-auth-token",
+				From:       "+15550000000",
+				Texts: map[string]string{
+					"test": "TEST_ONLY {{code}}", // 只留 test，删掉 login
+				},
+			},
+		},
+	}
+	s8UseConfig(t, w, cfg)
+	country, local := smsTestPhone(t, w)
+
+	_, err := w.sendSmsCodeWithSender(SmsSendInput{
+		PhoneCountry: country, Phone: local, Scene: sms.SceneTest, Ip: s8TestIp,
+	}, &fakeSmsSender{})
+	if !errors.Is(err, sms.ErrSmsTemplateMissing) {
+		t.Fatalf("只留 test 模板时 test 发码应报 ErrSmsTemplateMissing，得到 %v", err)
+	}
+}

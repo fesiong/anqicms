@@ -365,6 +365,8 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 			{
 				sms.Get("/setting", manageController.PluginSmsSetting)
 				sms.Post("/setting", manageController.PluginSmsSettingForm)
+				sms.Post("/test", manageController.PluginSmsTest)
+				sms.Get("/logs", manageController.PluginSmsLogs)
 			}
 
 			importApi := plugin.Party("/import")

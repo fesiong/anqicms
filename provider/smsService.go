@@ -9,7 +9,9 @@ import (
 	"sync"
 	"time"
 
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 )
 
 // smsIpBudget 是某站点在给定限额配置下的 IP 限流预算。
@@ -79,4 +81,21 @@ func smsErrSnippet(s string) string {
 		b = b[:smsErrSnippetMaxBytes]
 	}
 	return strings.ToValidUTF8(string(b), "")
+}
+
+// GetSmsLogList 分页查询短信发送流水（任务 13 / R115）。
+// 恒带 site_id = w.Id 基底（多站点隔离）：六个筛选都通过 filter 叠加在这个基底上，
+// 任何调用方都无法绕过站点隔离。按 created_time DESC 排序命中 idx_site_created，分页。
+// 返回 []*model.SmsLog：SmsLog 本身无码字段，也不含渲染后正文；端到端 JSON 复核见
+// controller/manageController/pluginSmsOps_test.go。
+func (w *Website) GetSmsLogList(filter func(*gorm.DB) *gorm.DB, page, pageSize int) ([]*model.SmsLog, int64) {
+	var logs []*model.SmsLog
+	var total int64
+	offset := (page - 1) * pageSize
+	tx := w.DB.Model(&model.SmsLog{}).Where("site_id = ?", w.Id)
+	if filter != nil {
+		tx = filter(tx)
+	}
+	tx.Count(&total).Order("created_time DESC").Limit(pageSize).Offset(offset).Find(&logs)
+	return logs, total
 }

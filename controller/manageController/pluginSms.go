@@ -2,11 +2,14 @@ package manageController
 
 import (
 	"encoding/json"
+	"errors"
 
 	"github.com/kataras/iris/v12"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/provider/sms"
 )
 
 // SmsSecretMask 是短信渠道凭据的掩码占位符，与 SendmailPasswordMask 同串但**独立声明**
@@ -188,5 +191,151 @@ func PluginSmsSettingForm(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("ConfigurationUpdated"),
+	})
+}
+
+// pluginSmsTestRequest 是后台测试发送的请求体（apicatalog 靠具名 ReadJSON 生成字段级 params）。
+type pluginSmsTestRequest struct {
+	PhoneCountry string `json:"phone_country"` // 区号，空则默认 86
+	Phone        string `json:"phone"`         // 本地号码
+}
+
+// respondSmsOpsError 是后台短信端点（test / logs）的统一错误出口（R114）。
+// code 恒为 config.StatusFailed；msg 只暴露可翻译键，绝不回显平台原始错误码/消息。
+// 平台 *SendError 经其 Unwrap 归约到 sms.ErrSmsSendFailed；仅 *WaitError 传 Seconds、
+// *AttemptsError 传 Remaining，其余错误一律不传参（Tr 兜底是字符串拼接，多传参会污染文案）。
+func respondSmsOpsError(ctx iris.Context, currentSite *provider.Website, err error) {
+	if errors.Is(err, sms.ErrSmsSendFailed) {
+		err = sms.ErrSmsSendFailed
+	}
+	var wait *sms.WaitError
+	var attempts *sms.AttemptsError
+	// 方法值：与前台 respondSmsError 口径一致（统一 currentSite.Tr(err.Error(), args...)）。
+	translate := currentSite.Tr
+	var msg string
+	switch {
+	case errors.As(err, &wait):
+		msg = translate(err.Error(), wait.Seconds)
+	case errors.As(err, &attempts):
+		msg = translate(err.Error(), attempts.Remaining)
+	default:
+		msg = translate(err.Error())
+	}
+	ctx.JSON(iris.Map{
+		"code": config.StatusFailed,
+		"msg":  msg,
+	})
+}
+
+// PluginSmsTest 向指定号码发一条测试短信（POST /plugin/sms/test，规格 §7.2）。
+// test 场景不受 Scenes 白名单限制，但仍走同一条 SendSmsCode 链路，IP 与号码日限照常生效。
+// 模板取该 region 下 login 场景的模板；login 为空明确报错 ErrSmsTemplateMissing，
+// 绝不静默套用别的场景，也绝不改 currentSite.PluginSms 内存真值去塞 test 模板（R113）。
+func PluginSmsTest(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	var req pluginSmsTestRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 归一化定 region（与 SendSmsCode 第 3 步同口径）。
+	phone, err := sms.NormalizePhone(req.PhoneCountry, req.Phone)
+	if err != nil {
+		respondSmsOpsError(ctx, currentSite, err)
+		return
+	}
+	region := phone.Region()
+	// 前置检查该 region 的 login 模板：为空则明确报错 sms.ErrSmsTemplateMissing，
+	// 不静默套用别的场景；其它 Resolve 错误（缺凭据/签名/区域不支持）也照常回错误文案。
+	if _, err := sms.Resolve(currentSite.PluginSms, region, sms.SceneLogin); err != nil {
+		if errors.Is(err, sms.ErrSmsTemplateMissing) {
+			respondSmsOpsError(ctx, currentSite, sms.ErrSmsTemplateMissing)
+			return
+		}
+		respondSmsOpsError(ctx, currentSite, err)
+		return
+	}
+	// 走同一条生产入口：Scene=test（第 2 步跳过白名单、仍受 IP/号码限额），
+	// UserId=0（管理员不是前台用户，sms_logs.user_id 只对前台发码有意义）。
+	result, err := currentSite.SendSmsCode(provider.SmsSendInput{
+		PhoneCountry: req.PhoneCountry,
+		Phone:        req.Phone,
+		Scene:        sms.SceneTest,
+		Ip:           ctx.RemoteAddr(),
+		UserId:       0,
+	})
+	if err != nil {
+		respondSmsOpsError(ctx, currentSite, err)
+		return
+	}
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": result,
+	})
+}
+
+// PluginSmsLogs 分页查询短信发送记录（GET /plugin/sms/logs，规格 §7.2）。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - pageSize: 每页条数，默认为 20。
+//   - 查询参数 "scene": 按场景精确筛选。
+//   - 查询参数 "provider": 按服务商精确筛选。
+//   - 查询参数 "status": 按发送状态精确筛选。
+//   - 查询参数 "phone": 按号码精确筛选。
+//   - 查询参数 "start_time": created_time 下界（含）。
+//   - 查询参数 "end_time": created_time 上界（含）。
+//
+// ⚠️ 展示须知：sms_logs.template_id 对 Twilio 存的是含 {{code}} 占位符的
+// 未渲染模板文本（符合 §4.3「不存渲染后正文」），展示时不得当作已渲染文案呈现（任务 14）。
+func PluginSmsLogs(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	page := ctx.URLParamIntDefault("current", 1)
+	pageSize := ctx.URLParamIntDefault("pageSize", 20)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	scene := ctx.URLParam("scene")
+	providerName := ctx.URLParam("provider")
+	status := ctx.URLParam("status")
+	phone := ctx.URLParam("phone")
+	startTime := ctx.URLParam("start_time")
+	endTime := ctx.URLParam("end_time")
+
+	list, total := currentSite.GetSmsLogList(func(tx *gorm.DB) *gorm.DB {
+		if scene != "" {
+			tx = tx.Where("scene = ?", scene)
+		}
+		if providerName != "" {
+			tx = tx.Where("provider = ?", providerName)
+		}
+		if status != "" {
+			tx = tx.Where("status = ?", status)
+		}
+		if phone != "" {
+			tx = tx.Where("phone = ?", phone)
+		}
+		if startTime != "" {
+			tx = tx.Where("created_time >= ?", startTime)
+		}
+		if endTime != "" {
+			tx = tx.Where("created_time <= ?", endTime)
+		}
+		return tx
+	}, page, pageSize)
+
+	ctx.JSON(iris.Map{
+		"code":  config.StatusOK,
+		"msg":   "",
+		"data":  list,
+		"total": total,
 	})
 }
