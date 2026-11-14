@@ -540,7 +540,7 @@ func smsIpBudgetFor(siteId uint, hourLimit, dayLimit int) *smsIpBudget
 - **图形验证码校验放 controller 层，不在 provider。** `Store` 在 `controller` 包，`provider` 反向 import 会成环。规格 §6.3 第 4 步由任务 10 的 handler 承担。
 - **`sender.Send` 必须在 `w.DB.Transaction` 回调之外。** 持锁事务里做网络 IO 会把行锁按住数秒，平台一慢就雪崩。`sendSmsCodeWithSender` 是测试接缝：生产入口 `SendSmsCode` 用 `sms.NewSender` 构造后转调它，测试传假 sender，**全程不触网、不发真实短信**。
 
-- [ ] **步骤 1：写测试基建 + 第一轮失败测试（限额与状态机）**
+- [x] **步骤 1：写测试基建 + 第一轮失败测试（限额与状态机）**
 
 基建（`provider/smsSend_test.go` 顶部）：
 ```go
@@ -563,22 +563,22 @@ func smsTestPhone(t *testing.T, w *Website) (country, local string)
 - `TestSmsIpLimitRejectedDoesNotExtendWindow`：被拒的请求**不延长窗口** —— 超限后再调一次仍被拒，且窗口到期时刻不因这次调用而后移。
 - `TestSmsDoesNotReuseCodeCache`：go/ast 断言 `provider/smsService.go`／`smsSend.go`／`smsVerify.go` 三个文件里**不出现** `library.CodeCache`。反向对照：合成一份含它的源码必须变红。理由：`CodeCache` 有七项已知缺陷（Get 不检查过期、Generate 无锁读写 map、key 不存在且 code 为空时 Verify 返回 true、进程内存储、math/rand 可预测等），复用它等于把这些缺陷带进短信路径。
 
-- [ ] **步骤 2：运行验证失败**
+- [x] **步骤 2：运行验证失败**
 
 运行：`go test ./provider/ -run 'TestSmsSend|TestSmsIp|TestSmsDoesNotReuseCodeCache' -v`
 预期：编译失败，`undefined: SendSmsCode`。
 
-- [ ] **步骤 3：实现第一轮**
+- [x] **步骤 3：实现第一轮**
 
 `provider/smsService.go`：`smsCodeHash` 用 `crypto/hmac` + `crypto/sha256`，密钥取站点 `TokenSecret`；`smsIpBudgetFor` 用 `sync.Map`，key 为 `fmt.Sprintf("%d:%d:%d", siteId, hourLimit, dayLimit)`，值是 `&smsIpBudget{hour: library.NewRateLimiter(hourLimit, time.Hour), day: library.NewRateLimiter(dayLimit, 24*time.Hour)}`。**必须是独立单例，不复用 `middleware.accountProbeLimiter`**（共用会让两个功能的限额互相污染）。注释写明「限额进 key，改配置会重置窗口」。
 `provider/smsSend.go`：按规格 §6.3 的第 1／2／3／5／6／7 步实现。第 7 步事务内顺序 a→f 不可换：日限计数查 `sms_logs`（**不带 scene**）、重发间隔查 `sms_codes`（**带 scene**）、删同键过期/已消费行、`crypto/rand` 生成码（**不用 math/rand**）、插 `sms_codes(send_status=0)`、插 `sms_logs(status=0)`、回写 `log_id`。
 
-- [ ] **步骤 4：运行验证通过**
+- [x] **步骤 4：运行验证通过**
 
 运行：`go test ./provider/ -run 'TestSmsSend|TestSmsIp|TestSmsDoesNotReuseCodeCache' -v`
 预期：第一轮九条 PASS。
 
-- [ ] **步骤 5：第二轮失败测试（平台调用、可观测、清理）**
+- [x] **步骤 5：第二轮失败测试（平台调用、可观测、清理）**
 
 - `TestSmsSendPendingLogBeforeCall`：假 sender 的 `beforeSend` 里查库，断言此刻已存在 `status=0` 的 `sms_logs` 行（**先落 pending 再调平台**，进程崩了也有痕迹）。
 - `TestSmsSendWritesBackSuccess`：假 sender 返回 `BizId="B-1"` → `sms_logs.status==1`、`biz_id=="B-1"`、`cost_ms>0`；`sms_codes.send_status==1`、`biz_id=="B-1"`；返回 `SmsSendResult{ExpiresIn: CodeTTL, ResendAfter: ResendInterval}`。
@@ -588,21 +588,21 @@ func smsTestPhone(t *testing.T, w *Website) (country, local string)
 - `TestSmsCodeHashIsKeyedHMAC`：发码后读库，断言 `code_hash` 是 64 位 hex，且**不等于** `sha256(明文码)`（证明用了 TokenSecret 而非裸哈希）。
 - `TestSmsLogRetentionPrune`：插入 `created_time` 早于 `now - LogRetentionDays*86400` 的日志 → 发码后被删；go/ast 断言清理语句带 `Limit(1000)`（单次限量，避免长事务）。
 
-- [ ] **步骤 6：运行验证失败**
+- [x] **步骤 6：运行验证失败**
 
 运行：`go test ./provider/ -run 'TestSmsSendPendingLogBeforeCall|TestSmsSendWritesBack|TestSmsSendPlatformFailure|TestSmsSendNoNetworkInTransaction|TestSmsSendResultHasNoCode|TestSmsCodeHashIsKeyedHMAC|TestSmsLogRetentionPrune' -v`
 预期：新增七条 FAIL。
 
-- [ ] **步骤 7：实现第二轮**
+- [x] **步骤 7：实现第二轮**
 
 补规格 §6.3 的第 8～11 步：事务外 `sender.Send`（`context.WithTimeout` **10s，不重试**）→ 回写两张表 → 失败置 `send_status=-1` → 惰性清理超期日志（`Limit(1000)`）。`OutId` 填 `SmsLog.Id`。`SendRequest.Text` 由 Twilio 的 `Texts[scene]` 把 `{{code}}` 替换成验证码得到；阿里云／腾讯云走 `Code` 字段。
 
-- [ ] **步骤 8：运行验证通过**
+- [x] **步骤 8：运行验证通过**
 
 运行：`go test ./provider/ -run 'TestSmsSend|TestSmsIp|TestSmsDoesNotReuseCodeCache|TestSmsCodeHashIsKeyedHMAC|TestSmsLogRetentionPrune' -v && go build ./...`
 预期：全部 PASS。
 
-- [ ] **步骤 9：Commit**
+- [x] **步骤 9：Commit**
 
 ```bash
 gofmt -w provider/smsService.go provider/smsSend.go provider/smsSend_test.go
