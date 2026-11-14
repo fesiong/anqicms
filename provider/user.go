@@ -617,7 +617,11 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 		}
 		return nil, errors.New(w.Tr("TheUsernameHasBeenRegistered"))
 	}
-	if req.Phone != "" {
+	// 老正则 VerifyCellphoneFormat 只服务于历史邮箱/密码注册路径（宽匹配中国号），
+	// 会误拒国际本地号。短信登录自动注册（LoginViaSms）已由 sms.NormalizePhone
+	// 按规格 §6.2 六道闸门严格校验，并以 PhoneNormalized=true 标记，故此处跳过
+	// 老正则（R85）。该标记是 json:"-" 内部字段，前台无法伪造。
+	if req.Phone != "" && !req.PhoneNormalized {
 		if !w.VerifyCellphoneFormat(req.Phone) {
 			return nil, errors.New(w.Tr("IncorrectMobilePhoneNumber"))
 		}
@@ -641,19 +645,23 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 		return nil, errors.New(w.Tr("FillInAtLeastOneOfTheEmailAndMobilePhoneNumber"))
 	}
 
+	// R86：把 req.PhoneCountry 写进 model.User，让 createUserWithPhoneGuard 在事务内
+	// 用真实区号比对/落库，而不是留空回落 86。空值路径（邮箱注册）由 GORM
+	// default:'86' + R55 规范化保持既有行为一字不变。
 	user := model.User{
-		UserName:  req.UserName,
-		RealName:  req.RealName,
-		AvatarURL: req.AvatarURL,
-		ParentId:  req.InviteId,
-		FirstName: req.FirstName,
-		LastName:  req.LastName,
-		Birthday:  req.Birthday,
-		Introduce: req.Introduce,
-		Phone:     req.Phone,
-		Email:     req.Email,
-		GroupId:   w.PluginUser.DefaultGroupId,
-		Status:    w.PluginUser.GetDefaultStatus(),
+		UserName:     req.UserName,
+		RealName:     req.RealName,
+		AvatarURL:    req.AvatarURL,
+		ParentId:     req.InviteId,
+		FirstName:    req.FirstName,
+		LastName:     req.LastName,
+		Birthday:     req.Birthday,
+		Introduce:    req.Introduce,
+		Phone:        req.Phone,
+		PhoneCountry: req.PhoneCountry,
+		Email:        req.Email,
+		GroupId:      w.PluginUser.DefaultGroupId,
+		Status:       w.PluginUser.GetDefaultStatus(),
 	}
 	user.AvatarURL = strings.TrimPrefix(user.AvatarURL, w.PluginStorage.StorageUrl)
 	req.Password = strings.TrimSpace(req.Password)

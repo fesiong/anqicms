@@ -122,6 +122,12 @@ type ApiRegisterRequest struct {
 	ResetPassword bool   `json:"reset_password"`
 
 	Extra map[string]interface{} `json:"extra"`
+
+	// PhoneNormalized 是内部标记，绝不由前台 JSON 绑定（R85，tag 必须忽略 JSON）。
+	// LoginViaSms 在 sms.NormalizePhone 成功后置 true；RegisterUser 仅在此为 true
+	// 时跳过历史 VerifyCellphoneFormat 老正则——该老正则只服务邮箱/密码注册路径，
+	// 会误拒国际本地号，而规格 §6.2 六道闸门已由 sms.NormalizePhone 严格校验。
+	PhoneNormalized bool `json:"-"`
 }
 
 type ApiLoginRequest struct {

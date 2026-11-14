@@ -80,27 +80,28 @@ func (w *Website) LoginViaSms(req *request.ApiLoginRequest) (*model.User, error)
 			return nil, e
 		}
 		regReq := &request.ApiRegisterRequest{
-			UserName:     userName,
-			Password:     password,
-			Phone:        phone.Local,
-			PhoneCountry: phone.Country,
+			UserName:        userName,
+			Password:        password,
+			Phone:           phone.Local,
+			PhoneCountry:    phone.Country,
+			PhoneNormalized: true, // R85：sms.NormalizePhone 已严格校验，RegisterUser 据此跳过老正则
 		}
 		newUser, e := w.RegisterUser(regReq)
 		if e != nil {
-			continue // 撞名（或其它注册失败）→ 换随机 UserName 重试，至多 smsLoginMaxRetry 次
-		}
-		// RegisterUser 的撞名分支可能返回一个已存在的同名用户；只接受号码与本次
-		// 入参完全一致的新用户，否则视为撞名重试，绝不把别人的账号签发 token。
-		if newUser == nil || newUser.Phone != phone.Local {
-			continue
-		}
-		// RegisterUser 当前不从 ApiRegisterRequest.PhoneCountry 写入 model.User
-		// （既有代码，见报告「疑虑」）：回写区号，保证 (PhoneCountry, Phone) 与登录入参一致。
-		if newUser.PhoneCountry != phone.Country {
-			if e := w.DB.Model(newUser).Update("phone_country", phone.Country).Error; e != nil {
+			// R88：只有该随机 UserName 确实撞名才换名重试；其余失败
+			// （DB 故障、号码非法、guard 查重命中、审核策略）立即原样返回 e，
+			// 绝不吞成 LoginFailed 后再重试 3 次。
+			if !w.smsLoginIsNameCollision(userName) {
 				return nil, e
 			}
-			newUser.PhoneCountry = phone.Country
+			continue
+		}
+		// RegisterUser 的撞名分支可能返回一个已存在的同名用户；只接受号码与区号
+		// 都与本次入参完全一致的新用户，否则视为撞名重试，绝不把别人的账号签发 token。
+		// R86：区号由 RegisterUser 直接落库（PhoneCountry: req.PhoneCountry），不再
+		// 事后 Update，故此处必须同时校验区号；漏掉区号错配会签发错区号账号。
+		if newUser == nil || newUser.Phone != phone.Local || newUser.PhoneCountry != phone.Country {
+			continue
 		}
 		// 审核门：注册后仍要过 GetDefaultStatus()。站点默认待审核/禁止时，
 		// 自动注册后必须拒绝登录（规格 §6.5），不得绕过站点审核策略。
@@ -114,4 +115,13 @@ func (w *Website) LoginViaSms(req *request.ApiLoginRequest) (*model.User, error)
 		return newUser, nil
 	}
 	return nil, errors.New("LoginFailed")
+}
+
+// smsLoginIsNameCollision 判定一次注册失败是否属于「随机 UserName 撞名」。
+// R88：只有 GetUserInfoByUserName 确实查得到该用户名才算撞名、才换名重试；
+// 其余失败（DB 故障、号码非法、guard 查重命中、审核策略）一律由调用方原样
+// 返回 e，不得被吞成 LoginFailed 后再重试 3 次。
+func (w *Website) smsLoginIsNameCollision(userName string) bool {
+	_, err := w.GetUserInfoByUserName(userName)
+	return err == nil
 }
