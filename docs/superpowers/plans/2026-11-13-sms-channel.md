@@ -922,7 +922,7 @@ git commit -m "feat(短信): 后台测试发送与发送记录查询"
 
 **前端验证约束（不可违反）：** 仓库**没有** jest／vitest，**不新增测试框架**。纯逻辑用 `node_modules/.bin/esbuild` 转译后交给 node 断言。**不跑 `npx tsc --noEmit` 全量**（会被 SIGTERM），**不跑 `npm run format`**（会动全仓）。仓库存量 38 个类型错误，判断是否引入新错误只看是否命中本次改动文件。
 
-- [ ] **步骤 1：编写失败的测试 `check-sms-payload.mjs`**
+- [x] **步骤 1：编写失败的测试 `check-sms-payload.mjs`**
 
 脚本用 esbuild 把 `payload.ts` 转成 CJS 临时文件（写进 `tmp/`），require 后用 `node:assert` 断言：
 
@@ -932,22 +932,22 @@ git commit -m "feat(短信): 后台测试发送与发送记录查询"
 - **未生效厂商也提交**：`provider='aliyun'` 时 `tencent`／`twilio` 子树仍在 payload 里。
 脚本退出码非 0 即失败。
 
-- [ ] **步骤 2：运行验证失败**
+- [x] **步骤 2：运行验证失败**
 
 运行：`node anqicms-admin/scripts/check-sms-payload.mjs`（在仓库根执行）
 预期：FAIL，找不到 `payload.ts`。
 
-- [ ] **步骤 3：实现 `payload.ts` 与 `sms.ts`**
+- [x] **步骤 3：实现 `payload.ts` 与 `sms.ts`**
 
 `payload.ts` 只导出 `buildSmsPayload`，纯函数，规则见步骤 1 的四条断言。
 `services/plugin/sms.ts` 仿 `services/plugin/sendmail.ts`：`import { get, post } from '../tools';`，四个函数 `pluginSmsSetting()`（GET `/plugin/sms/setting`）、`pluginSmsSettingSave(body)`（POST 同路径）、`pluginSmsTest(body)`（POST `/plugin/sms/test`）、`pluginSmsLogs(params)`（GET `/plugin/sms/logs`），签名统一 `(params?: any, options?: {[key:string]:any})`。
 
-- [ ] **步骤 4：运行验证通过**
+- [x] **步骤 4：运行验证通过**
 
 运行：`node anqicms-admin/scripts/check-sms-payload.mjs`
 预期：全部断言通过，退出码 0。
 
-- [ ] **步骤 5：实现页面、路由、菜单与三语文案**
+- [x] **步骤 5：实现页面、路由、菜单与三语文案**
 
 `pages/plugin/sms/index.tsx`：六个 tab（基础设置／阿里云／腾讯云／Twilio／发送测试／发送记录），**visitedTabs 常驻挂载 + `display:none` 切换**（照抄 `pages/plugin/channels/index.tsx` 的范式，条件渲染会卸载表单丢输入）。配置类 tab 共用一个 ProForm，`onFinish` 用 `formRef.current?.getFieldsValue(true)` 取全量再经 `buildSmsPayload`。
 厂商 tab **始终可见**，未生效的顶部标「当前未生效」；Twilio tab 顶部固定提示「仅支持国际号码，+86 号码将被拒发」。凭据字段 placeholder 写明「`********` 表示未改动，原样保存即可保持不变」，读回掩码**不清空输入框**。场景模板留空的语义在界面上说清：留空 = 该场景不可用，发码时明确报错。区号输入默认 `86` + 常用区号下拉。保存成功后 `message.success` 并重新拉取配置。
@@ -955,7 +955,7 @@ git commit -m "feat(短信): 后台测试发送与发送记录查询"
 `config/menu.go` 在 `/plugin/channel/sendmail` 之后加规格 §8.1 的菜单项。**`Path` 必须与前端 `path` 逐字一致** —— 它同时是管理员分组权限的 KEY。
 三语 `plugin.ts` 补 `plugin.sms.*` 全部文案键，三语键集合必须一致。
 
-- [ ] **步骤 6：语法与文案校验**
+- [x] **步骤 6：语法与文案校验**
 
 运行：
 ```bash
@@ -968,7 +968,7 @@ go build ./... && go vet ./config/
 预期：esbuild 无报错，payload 断言通过，Go 侧编译通过。
 再人工核对三语键集合一致（用 `node -e` 比对三个 locale 文件里 `plugin.sms.` 前缀的键名集合，差集必须为空）。
 
-- [ ] **步骤 7：Commit**
+- [x] **步骤 7：Commit**
 
 ```bash
 git add anqicms-admin/src/services/plugin/sms.ts anqicms-admin/src/pages/plugin/sms/index.tsx anqicms-admin/src/pages/plugin/sms/payload.ts anqicms-admin/scripts/check-sms-payload.mjs anqicms-admin/config/routes.ts anqicms-admin/src/locales/zh-CN/plugin.ts anqicms-admin/src/locales/en-US/plugin.ts anqicms-admin/src/locales/zh-TW/plugin.ts config/menu.go
