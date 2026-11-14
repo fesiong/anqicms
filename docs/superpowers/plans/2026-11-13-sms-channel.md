@@ -820,7 +820,7 @@ const SmsSettingKey = "sms"
 func (w *Website) LoadSmsSetting(value string)
 ```
 
-- [ ] **步骤 1：编写失败的测试**
+- [x] **步骤 1：编写失败的测试**
 
 - `TestSmsSecretFieldsMasked`：构造带真值的 `config.PluginSmsConfig`，走读端点的脱敏函数，断言**八个字段**变成 `********`：阿里云 `access_key_id`／`access_key_secret`（国内+国际共 4 个）、腾讯云 `secret_id`／`secret_key`（4 个）、Twilio `account_sid`／`auth_token`／`api_key_sid`／`api_key_secret`（4 个）。同时断言**不掩码**的字段原样保留：`sms_sdk_app_id`／`region`／`endpoint`／`sign_name`／`from`／`messaging_service_sid`／`templates`／`texts`。空凭据保持空串（不要给空值也打掩码，否则站长分不清配没配）。**再断言脱敏调用之后 `currentSite.PluginSms` 里的真值逐字段不变** —— 这是行为侧的证据，与下一条的源码侧护栏互补。
 - `TestSmsSettingMasksValueCopyNotPointer`：go/ast 断言脱敏前出现 `*currentSite.PluginSms` 解引用（**值拷贝**）。反向对照：合成 `setting := currentSite.PluginSms` 的源码必须变红。这条防的是 2026-10-03 真实事故——`PluginSms` 是指针，直接赋值后改掩码会把内存里的真凭据抹掉，之后所有发信失败且无报错。
@@ -829,29 +829,29 @@ func (w *Website) LoadSmsSetting(value string)
 - `TestSmsSettingPartialUpdateKeepsUnsentFields`：只提交 `{"code_ttl":600}` → 其余字段（含三个厂商对象）全部保持原值。
 - `TestSmsSettingFormKeepsNamedReadJSON`：go/ast 断言 `PluginSmsSettingForm` 内**恰好一次**具名 `ctx.ReadJSON(&req)`（`req` 是 `config.PluginSmsConfig` 而非 map），且出现 `library.MergeJSONPayload`。反向对照：合成把 `ReadJSON` 目标换成 map 的源码必须变红（会让 apicatalog 的 params 归零）。
 
-- [ ] **步骤 2：运行测试验证失败**
+- [x] **步骤 2：运行测试验证失败**
 
 运行：`go test ./controller/manageController/ -run 'TestSms' -v`
 预期：FAIL（符号未定义）。
 
-- [ ] **步骤 3：接进站点配置链路**
+- [x] **步骤 3：接进站点配置链路**
 
 `provider/website.go` 在 `PluginSendmail` 附近加 `PluginSms *config.PluginSmsConfig`。
 `provider/setting.go`：加 `SmsSettingKey = "sms"`；在 `LoadSendmailSetting` 的分派旁加 `w.LoadSmsSetting(settingMap[SmsSettingKey])`；实现 `LoadSmsSetting`，仿 `LoadSendmailSetting` 但**加载后调 `sms.ApplyDefaults`** 补齐默认值。
 
-- [ ] **步骤 4：实现两个 handler 与路由**
+- [x] **步骤 4：实现两个 handler 与路由**
 
 读端点：`setting := *currentSite.PluginSms`（**解引用值拷贝**）→ 八个凭据字段非空则置 `SmsSecretMask` → 回 `{code: config.StatusOK, data: setting}`。
 写端点严格按规格 §3.5 六步顺序：具名 `ctx.ReadJSON(&req)` → `req = *currentSite.PluginSms` 作基底 → `ctx.GetBody()` + `json.Unmarshal` 取 payload → `library.MergeJSONPayload(payload, &req)` → 逐字段哨兵回写保护（值为 `********` 则取 `currentSite.PluginSms` 对应真值）→ 赋回 `currentSite.PluginSms` → `SaveSettingValue(SmsSettingKey, ...)` + `AddAdminLog`。
 在写端点上方写注释记录 null 的两种行为（顶层 no-op / 嵌套 map 清空）。
 `route/manage.go` 在 `sendmail` party 之后加 `sms := plugin.Party("/sms")`，注册 `sms.Get("/setting", ...)` 与 `sms.Post("/setting", ...)`，party 上挂 **`middleware.AdminPermissionRequired`**。
 
-- [ ] **步骤 5：运行测试验证通过 + 重生成清单**
+- [x] **步骤 5：运行测试验证通过 + 重生成清单**
 
 运行：`go test ./controller/manageController/ -run 'TestSms' -v && go build ./... && go run ./cmd/apicatalog && go run ./cmd/apicatalog -check`
 预期：六条 PASS，catalog 一致。
 
-- [ ] **步骤 6：Commit**
+- [x] **步骤 6：Commit**
 
 ```bash
 gofmt -w controller/manageController/pluginSms.go controller/manageController/pluginSms_test.go
