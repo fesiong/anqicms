@@ -683,7 +683,7 @@ func ApiSmsSend(ctx iris.Context)
 func (w *Website) LoginViaSms(req *request.ApiLoginRequest) (*model.User, error)
 ```
 
-- [ ] **步骤 1：编写失败的测试**
+- [x] **步骤 1：编写失败的测试**
 
 `controller/apiSms_test.go`（复用本包已有的 `readFuncSource`／`mustContain`／`mustNotContain`）：
 
@@ -700,34 +700,34 @@ func (w *Website) LoginViaSms(req *request.ApiLoginRequest) (*model.User, error)
 - `TestLoginViaSmsRejectsWrongCode`：错码 → 失败，且**不创建用户**（校验在建号之前）。
 - `TestLoginViaSmsRejectsBannedUser`：既有号 `Status=-1` → 拒绝登录。
 
-- [ ] **步骤 2：运行测试验证失败**
+- [x] **步骤 2：运行测试验证失败**
 
 运行：`go test ./controller/ -run 'TestApiSmsSend|TestApiLoginDispatchesSms' -v` 与 `go test ./provider/ -run 'TestLoginViaSms' -v`
 预期：均 FAIL（符号未定义）。
 
-- [ ] **步骤 3：实现请求结构与常量**
+- [x] **步骤 3：实现请求结构与常量**
 
 `config/constant.go` 在既有平台常量组里加 `PlatformSms = "sms"`。
 `request/sms.go` 新增 `ApiSmsSendRequest{Scene, PhoneCountry, Phone, CaptchaId, Captcha string}`，json tag 逐字按规格 §7.1 表格。
 `request/user.go`：`ApiLoginRequest` 加 `PhoneCountry string \`json:"phone_country"\``；`ApiRegisterRequest` 加同名字段。**一并订正两处误导注释**：`ApiLoginRequest.Code` 与 `ApiRegisterRequest.Code` 现在确实承载短信验证码。
 
-- [ ] **步骤 4：实现 `provider/smsLogin.go`**
+- [x] **步骤 4：实现 `provider/smsLogin.go`**
 
 `LoginViaSms` 按规格 §6.5：归一化 → `VerifySmsCode(country, phone, SceneLogin, req.Code)` → `GetUserInfoByPhoneCountry` → 存在则查 `Status`（1 正常／0 待审核／-1 禁止）→ 不存在则合成 `request.ApiRegisterRequest{UserName: 随机12位, Password: 随机32位, Phone, PhoneCountry}` 调 `w.RegisterUser`，撞名重试 ≤3 次。
 随机串用 `crypto/rand`。**UserName 不用手机号**（部分模板会公开显示用户名）。注册后仍要过 `GetDefaultStatus()` 审核门。成功后走既有 `GetUserAuthToken` + `LogLogin`，与密码登录同形。
 
-- [ ] **步骤 5：实现 `controller/apiSms.go` 与路由**
+- [x] **步骤 5：实现 `controller/apiSms.go` 与路由**
 
 `respondSmsError` 见 Interfaces。`ApiSmsSend`：`ctx.ReadJSON` → `provider.CurrentSite(ctx)` → scene 白名单（拒 `test` 与 `notify.` 前缀）→ `Safe.Captcha == 1` 时 `Store.Verify` → `bind_old` 要求登录态且号码等于当前用户绑定号码 → 调 `SendSmsCode`（`Ip` 取 `ctx.RemoteAddr()`，**不自己解析 X-Forwarded-For**）→ 成功回 `{code: config.StatusOK, data: {expires_in, resend_after}}`。
 `route/base.go` 在 `api.Post("/login", ...)` 附近加 `api.Post("/sms/send", controller.ApiSmsSend)`。
 `controller/apiUser.go` 在 `config.PlatformGoogle` 分支之后加 `else if req.Platform == config.PlatformSms` 分支，调 `LoginViaSms`，错误处理与相邻分支同形。
 
-- [ ] **步骤 6：运行测试验证通过 + 重生成端点清单**
+- [x] **步骤 6：运行测试验证通过 + 重生成端点清单**
 
 运行：`go test ./controller/ -run 'TestApiSmsSend|TestApiLoginDispatchesSms' -v && go test ./provider/ -run 'TestLoginViaSms' -v && go build ./... && go run ./cmd/apicatalog && go run ./cmd/apicatalog -check`
 预期：测试 PASS，catalog 校验一致。
 
-- [ ] **步骤 7：Commit**
+- [x] **步骤 7：Commit**
 
 ```bash
 gofmt -w request/sms.go controller/apiSms.go provider/smsLogin.go controller/apiSms_test.go provider/smsLogin_test.go
