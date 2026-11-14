@@ -461,7 +461,7 @@ git commit -m "feat(短信): 新增 sms_codes/sms_logs 模型与迁移注册，�
 
 **Interfaces：** `model.User.PhoneCountry`；`func (w *Website) GetUserInfoByPhoneCountry(country, phone string) (*model.User, error)`；`func (w *Website) createUserWithPhoneGuard(user *model.User) error`。
 
-- [ ] **步骤 1：编写失败的测试**
+- [x] **步骤 1：编写失败的测试**
 
 `TestUserPhoneCountryColumn`：go/ast 断言 `model.User` 有 `PhoneCountry string`，tag 含 `type:varchar(8)`、`not null`、`default:'86'`；断言 `Phone` 字段**没有** `uniqueIndex`（实测 339 行里 273 个互不重复非空号 + 66 个空串，加唯一索引会迁移失败）。反向对照：合成一份把 `Phone` 标成 `uniqueIndex` 的源码，必须变红。
 
@@ -476,28 +476,28 @@ git commit -m "feat(短信): 新增 sms_codes/sms_logs 模型与迁移注册，�
 
 `TestVerifyCellphoneFormatUnchanged`：从 `provider/user.go` **真实文件文本**里取 `VerifyCellphoneFormat` 的函数体，断言正则字面量仍是 `1[3-9][0-9]{9}`（**无 `^$` 锚点**）。锚点字符串必须从文件读出后比对，不凭印象写死。反向对照：合成一份加了 `^...$` 的源码必须变红。理由：收紧会让存量带前缀账号（`"abc13900001111xyz"` 这类）无法登录，新校验只用于短信路径。
 
-- [ ] **步骤 2：运行测试验证失败**
+- [x] **步骤 2：运行测试验证失败**
 
 运行：`go test ./provider/ -run 'TestUserPhoneCountryColumn|TestRegisterUserUsesPhoneGuard|TestCreateUserWithPhoneGuard|TestVerifyCellphoneFormatUnchanged' -v`
 预期：FAIL（字段／函数未定义）。
 
-- [ ] **步骤 3：加列与改查询**
+- [x] **步骤 3：加列与改查询**
 
 `model/user.go` 加 `PhoneCountry string`，gorm tag `column:phone_country;type:varchar(8);not null;default:'86'`，位置紧邻 `Phone`。**存量行由 MySQL 的 `ADD COLUMN ... NOT NULL DEFAULT '86'` 自动回填 86**，不需要单独的数据迁移脚本。
 `GetUserInfoByPhone(phone)` 改名为 `GetUserInfoByPhoneCountry(country, phone)`，WHERE 用 `phone_country = ? AND phone = ?`；`country == ""` 时按 `86` 处理。三处调用点按规格 §6.6 改：`:576` 由步骤 4 的事务查重取代、`:1048` 传 `req.PhoneCountry`（未传沿用用户现值）、`provider/order.go:1347` 传 `user.PhoneCountry`。
 资料更新请求的 `PhoneCountry` 用 **`*string`**（与既有 `Phone *string` 一致，未传不改，否则编辑资料会把区号静默重置成 86）。
 
-- [ ] **步骤 4：实现 `createUserWithPhoneGuard` 并接进 `RegisterUser`**
+- [x] **步骤 4：实现 `createUserWithPhoneGuard` 并接进 `RegisterUser`**
 
 函数体照抄规格 §4.4 的代码块（三条约束不可改：WHERE 只用 `phone` 单列、`phone == ""` 跳过、依赖 RR）。`RegisterUser` 里 `w.DB.Save(&user)`（`:616`）换成 `w.createUserWithPhoneGuard(&user)`。**extra 字段、`ProcessNewUser`、发验证邮件全部留在事务外** —— 不能把 SMTP 圈进持锁事务。
 在函数上方写注释记录「依赖 REPEATABLE READ；若生产库是 READ COMMITTED 则保证不成立，上线前必须核对」。
 
-- [ ] **步骤 5：运行测试验证通过**
+- [x] **步骤 5：运行测试验证通过**
 
 运行：`go test ./provider/ -run 'TestUserPhoneCountryColumn|TestRegisterUserUsesPhoneGuard|TestCreateUserWithPhoneGuard|TestVerifyCellphoneFormatUnchanged' -v && go build ./... && go vet ./provider/ ./model/ ./request/`
 预期：全部 PASS。
 
-- [ ] **步骤 6：Commit**
+- [x] **步骤 6：Commit**
 
 ```bash
 gofmt -w provider/sms_user_test.go
