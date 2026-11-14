@@ -414,6 +414,43 @@ func TestCreateUserWithPhoneGuard(t *testing.T) {
 		}
 		t.Logf("③ 通过：3 个空号全部插入成功，ids=%v", ids)
 	})
+
+	// ④ 回归（R56）：调用方不给区号（模拟 RegisterUser 的 ApiRegisterRequest 无区号字段），
+	// 依赖 createUserWithPhoneGuard 内部的空值规范化把区号补成 86，堵住同号无限重复注册。
+	t.Run("④ PhoneCountry为空时同号第二次报错且落库区号为86", func(t *testing.T) {
+		phone := smsUserRandomPhone()
+		var ids []uint
+		defer func() { smsUserCleanup(t, db, ids, []string{phone}) }()
+
+		u1 := &model.User{UserName: "sms_guard_4a", Phone: phone}
+		if err := w.createUserWithPhoneGuard(u1); err != nil {
+			t.Fatalf("第一次插入应成功，却报错：%v", err)
+		}
+		ids = append(ids, u1.Id)
+
+		u2 := &model.User{UserName: "sms_guard_4b", Phone: phone}
+		err := w.createUserWithPhoneGuard(u2)
+		if err == nil {
+			t.Fatal("调用方未给区号时，同号第二次插入应返回 error（规范化后区号均为 86），却成功")
+		}
+		if u2.Id != 0 {
+			ids = append(ids, u2.Id)
+		}
+
+		var cnt int64
+		db.Raw("SELECT COUNT(*) FROM `users` WHERE `phone` = ?", phone).Row().Scan(&cnt)
+		if cnt != 1 {
+			t.Fatalf("该号应仅有 1 行，实际 %d", cnt)
+		}
+		var got string
+		if scanErr := db.Raw("SELECT `phone_country` FROM `users` WHERE `phone` = ?", phone).Row().Scan(&got); scanErr != nil {
+			t.Fatalf("读回 phone_country 失败：%v", scanErr)
+		}
+		if got != "86" {
+			t.Fatalf("插入行 phone_country 应为规范化后的 86，实际 %q", got)
+		}
+		t.Logf("④ 通过：第二次返回 error=%v，表中该号 %d 行，落库区号 = %q", err, cnt, got)
+	})
 }
 
 // TestCreateUserWithPhoneGuardConcurrent：10 个 goroutine 同时用同一 (country, phone)

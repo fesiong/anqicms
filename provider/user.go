@@ -92,12 +92,22 @@ func (w *Website) GetUserInfoByEmail(email string) (*model.User, error) {
 	})
 }
 
+// defaultPhoneCountry 是手机号默认区号，与 model.User.PhoneCountry 的列默认值一致。
+const defaultPhoneCountry = "86"
+
+// normalizePhoneCountry 把空区号按默认区号 86 处理。
+// GetUserInfoByPhoneCountry 与 createUserWithPhoneGuard 共用，避免两处各自硬编码 86。
+func normalizePhoneCountry(country string) string {
+	if country == "" {
+		return defaultPhoneCountry
+	}
+	return country
+}
+
 // GetUserInfoByPhoneCountry 按 (区号, 手机号) 查用户（规格 §6.6）。
 // country == "" 按默认区号 86 处理，兼容未带区号的旧调用与存量数据。
 func (w *Website) GetUserInfoByPhoneCountry(country, phone string) (*model.User, error) {
-	if country == "" {
-		country = "86"
-	}
+	country = normalizePhoneCountry(country)
 	return w.GetUserByFunc(func(tx *gorm.DB) *gorm.DB {
 		return tx.Where("`phone_country` = ? AND `phone` = ?", country, phone)
 	})
@@ -115,6 +125,10 @@ func (w *Website) GetUserInfoByPhoneCountry(country, phone string) (*model.User,
 //  2. phone == "" 跳过查重——66 行空串若参与 FOR UPDATE 会锁住一大片间隙，把无关注册串行化。
 //  3. 仅此函数内持锁；extra 字段、ProcessNewUser、发验证邮件一律留在事务外，不能把 SMTP 圈进事务。
 func (w *Website) createUserWithPhoneGuard(user *model.User) error {
+	// 修复规格 §4.4 代码块隐含的「调用方已给区号」前提：RegisterUser 的 ApiRegisterRequest 无区号字段，
+	// 空区号若不规范化，会与库里回填的 86 永远比对不等，同号可无限重复注册。
+	// 规范化发生在比对之前并写回 user，保证 tx.Save 落库的区号与比对所用一致。
+	user.PhoneCountry = normalizePhoneCountry(user.PhoneCountry)
 	return w.DB.Transaction(func(tx *gorm.DB) error {
 		if user.Phone != "" {
 			var existing []model.User
@@ -123,7 +137,7 @@ func (w *Website) createUserWithPhoneGuard(user *model.User) error {
 				return err
 			}
 			for _, u := range existing {
-				if u.PhoneCountry == user.PhoneCountry {
+				if normalizePhoneCountry(u.PhoneCountry) == user.PhoneCountry {
 					return errors.New(w.Tr("TheMobilePhoneNumberHasBeenRegistered"))
 				}
 			}
