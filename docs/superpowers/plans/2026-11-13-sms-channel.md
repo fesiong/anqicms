@@ -411,7 +411,7 @@ git commit -m "feat(短信): Twilio Basic 适配器与 Sender 工厂"
 
 **Interfaces：** `model.SmsCode`、`model.SmsLog`（字段见规格 §4.2／§4.3）。
 
-- [ ] **步骤 1：编写失败的护栏测试**
+- [x] **步骤 1：编写失败的护栏测试**
 
 复用 `provider/channel_model_test.go` 已有的 `scanMigratedModels`／`parseGormIndexes`／`gormIndexPriority`／`modelTypeName`（**不重写扫描器**）。新增 `smsModels = []string{"SmsCode", "SmsLog"}`。
 
@@ -423,26 +423,26 @@ git commit -m "feat(短信): Twilio Basic 适配器与 Sender 工厂"
 
 `TestSmsLogStoresNoPlainText`：go/ast 断言 `SmsLog` **不存在**名为 `Code`／`CodeHash`／`Body`／`Text`／`Content` 的字段（日志表不得存验证码明文或渲染正文）。反向对照：合成一份加了 `Body string` 的源码，必须变红。
 
-- [ ] **步骤 2：运行测试验证失败**
+- [x] **步骤 2：运行测试验证失败**
 
 运行：`go test ./provider/ -run 'TestSmsTablesRegistered|TestSmsLogIndexOrdersSiteFirst|TestSmsCodeHashNotSerialized|TestSmsLogStoresNoPlainText' -v`
 预期：FAIL（`model.SmsCode` 未定义／未注册）。**按 `-run` 分批，不整跑 provider。**
 
-- [ ] **步骤 3：创建 `model/sms.go`**
+- [x] **步骤 3：创建 `model/sms.go`**
 
 `SmsCode` 与 `SmsLog` 的字段名、列名、类型、默认值、索引 tag **逐字照抄规格 §4.2／§4.3**。两处不可省：`CodeHash` 的 `json:"-"`；`idx_site_created` 的 `site_id` priority 1。
 **不写 `TableName()`** —— 仓库 90 余个模型里只有 2 个写了它，约定是靠 GORM 复数化：`SmsCode` → `sms_codes`、`SmsLog` → `sms_logs`，正好是需要的表名。测试里用 `w.DB.Migrator().HasTable("sms_codes")` 实测确认，不靠推断。
 
-- [ ] **步骤 4：注册迁移**
+- [x] **步骤 4：注册迁移**
 
 在 `provider/dao.go` 的 `var models = []interface{}{...}` 末尾（`&model.NotificationDelivery{}` 之后）追加 `&model.SmsCode{}`、`&model.SmsLog{}`，并加一行分组注释说明用途。
 
-- [ ] **步骤 5：运行测试验证通过**
+- [x] **步骤 5：运行测试验证通过**
 
 运行：`go test ./provider/ -run 'TestSms' -v && go build ./...`
 预期：四条护栏 PASS。
 
-- [ ] **步骤 6：Commit**
+- [x] **步骤 6：Commit**
 
 ```bash
 gofmt -w model/sms.go provider/sms_model_test.go
