@@ -1,0 +1,103 @@
+{
+  "canonicalNote": "canonicalRequest/stringToSign/canonicalUri/canonicalQuery/canonicalHeaders/signedHeaders/payloadHash/credentialScope/date/secretDate/secretService/secretSigning 由官方 SDK common@v1.3.172 client.go:387-508 的 TC3 签名块逐字副本（sha256hex/hmacsha256 副本自 sign.go:34-43）对同一组冻结输入构造，并与 SDK 实抓 Authorization 逐字节交叉验证一致。假凭据，不含真实 SecretId/SecretKey。",
+  "capturedAt": "2026-11-14",
+  "note": "腾讯云 SendSms TC3-HMAC-SHA256 官方 SDK 对照向量。假凭据，httptest 抓取；时间戳取自 SDK 实际请求头 X-TC-Timestamp，未注入。仓内测试只读本文件，永不联网。",
+  "sdk": [
+    "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/sms v1.3.172",
+    "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.3.172"
+  ],
+  "vectors": [
+    {
+      "name": "domestic",
+      "endpoint": "sms.tencentcloudapi.com",
+      "secretId": "AKIDFakeVectorSecretId000000000000",
+      "secretKey": "FakeVectorSecretKey0000000000000",
+      "cloudRegion": "ap-guangzhou",
+      "input": {
+        "to": "+8613900001111",
+        "code": "123456",
+        "outId": "9001",
+        "signName": "安企测试",
+        "templateId": "1234567",
+        "smsSdkAppId": "1400006666"
+      },
+      "method": "POST",
+      "path": "/",
+      "rawQuery": "",
+      "headers": {
+        "accept-encoding": "gzip",
+        "authorization": "TC3-HMAC-SHA256 Credential=AKIDFakeVectorSecretId000000000000/2026-11-14/sms/tc3_request, SignedHeaders=content-type;host, Signature=a261da55c4b3933444cf6ca5fbe4e62d02681d26678574dabcf14aba685cdca3",
+        "content-length": "167",
+        "content-type": "application/json",
+        "user-agent": "Go-http-client/1.1",
+        "x-tc-action": "SendSms",
+        "x-tc-language": "zh-CN",
+        "x-tc-region": "ap-guangzhou",
+        "x-tc-requestclient": "SDK_GO_1.3.172",
+        "x-tc-timestamp": "1794624293",
+        "x-tc-version": "2021-01-11"
+      },
+      "body": "{\"PhoneNumberSet\":[\"+8613900001111\"],\"SmsSdkAppId\":\"1400006666\",\"TemplateId\":\"1234567\",\"SignName\":\"安企测试\",\"TemplateParamSet\":[\"123456\"],\"SessionContext\":\"9001\"}",
+      "authorization": "TC3-HMAC-SHA256 Credential=AKIDFakeVectorSecretId000000000000/2026-11-14/sms/tc3_request, SignedHeaders=content-type;host, Signature=a261da55c4b3933444cf6ca5fbe4e62d02681d26678574dabcf14aba685cdca3",
+      "canonicalRequest": "POST\n/\n\ncontent-type:application/json\nhost:sms.tencentcloudapi.com\n\ncontent-type;host\nb65d8aa955575a05a1ec291c7898322de1d1cf2572acf726c9de720db6fa8e8e",
+      "stringToSign": "TC3-HMAC-SHA256\n1794624293\n2026-11-14/sms/tc3_request\n381d7d5d8a29f76b03ae2052fe0dc994e56392109cdecb3e4c99141047bff6e9",
+      "canonicalUri": "/",
+      "canonicalQuery": "",
+      "canonicalHeaders": "content-type:application/json\nhost:sms.tencentcloudapi.com\n",
+      "signedHeaders": "content-type;host",
+      "payloadHash": "b65d8aa955575a05a1ec291c7898322de1d1cf2572acf726c9de720db6fa8e8e",
+      "credentialScope": "2026-11-14/sms/tc3_request",
+      "timestamp": "1794624293",
+      "date": "2026-11-14",
+      "secretDate": "280e4dba22260ca675d1af15eecee1296e092a77dd4d27a1d3dc1d303ac888a6",
+      "secretService": "f11aa926f25aece5f460476172a9ae0689e3599112fd31258dcf27fc57a6e62b",
+      "secretSigning": "9adba8d9230cc98148bf648948b7c197dfb177569eeb97deabd7484769c8bc4b"
+    },
+    {
+      "name": "international",
+      "endpoint": "sms.tencentcloudapi.com",
+      "secretId": "AKIDFakeVectorSecretId000000000000",
+      "secretKey": "FakeVectorSecretKey0000000000000",
+      "cloudRegion": "ap-guangzhou",
+      "input": {
+        "to": "+85200001234",
+        "code": "654321",
+        "outId": "9002",
+        "signName": "",
+        "templateId": "2234567",
+        "smsSdkAppId": "1400007777"
+      },
+      "method": "POST",
+      "path": "/",
+      "rawQuery": "",
+      "headers": {
+        "accept-encoding": "gzip",
+        "authorization": "TC3-HMAC-SHA256 Credential=AKIDFakeVectorSecretId000000000000/2026-11-14/sms/tc3_request, SignedHeaders=content-type;host, Signature=6dae75c5130b59221edc1a7dbca4891ac870e99b502bf2ffb13ae720b4101bdb",
+        "content-length": "139",
+        "content-type": "application/json",
+        "user-agent": "Go-http-client/1.1",
+        "x-tc-action": "SendSms",
+        "x-tc-language": "zh-CN",
+        "x-tc-region": "ap-guangzhou",
+        "x-tc-requestclient": "SDK_GO_1.3.172",
+        "x-tc-timestamp": "1794624293",
+        "x-tc-version": "2021-01-11"
+      },
+      "body": "{\"PhoneNumberSet\":[\"+85200001234\"],\"SmsSdkAppId\":\"1400007777\",\"TemplateId\":\"2234567\",\"TemplateParamSet\":[\"654321\"],\"SessionContext\":\"9002\"}",
+      "authorization": "TC3-HMAC-SHA256 Credential=AKIDFakeVectorSecretId000000000000/2026-11-14/sms/tc3_request, SignedHeaders=content-type;host, Signature=6dae75c5130b59221edc1a7dbca4891ac870e99b502bf2ffb13ae720b4101bdb",
+      "canonicalRequest": "POST\n/\n\ncontent-type:application/json\nhost:sms.tencentcloudapi.com\n\ncontent-type;host\n7958a429adb2bfa798bb99fc8586ae50277da8ef55f12f6e27ac601bacff8f51",
+      "stringToSign": "TC3-HMAC-SHA256\n1794624293\n2026-11-14/sms/tc3_request\n5a2564537248c7c6378a95f0a4c6d608e68b85a8bb0b252a247534bf42f0952c",
+      "canonicalUri": "/",
+      "canonicalQuery": "",
+      "canonicalHeaders": "content-type:application/json\nhost:sms.tencentcloudapi.com\n",
+      "signedHeaders": "content-type;host",
+      "payloadHash": "7958a429adb2bfa798bb99fc8586ae50277da8ef55f12f6e27ac601bacff8f51",
+      "credentialScope": "2026-11-14/sms/tc3_request",
+      "timestamp": "1794624293",
+      "date": "2026-11-14",
+      "secretDate": "280e4dba22260ca675d1af15eecee1296e092a77dd4d27a1d3dc1d303ac888a6",
+      "secretService": "f11aa926f25aece5f460476172a9ae0689e3599112fd31258dcf27fc57a6e62b",
+      "secretSigning": "9adba8d9230cc98148bf648948b7c197dfb177569eeb97deabd7484769c8bc4b"
+    }
+  ]
+}

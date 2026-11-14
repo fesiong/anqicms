@@ -288,7 +288,8 @@ func TestAliyunSenderNonJSONBody(t *testing.T) {
 	}
 }
 
-// TestAliyunBodySnippetStaysValidUTF8 直接锁 aliyunBodySnippet 的三条契约：
+// TestAliyunBodySnippetStaysValidUTF8 直接锁 smsBodySnippet（R38 起为共享 helper，
+// 原 aliyunBodySnippet）的三条契约：
 // ① 结果必须是合法 UTF-8（否则 utf8mb4 的 err_msg 列拒收，整条流水写不进去）；
 // ② 字节数只减不增，上限 200；③ 现场要留住——不能为了合法把整段清空。
 // 抓它的破坏：按字节硬切后直接 string(body)（切在汉字中间）；用 utf8.Valid 整段
@@ -336,7 +337,7 @@ func TestAliyunBodySnippetStaysValidUTF8(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := aliyunBodySnippet([]byte(c.body))
+			got := smsBodySnippet([]byte(c.body))
 			if !utf8.ValidString(got) {
 				t.Fatalf("片段含非法 UTF-8 字节: %q", got)
 			}
