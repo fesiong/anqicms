@@ -94,7 +94,7 @@
 
 **Interfaces（后续任务依赖）：** `config.PluginSmsConfig` 及其子结构、`sms.Profile`／`SendRequest`／`SendResult`／`Sender`、`sms.NormalizePhone`／`Phone`、15 个 `ErrSms*` 哨兵、`sms.SendError`／`ErrorClass`。
 
-- [ ] **步骤 1：编写失败的测试 `TestNormalizePhone`**
+- [x] **步骤 1：编写失败的测试 `TestNormalizePhone`**
 
 表驱动，字段 `{name, country, local, wantCountry, wantLocal, wantRegion, wantErr bool}`。**必须包含审查重点 1 的全部用例**：
 
@@ -121,18 +121,18 @@
 每条成功用例额外断言 `got.E164() == "+" + wantCountry + wantLocal`。
 另写 `TestNormalizePhoneIdempotent`：对每条成功用例断言 `NormalizePhone(got.Country, got.Local)` 与首次结果逐字段相等（归一化必须幂等，否则查重键会漂移）。
 
-- [ ] **步骤 2：运行测试验证失败**
+- [x] **步骤 2：运行测试验证失败**
 
 运行：`go test ./provider/sms/ -run 'TestNormalizePhone' -v`
 预期：编译失败，`undefined: NormalizePhone`。
 
-- [ ] **步骤 3：创建 `config/sms.go`**
+- [x] **步骤 3：创建 `config/sms.go`**
 
 只放结构与常量，**零方法、零 import provider**（`provider/sms` → `config` 单向，反向会成环）。
 常量取值：`SmsProviderAliyun="aliyun"`、`SmsProviderTencent="tencent"`、`SmsProviderTwilio="twilio"`、`SmsRegionDomestic="domestic"`、`SmsRegionInternational="international"`。
 类型：`PluginSmsConfig`、`SmsAliyunConfig{Domestic, International SmsAliyunRegion}`、`SmsAliyunRegion`、`SmsTencentConfig{Domestic, International SmsTencentRegion}`、`SmsTencentRegion`、`SmsTwilioConfig{International SmsTwilioRegion}`、`SmsTwilioRegion`。**字段名、json tag、注释逐字照抄规格 §3.2**，不增不减。
 
-- [ ] **步骤 4：创建 `provider/sms/sender.go` 与 `provider/sms/errors.go`**
+- [x] **步骤 4：创建 `provider/sms/sender.go` 与 `provider/sms/errors.go`**
 
 `sender.go`：`Profile`／`SendRequest`／`SendResult`／`Sender` 逐字照抄规格 §5.1；场景码常量 `SceneLogin="login"`、`SceneRegister="register"`、`SceneReset="reset"`、`SceneBindOld="bind_old"`、`SceneBindNew="bind_new"`、`SceneTest="test"`。常量表上方写注释说明**通知场景统一用 `notify.` 前缀，本期不定义具体值**（规格 §2.4 的预留边界：只留 `Sender` 接口与命名空间，不建投递规则表／模板表／重试队列）。
 
@@ -154,7 +154,7 @@ type AttemptsError struct{ Remaining int } // Unwrap() → ErrSmsCodeMismatch
 15 个哨兵 `var ErrSmsXxx = errors.New("<翻译键>")`，**Error() 字符串就是翻译键本身**（`provider/sms` 拿不到 `*Website`，翻译在 controller 层做）。键名与规格 §10.2 表格逐行对应：`SmsServiceNotEnabled`、`SmsSceneNotEnabled`、`SmsPhoneInvalid`、`SmsRegionUnsupported`、`SmsCredentialMissing`、`SmsSignMissing`、`SmsTemplateMissing`、`SmsIpLimited`、`SmsPhoneLimited`、`SmsResendTooSoon`、`SmsCodeNotFound`、`SmsCodeExpired`、`SmsCodeMismatch`、`SmsCodeLocked`、`SmsSendFailed`。
 `ClassifyHTTPStatus`：429／408／425 与 ≥500 → transient；其余 4xx → permanent；2xx／3xx → transient（未知一律 transient）。
 
-- [ ] **步骤 5：实现 `provider/sms/phone.go`**
+- [x] **步骤 5：实现 `provider/sms/phone.go`**
 
 ```go
 type Phone struct{ Country, Local string }
@@ -165,19 +165,19 @@ func (p Phone) Region() string // Country == "86" → domestic，否则 internat
 规则按规格 §6.2 五条，正则逐字：区号 `^[1-9]\d{0,3}$`、本地 `^\d{4,14}$`、国内附加 `^1[3-9]\d{9}$`。
 去格式字符集合必须覆盖：半角空格、`\t`、`-`、`(`、`)`、`.`、不换行空格 `\u00a0`、零宽空格 `\u200b`、零宽连接符 `\u200d`、BOM `\ufeff`，以及**全角数字 `０-９`（U+FF10..U+FF19）折半角**。顺序：先折全角 → 再去格式字符 → 再校验。所有失败路径返回 `ErrSmsPhoneInvalid`。
 
-- [ ] **步骤 6：补后端多语言文案**
+- [x] **步骤 6：补后端多语言文案**
 
 15 个翻译键加进 `locales/zh-CN/default.yml`、`locales/zh-TW/default.yml`、`locales/en-US/default.yml`，文案口径按规格 §10.2 表格第三列。
 **只加这三个** —— 实测另外 6 个 locale（bn-BD／fa-IR／id-ID／ja-JP／pt-BR／ru-RU）各只有 95 个键，是部分翻译，缺键时 `w.tr` 回落到 `fmt.Sprintf(str, args...)` 返回键名本身，与仓库其余 770 多个键的现状一致。
 两个带参数的键用 `%d` 占位：`SmsResendTooSoon` → `"请 %d 秒后再试"`，`SmsCodeMismatch` → `"验证码错误，还可尝试 %d 次"`（`Tr(str, args...)` 支持可变参数）。
 校验：三个文件的键集合差集必须为空（用脚本比对 `^"Sms` 前缀的键名）。
 
-- [ ] **步骤 7：运行测试验证通过**
+- [x] **步骤 7：运行测试验证通过**
 
 运行：`go test ./provider/sms/ -run 'TestNormalizePhone' -v && go build ./... && go vet ./provider/sms/ ./config/`
 预期：两个测试 PASS，build 与 vet 无输出。
 
-- [ ] **步骤 8：Commit**
+- [x] **步骤 8：Commit**
 
 ```bash
 gofmt -w config/sms.go provider/sms/sender.go provider/sms/errors.go provider/sms/phone.go provider/sms/phone_test.go
@@ -196,7 +196,7 @@ git commit -m "feat(短信): 新增短信配置结构、平台契约与号码归
 
 **Interfaces：** `sms.Resolve(cfg *config.PluginSmsConfig, region, scene string) (*Profile, error)`、`sms.ApplyDefaults(cfg *config.PluginSmsConfig)`。
 
-- [ ] **步骤 1：编写失败的测试**
+- [x] **步骤 1：编写失败的测试**
 
 四个测试，断言用规格 §3.3 的口径：
 
@@ -208,26 +208,26 @@ git commit -m "feat(短信): 新增短信配置结构、平台契约与号码归
 
 `TestApplyDefaults`：零值 `PluginSmsConfig` 过一遍 `ApplyDefaults` 后八个数值等于全局约束里的默认值；`CodeLength` 传 3 → 收敛到 4，传 9 → 收敛到 8；已显式设置的合法值不被改写。阿里云 `ParamName` 为空 → `"code"`；阿里云国际 `Endpoint` 为空 → `dysmsapi.ap-southeast-1.aliyuncs.com`；国内 `Endpoint` 为空 → `dysmsapi.aliyuncs.com`；腾讯云 `Region` 为空 → `ap-guangzhou`。
 
-- [ ] **步骤 2：运行测试验证失败**
+- [x] **步骤 2：运行测试验证失败**
 
 运行：`go test ./provider/sms/ -run 'TestResolve|TestApplyDefaults' -v`
 预期：编译失败，`undefined: Resolve`。
 
-- [ ] **步骤 3：实现 `provider/sms/resolve.go`**
+- [x] **步骤 3：实现 `provider/sms/resolve.go`**
 
 两个导出函数签名见 Interfaces。`Resolve` 内部顺序：`ApplyDefaults` 的副本（**不得改写入参 cfg**，它是站点内存里的全局对象）→ 按 provider 选槽 → Twilio+domestic 直接拒 → 凭据继承（只继承凭据字段）→ 必填校验 → 填 `Profile`。
 腾讯云 `TemplateParamSet` 是位置数组，`Profile.ParamName` 对腾讯云无意义，留空。
 
-- [ ] **步骤 4：运行测试验证通过**
+- [x] **步骤 4：运行测试验证通过**
 
 运行：`go test ./provider/sms/ -v`
 预期：任务 1 与本任务的测试全部 PASS。
 
-- [ ] **步骤 5：反向对照 —— 证明继承护栏抓得住错**
+- [x] **步骤 5：反向对照 —— 证明继承护栏抓得住错**
 
 临时把「只继承凭据」改成「整槽拷贝」，重跑 `TestResolveCredentialInheritance`，**必须变红**；恢复后重跑必须变绿。把这次对照的结论写进测试文件顶部注释（一行，说明改坏了会红）。
 
-- [ ] **步骤 6：Commit**
+- [x] **步骤 6：Commit**
 
 ```bash
 gofmt -w provider/sms/resolve.go provider/sms/resolve_test.go
@@ -248,12 +248,12 @@ git commit -m "feat(短信): 区域解析与国内→国际凭据继承，签名
 
 **Interfaces：** `sms.NewAliyunSender() Sender`；签名器 `sms.SignAliyun(req *http.Request, p Profile, now time.Time, nonce string) error`（时间与 nonce 可注入，便于对照）。
 
-- [ ] **步骤 1：在隔离模块里生成对照向量（规格 §11.1 九步）**
+- [x] **步骤 1：在隔离模块里生成对照向量（规格 §11.1 九步）**
 
 在 `tmp/smsvec/` 建独立 `go.mod`（**仓库 `go.mod`／`go.sum` 全程不动**），装阿里云官方 SDK。起 `httptest` 假服务器，用假 AK/SK 让 SDK 把 `SendSms` 打到假服务器上，抓下完整请求。
 **不强行注入时间／nonce** —— 从抓到的请求头里读出 SDK 实际用的 `x-acs-date` 与 `x-acs-signature-nonce`，连同 method／path／query／全部 header／body 一起写成 `provider/sms/testdata/aliyun_sign.json`。向量里凭据一律是假值。
 
-- [ ] **步骤 2：编写失败的测试**
+- [x] **步骤 2：编写失败的测试**
 
 `TestAliyunSignMatchesOfficialVector`：读 `testdata/aliyun_sign.json`，用其中的时间与 nonce 调 `SignAliyun`，**逐字节比对** `Authorization` 与 `x-acs-content-sha256`。
 反向对照子测试：① 把向量里 `Signature` 改一个字节 → 必须不等；② 把 canonical query 里的 `%20` 换成 `+` → 必须不等（阿里云 V3 用 `%20`，写成 `+` 是经典错法）。
@@ -268,22 +268,22 @@ git commit -m "feat(短信): 区域解析与国内→国际凭据继承，签名
 
 `TestAliyunSenderBothEndpoints`：`Profile.Endpoint` 分别取 `dysmsapi.aliyuncs.com` 与 `dysmsapi.ap-southeast-1.aliyuncs.com`，断言请求确实打到对应 host，且两次签名都通过各自的向量（向量文件里存两组）。
 
-- [ ] **步骤 3：运行测试验证失败**
+- [x] **步骤 3：运行测试验证失败**
 
 运行：`go test ./provider/sms/ -run 'TestAliyun' -v`
 预期：编译失败，`undefined: SignAliyun`。
 
-- [ ] **步骤 4：实现签名器与适配器**
+- [x] **步骤 4：实现签名器与适配器**
 
 `sign_aliyun.go`：ACS3-HMAC-SHA256。请求头 `x-acs-action: SendSms`、`x-acs-version: 2017-05-25`、`x-acs-date`（UTC ISO8601 `2006-01-02T15:04:05Z`）、`x-acs-signature-nonce`、`x-acs-content-sha256`；`Authorization: ACS3-HMAC-SHA256 Credential={AccessKeyId},SignedHeaders={...},Signature={...}`。canonical query 用 `%20` 不用 `+`。手写，**不引入依赖**；写法参考仓库既有的 `provider/storage/aws.go:89-171`。
 `aliyun.go`：`NewAliyunSender()`；`Send` 走 `p.Endpoint`（国内／国际由 `Resolve` 决定），超时 **10s，不重试**。成功判据 `Code == "OK"`。错误码映射按规格 §5.6，未列入的一律 `ClassTransient`。
 
-- [ ] **步骤 5：运行测试验证通过**
+- [x] **步骤 5：运行测试验证通过**
 
 运行：`go test ./provider/sms/ -run 'TestAliyun' -v`
 预期：全部 PASS，且**不联网**（向量已冻结，测试只读 testdata）。
 
-- [ ] **步骤 6：清理隔离模块并 Commit**
+- [x] **步骤 6：清理隔离模块并 Commit**
 
 ```bash
 rm -rf tmp/smsvec
@@ -304,11 +304,11 @@ git commit -m "feat(短信): 阿里云 ACS3-HMAC-SHA256 签名与适配器，附
 
 **Interfaces：** `sms.NewTencentSender() Sender`；`sms.SignTencent(req *http.Request, p Profile, payload []byte, now time.Time) error`。
 
-- [ ] **步骤 1：生成对照向量**
+- [x] **步骤 1：生成对照向量**
 
 同任务 3 步骤 1 的九步，隔离模块装腾讯云官方 SDK，action `SendSms`、version `2021-01-11`、endpoint `sms.tencentcloudapi.com`。从抓到的请求读出 SDK 实际用的 `X-TC-Timestamp`，冻结成 `testdata/tencent_sign.json`。凭据全假。
 
-- [ ] **步骤 2：编写失败的测试**
+- [x] **步骤 2：编写失败的测试**
 
 `TestTencentSignMatchesOfficialVector`：逐字节比对 `Authorization` 与 `X-TC-Timestamp`。反向对照：① 改 `Signature` 一字节必不等；② 把派生密钥的日期串从 `X-TC-Timestamp` 的 UTC 日期换成本地日期 → 必不等（TC3 的 credential scope 日期必须按 UTC 算，跨时区是经典错法）。
 
@@ -324,22 +324,22 @@ git commit -m "feat(短信): 阿里云 ACS3-HMAC-SHA256 签名与适配器，附
 
 `TestTencentSenderSignNameVariants`：国内 `SignName` 非空 → 请求体带该值；国际 `SignName` 为空 → 请求体**不带** `SignName` 键（腾讯云国际选填）。两种各存一组向量。
 
-- [ ] **步骤 3：运行测试验证失败**
+- [x] **步骤 3：运行测试验证失败**
 
 运行：`go test ./provider/sms/ -run 'TestTencent' -v`
 预期：编译失败，`undefined: SignTencent`。
 
-- [ ] **步骤 4：实现签名器与适配器**
+- [x] **步骤 4：实现签名器与适配器**
 
 `sign_tencent.go`：TC3-HMAC-SHA256，header `X-TC-Action`／`X-TC-Version`／`X-TC-Timestamp`／`X-TC-Region`（取 `p.CloudRegion`）；credential scope `{UTC日期}/sms/tc3_request`。手写，0 依赖。
 `tencent.go`：`NewTencentSender()`；超时 10s 不重试；成功判据 `Response.SendStatusSet[0].Code == "Ok"`，空数组视为失败。`SignName` 国内必填（是签名内容不是 ID）。错误码映射按规格 §5.6。
 
-- [ ] **步骤 5：运行测试验证通过**
+- [x] **步骤 5：运行测试验证通过**
 
 运行：`go test ./provider/sms/ -run 'TestTencent' -v`
 预期：全部 PASS，不联网。
 
-- [ ] **步骤 6：清理并 Commit**
+- [x] **步骤 6：清理并 Commit**
 
 ```bash
 rm -rf tmp/smsvec
@@ -359,7 +359,7 @@ git commit -m "feat(短信): 腾讯云 TC3-HMAC-SHA256 签名与适配器，附�
 
 **Interfaces：** `sms.NewTwilioSender() Sender`；`sms.NewSender(provider string) (Sender, error)`。
 
-- [ ] **步骤 1：编写失败的测试**
+- [x] **步骤 1：编写失败的测试**
 
 Twilio 无签名算法（HTTP Basic），**不需要 SDK 对照向量**；用 httptest 直接钉契约。
 
@@ -377,22 +377,22 @@ Twilio 无签名算法（HTTP Basic），**不需要 SDK 对照向量**；用 ht
 
 `TestTwilioSenderErrorCodeClassification`：表驱动覆盖规格 §5.6 Twilio 行的每一个码（`20003` 鉴权失败、`21211` To 非法、`21606` From 非法、`21610` 已退订、余额不足）→ `ClassPermanent`；未列入的码 → `ClassTransient` 且 `Code` 原样保留。
 
-- [ ] **步骤 2：运行测试验证失败**
+- [x] **步骤 2：运行测试验证失败**
 
 运行：`go test ./provider/sms/ -run 'TestTwilio|TestNewSender' -v`
 预期：编译失败，`undefined: NewTwilioSender`。
 
-- [ ] **步骤 3：实现 `twilio.go` 与 `factory.go`**
+- [x] **步骤 3：实现 `twilio.go` 与 `factory.go`**
 
 `twilio.go`：`POST https://api.twilio.com/2010-04-01/Accounts/{AccountSid}/Messages.json`，Basic Auth，表单编码。超时 10s 不重试。**不做 Content SID 映射**（规格 §3.2 已决定 YAGNI），`Body` 直接用 `req.Text`。
 `factory.go`：`NewSender` 按 `config.SmsProvider*` 常量分派，未知值返回 error。
 
-- [ ] **步骤 4：运行测试验证通过**
+- [x] **步骤 4：运行测试验证通过**
 
 运行：`go test ./provider/sms/ -v && go build ./... && go vet ./provider/sms/`
 预期：`provider/sms` 整包 PASS（该包无 DB 依赖，可整跑）。
 
-- [ ] **步骤 5：Commit**
+- [x] **步骤 5：Commit**
 
 ```bash
 gofmt -w provider/sms/twilio.go provider/sms/factory.go provider/sms/twilio_test.go provider/sms/factory_test.go
