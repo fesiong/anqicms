@@ -2,6 +2,7 @@ package sms
 
 import (
 	"fmt"
+	"net/url"
 
 	"kandaoni.com/anqicms/config"
 )
@@ -243,7 +244,7 @@ func resolveTwilio(cfg *config.PluginSmsConfig, region, scene string) (*Profile,
 	return &Profile{
 		Provider:            cfg.Provider,
 		Region:              region,
-		Endpoint:            fmt.Sprintf(twilioEndpointFormat, slot.AccountSid),
+		Endpoint:            fmt.Sprintf(twilioEndpointFormat, url.PathEscape(slot.AccountSid)), // 裁决 R41①：转义防路径注入，AccountSid 原值仍留给 Basic 用户名侧
 		AccountSid:          slot.AccountSid,
 		AuthToken:           slot.AuthToken,
 		ApiKeySid:           slot.ApiKeySid,
