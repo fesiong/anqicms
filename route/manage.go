@@ -361,6 +361,12 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 				sendmail.Post("/test", manageController.PluginSendmailTest)
 			}
 
+			sms := plugin.Party("/sms", middleware.AdminPermissionRequired)
+			{
+				sms.Get("/setting", manageController.PluginSmsSetting)
+				sms.Post("/setting", manageController.PluginSmsSettingForm)
+			}
+
 			importApi := plugin.Party("/import")
 			{
 				importApi.Get("/api", manageController.PluginImportApi)
