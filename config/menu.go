@@ -234,6 +234,12 @@ var DefaultMenuGroups = []*MenuGroup{
 				Backend:  "/plugin/sendmail",
 			},
 			{
+				Path:     "/plugin/channel/sms",
+				GroupKey: "plugin",
+				Name:     "短信服务",
+				Backend:  "/plugin/sms",
+			},
+			{
 				Path:     "/plugin/channel/subscription",
 				GroupKey: "plugin",
 				Name:     "邮件订阅",

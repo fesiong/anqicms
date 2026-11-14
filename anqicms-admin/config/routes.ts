@@ -556,6 +556,15 @@ export default [
             icon: 'sendmail',
           },
           {
+            // path 必须与后端 config/menu.go 的 Menu.Path 逐字一致，
+            // 它同时是管理员分组权限的 KEY。
+            path: '/plugin/channel/sms',
+            name: 'sms',
+            type: 'system',
+            component: '@/pages/plugin/sms/index',
+            icon: 'sendmail',
+          },
+          {
             path: '/plugin/channel/subscription',
             name: 'subscription',
             type: 'system',
