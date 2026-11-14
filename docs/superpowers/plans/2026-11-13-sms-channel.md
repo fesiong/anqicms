@@ -875,7 +875,7 @@ func PluginSmsLogs(ctx iris.Context) // GET  /plugin/sms/logs
 func (w *Website) GetSmsLogList(filter func(*gorm.DB) *gorm.DB, page, pageSize int) ([]*model.SmsLog, int64)
 ```
 
-- [ ] **步骤 1：编写失败的测试**
+- [x] **步骤 1：编写失败的测试**
 
 - `TestPluginSmsTestUsesLoginTemplate`：`test` 场景取该 region 下 **`login`** 场景的模板；`login` 模板为空时**明确报错**（`ErrSmsTemplateMissing`），不静默套用别的场景。
 - `TestPluginSmsTestBypassesSceneWhitelistOnly`：`Scenes` 为空 → `test` 仍可发（否则站长关掉全部场景就没法测试）；但号码日限与 IP 限额**仍然生效**（源码级断言走的是同一条 `SendSmsCode` 链路，不是旁路）。
@@ -883,12 +883,12 @@ func (w *Website) GetSmsLogList(filter func(*gorm.DB) *gorm.DB, page, pageSize i
 - `TestPluginSmsLogsNeverReturnsCode`：go/ast 断言返回结构里不含验证码字段；响应 JSON 序列化后不出现 `code_hash`（`json:"-"` 已在任务 6 钉住，这里做端到端复核）。
 - `TestPluginSmsOpsRequireAdminPermission`：go/ast 解析 `route/manage.go`，断言 `/plugin/sms` party 上挂了 `AdminPermissionRequired`（**不是** `AdminPermission`）。反向对照：合成换成 `AdminPermission` 的源码必须变红。
 
-- [ ] **步骤 2：运行测试验证失败**
+- [x] **步骤 2：运行测试验证失败**
 
 运行：`go test ./controller/manageController/ -run 'TestPluginSms' -v`
 预期：新增五条 FAIL。
 
-- [ ] **步骤 3：实现**
+- [x] **步骤 3：实现**
 
 `PluginSmsTest`：读 `{phone_country, phone}` → 归一化定 region → 取该 region 的 `login` 模板（空则报错）→ 调 `SendSmsCode`，`Scene` 传 `sms.SceneTest`，`Ip` 取 `ctx.RemoteAddr()`，`UserId` 传 `0`（管理员不是前台用户，`sms_logs.user_id` 只对前台发码有意义）→ 回发送结果与失败原因。
 **错误文案**：`manageController` 与 `controller` 是不同包，用不了任务 10 的 `respondSmsError`。本包直接 `currentSite.Tr(err.Error(), args...)`，`errors.As` 命中 `*sms.WaitError`／`*sms.AttemptsError` 时把数值作为可变参数传入，口径与前台一致。
@@ -896,12 +896,12 @@ func (w *Website) GetSmsLogList(filter func(*gorm.DB) *gorm.DB, page, pageSize i
 `GetSmsLogList` 放 `provider/smsService.go`，签名见 Interfaces，仿仓库既有 `GetXxxList` 范式。
 路由：`sms.Post("/test", ...)`、`sms.Get("/logs", ...)`，沿用任务 12 的 party 与权限中间件。
 
-- [ ] **步骤 4：运行测试验证通过 + 重生成清单**
+- [x] **步骤 4：运行测试验证通过 + 重生成清单**
 
 运行：`go test ./controller/manageController/ -run 'TestSms|TestPluginSms' -v && go build ./... && go run ./cmd/apicatalog && go run ./cmd/apicatalog -check`
 预期：全部 PASS。
 
-- [ ] **步骤 5：Commit**
+- [x] **步骤 5：Commit**
 
 ```bash
 gofmt -w controller/manageController/pluginSmsOps_test.go
