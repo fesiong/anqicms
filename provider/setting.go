@@ -21,6 +21,7 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/pkg/ai/eino"
+	"kandaoni.com/anqicms/provider/sms"
 	"kandaoni.com/anqicms/response"
 )
 
@@ -44,6 +45,7 @@ const (
 	GuestbookSettingKey      = "guestbook"
 	UploadFilesSettingKey    = "upload_file"
 	SendmailSettingKey       = "sendmail"
+	SmsSettingKey            = "sms"
 	ImportApiSettingKey      = "import_api"
 	StorageSettingKey        = "storage"
 	PaySettingKey            = "pay"
@@ -121,6 +123,7 @@ func (w *Website) InitSetting() {
 	w.LoadGuestbookSetting(settingMap[GuestbookSettingKey])
 	w.LoadUploadFilesSetting(settingMap[UploadFilesSettingKey])
 	w.LoadSendmailSetting(settingMap[SendmailSettingKey])
+	w.LoadSmsSetting(settingMap[SmsSettingKey])
 	w.LoadImportApiSetting(settingMap[ImportApiSettingKey])
 	w.LoadStorageSetting(settingMap[StorageSettingKey])
 	w.LoadWeappSetting(settingMap[WeappSettingKey])
@@ -445,6 +448,18 @@ func (w *Website) LoadSendmailSetting(value string) {
 	// if len(w.PluginSendmail.SendType) == 0 {
 	// 	w.PluginSendmail.SendType = []int{SendTypeGuestbook}
 	// }
+}
+
+// LoadSmsSetting 读取短信渠道配置，与 LoadSendmailSetting 同形：先建空对象再解 JSON。
+// 解完必须跑 sms.ApplyDefaults：8 个验证码参数与区域默认值要在运行期真被填上，
+// 不能只停在 config/sms.go 的字段注释里（任务 8 的发码流程直接吃这些值）。
+// 这里读的是库里真值，不做掩码——掩码与回写保护属后台读端点（规格 §3.4）。
+func (w *Website) LoadSmsSetting(value string) {
+	w.PluginSms = &config.PluginSmsConfig{}
+	if value != "" {
+		_ = json.Unmarshal([]byte(value), w.PluginSms)
+	}
+	sms.ApplyDefaults(w.PluginSms)
 }
 
 func (w *Website) LoadImportApiSetting(value string) {

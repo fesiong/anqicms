@@ -1768,7 +1768,7 @@ func (w *Website) BackupDesignData(packageName string) error {
 		_ = w.writeDataToZip("redirects", redirects, zw)
 	}
 	var settings []model.Setting
-	w.DB.Where("`key` NOT IN(?)", []string{SendmailSettingKey, ImportApiSettingKey, StorageSettingKey, PaySettingKey, WeappSettingKey, WechatSettingKey, AnqiSettingKey, CacheTypeKey, LastRunVersionKey, GoogleAuthSettingKey, AkismetSettingKey, TranslateSettingKey, AiGenerateSettingKey, HtmlCacheSettingKey, FulltextSettingKey, PushSettingKey}).Find(&settings)
+	w.DB.Where("`key` NOT IN(?)", []string{SendmailSettingKey, SmsSettingKey, ImportApiSettingKey, StorageSettingKey, PaySettingKey, WeappSettingKey, WechatSettingKey, AnqiSettingKey, CacheTypeKey, LastRunVersionKey, GoogleAuthSettingKey, AkismetSettingKey, TranslateSettingKey, AiGenerateSettingKey, HtmlCacheSettingKey, FulltextSettingKey, PushSettingKey}).Find(&settings)
 	if len(settings) > 0 {
 		_ = w.writeDataToZip("settings", settings, zw)
 	}

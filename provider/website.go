@@ -85,6 +85,7 @@ type Website struct {
 	PluginGuestbook    *config.PluginGuestbookConfig
 	PluginUploadFiles  []config.PluginUploadFile
 	PluginSendmail     *config.PluginSendmail
+	PluginSms          *config.PluginSmsConfig
 	PluginImportApi    *config.PluginImportApiConfig
 	PluginStorage      *config.PluginStorageConfig
 	PluginWeapp        *config.PluginWeappConfig
