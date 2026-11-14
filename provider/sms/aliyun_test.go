@@ -1,6 +1,7 @@
 package sms
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,11 +13,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 // 本文件锁死阿里云适配器的行为契约（规格 §5.2／§5.6／§10.1）：
@@ -221,6 +224,9 @@ func TestAliyunSenderBusinessFailure(t *testing.T) {
 // TestAliyunSenderNonJSONBody（审查重点 5）：网关插 HTML 错误页 / CDN 拦截时
 // HTTP 200 但 body 不是 JSON → 必须判失败，原始 body 片段（截断 200 字节）
 // 留进 Message，分类 transient，绝不返回 nil error。
+// Message 的唯一目的地是 sms_logs.err_msg（规格 §10.4「失败也留痕」），所以它
+// 必须是合法 UTF-8：按字节硬切 200 会切在汉字中间，utf8mb4 列拒收非法字节序列
+// 时整条发送流水写入失败，最需要留痕的场景反而什么线索都没留下。
 func TestAliyunSenderNonJSONBody(t *testing.T) {
 	cases := []struct {
 		name string
@@ -228,6 +234,7 @@ func TestAliyunSenderNonJSONBody(t *testing.T) {
 	}{
 		{"HTML错误页", "<html>502 Bad Gateway</html>"},
 		{"超长body截断200字节", strings.Repeat("x", 500)},
+		{"多字节中文拦截页", strings.Repeat("网关拦截", 100)},
 		{"JSON但缺Code", "{}"},
 	}
 	for _, c := range cases {
@@ -245,6 +252,13 @@ func TestAliyunSenderNonJSONBody(t *testing.T) {
 			if se.Class != ClassTransient {
 				t.Fatalf("应为 transient, got %s", se.Class)
 			}
+			// 落库前必须是合法 UTF-8（Message 与 Error() 两条路径都要查）。
+			if !utf8.ValidString(se.Message) {
+				t.Fatalf("Message 含非法 UTF-8 字节，写 sms_logs.err_msg 会整条失败: %q", se.Message)
+			}
+			if !utf8.ValidString(se.Error()) {
+				t.Fatalf("Error() 含非法 UTF-8 字节: %q", se.Error())
+			}
 			if c.name == "HTML错误页" && !strings.Contains(se.Message, "<html>502 Bad Gateway</html>") {
 				t.Fatalf("Message 未保留原始 body 片段: %q", se.Message)
 			}
@@ -255,6 +269,82 @@ func TestAliyunSenderNonJSONBody(t *testing.T) {
 				if strings.Contains(se.Message, strings.Repeat("x", 201)) {
 					t.Fatalf("Message 未截断到 200 字节: %q", se.Message)
 				}
+			}
+			if c.name == "多字节中文拦截页" {
+				// 1200 字节切到 200 → 落在第 67 个汉字中间，回退后应是 66 个完整汉字。
+				if !strings.Contains(se.Message, strings.Repeat("网关拦截", 16)) {
+					t.Fatalf("Message 未保留多字节现场: %q", se.Message)
+				}
+				if strings.Contains(se.Message, strings.Repeat("网关拦截", 17)) {
+					t.Fatalf("Message 未截断到 200 字节: %q", se.Message)
+				}
+				// 198 字节 = 16 组「网关拦截」+「网关」：必须正好回退到完整 rune
+				// 边界。多退（整段清空）或少退（留下半个「拦」）都会让这条红。
+				if !strings.HasSuffix(se.Message, "网关") {
+					t.Fatalf("Message 未回退到完整 rune 边界（应以「网关」结尾）: %q", se.Message)
+				}
+			}
+		})
+	}
+}
+
+// TestAliyunBodySnippetStaysValidUTF8 直接锁 aliyunBodySnippet 的三条契约：
+// ① 结果必须是合法 UTF-8（否则 utf8mb4 的 err_msg 列拒收，整条流水写不进去）；
+// ② 字节数只减不增，上限 200；③ 现场要留住——不能为了合法把整段清空。
+// 抓它的破坏：按字节硬切后直接 string(body)（切在汉字中间）；用 utf8.Valid 整段
+// 回退循环（body 中段有非法字节时会一路退到空串，现场全丢）。
+func TestAliyunBodySnippetStaysValidUTF8(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			// 200 mod 12 = 8：切在第 67 个汉字的第 3 字节上，必须回退到 198 字节。
+			name: "多字节切在rune中间",
+			body: strings.Repeat("网关拦截", 100),
+			want: strings.Repeat("网关拦截", 16) + "网关",
+		},
+		{
+			name: "四字节emoji正好落在边界",
+			body: strings.Repeat("🚀", 100),
+			want: strings.Repeat("🚀", 50),
+		},
+		{
+			name: "纯ASCII超长",
+			body: strings.Repeat("x", 500),
+			want: strings.Repeat("x", 200),
+		},
+		{
+			// 网关返回 GBK/Latin-1 拦截页：中段非法字节只丢非法部分，其余现场必须留住。
+			name: "中段非法字节不得清空现场",
+			body: "<html>" + strings.Repeat("\xff\xfe", 10) + "网关拦截</html>",
+			want: "<html>网关拦截</html>",
+		},
+		{
+			// 非法字节在开头：整段回退循环会退到空串，现场全丢。
+			name: "开头非法字节不得清空现场",
+			body: "\xff\xfe<html>网关</html>",
+			want: "<html>网关</html>",
+		},
+		{
+			name: "短body原样保留",
+			body: "<html>502 Bad Gateway</html>",
+			want: "<html>502 Bad Gateway</html>",
+		},
+		{name: "空body", body: "", want: ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := aliyunBodySnippet([]byte(c.body))
+			if !utf8.ValidString(got) {
+				t.Fatalf("片段含非法 UTF-8 字节: %q", got)
+			}
+			if len(got) > 200 {
+				t.Fatalf("片段未截断到 200 字节: %d", len(got))
+			}
+			if got != c.want {
+				t.Fatalf("片段不符\n got: %q (%d 字节)\nwant: %q (%d 字节)", got, len(got), c.want, len(c.want))
 			}
 		})
 	}
@@ -472,9 +562,30 @@ func TestAliyunSenderBothEndpoints(t *testing.T) {
 	}
 }
 
-// TestAliyunSenderTimeoutNoRetry 用生产默认 client 的超时行为验证：
-// 挂起请求 ~10s 后返回 transient 错误，且服务端只收到一次请求（按条计费，不自动重试）。
+// TestAliyunSenderFactoryTimeout 声明式锁死出厂超时＝规格 §10.4 强制的 10s。
+// 这是 R31 两条信号之一：不必真等 10s 才能证明出厂值（旧设计把生产 Timeout 抄进
+// 被测 client，elapsed≈10s 近乎同义反复）。抓它的破坏：把 aliyunSendTimeout 改小。
+func TestAliyunSenderFactoryTimeout(t *testing.T) {
+	sender, ok := NewAliyunSender().(*aliyunSender)
+	if !ok {
+		t.Fatalf("NewAliyunSender 未返回 *aliyunSender: %T", NewAliyunSender())
+	}
+	if sender.client == nil {
+		t.Fatal("出厂 client 为 nil")
+	}
+	if sender.client.Timeout != 10*time.Second {
+		t.Fatalf("出厂发送超时必须是 10s（规格 §10.4）, got %v", sender.client.Timeout)
+	}
+}
+
+// TestAliyunSenderTimeoutNoRetry 是 R31 的第二条信号：超时判 transient，且服务端
+// 只收到一次请求（短信按条计费，自动重试＝重复扣费）。用 200ms 超时的 client 跑
+// 同一个阻塞 handler，成本 ~0.2s 而不是 10s；不再断言 9–12s 墙钟窗口（负载机上会
+// 假红），只留一个宽松的上界当挂死护栏。
 func TestAliyunSenderTimeoutNoRetry(t *testing.T) {
+	if testing.Short() {
+		t.Skip("-short：跳过阻塞 handler 用例（出厂超时值由 TestAliyunSenderFactoryTimeout 锁）")
+	}
 	var hits atomic.Int32
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
@@ -482,13 +593,12 @@ func TestAliyunSenderTimeoutNoRetry(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	prod := NewAliyunSender().(*aliyunSender)
-	client := aliyunRedirectClient(srv)
-	client.Timeout = prod.client.Timeout // 保留生产超时，只改路由
+	client := srv.Client()
+	client.Timeout = 200 * time.Millisecond
 	sender := &aliyunSender{client: client}
 
 	start := time.Now()
-	_, err := sender.Send(context.Background(), aliyunTestProfile("dysmsapi.aliyuncs.com"), aliyunTestSendRequest())
+	_, err := sender.Send(context.Background(), aliyunTestProfile(aliyunTestEndpoint(srv)), aliyunTestSendRequest())
 	elapsed := time.Since(start)
 	if err == nil {
 		t.Fatal("超时必须返回错误")
@@ -500,12 +610,65 @@ func TestAliyunSenderTimeoutNoRetry(t *testing.T) {
 	if se.Class != ClassTransient {
 		t.Fatalf("超时应为 transient, got %s", se.Class)
 	}
-	if elapsed < 9*time.Second || elapsed > 12*time.Second {
-		t.Fatalf("发送超时应在 10s 左右, got %v", elapsed)
+	if elapsed > 5*time.Second {
+		t.Fatalf("200ms 超时不该拖到 %v：疑似挂死或重试", elapsed)
 	}
 	time.Sleep(200 * time.Millisecond)
 	if n := hits.Load(); n != 1 {
 		t.Fatalf("不得自动重试（按条计费）: 服务端收到 %d 次请求", n)
+	}
+}
+
+// TestAliyunSenderLimitsResponseBody（R33）：body 读取必须有上限。代码既然预设了
+// 「网关插 HTML／CDN 拦截」这种敌意 body，就不能 io.ReadAll 把整条响应收进内存——
+// 10s 超时内高速链路可灌进数百 MB。这里用 8 MiB（有限但远超 200 字节）验证：
+// ① 仍正确判失败并留下 ≤200 字节的合法 UTF-8 片段；② 进程累计分配增量远小于 body
+// 本身（证明只读了上限那一段，没把整条 body 收进内存）。
+// 抓它的破坏：去掉 io.LimitReader。
+func TestAliyunSenderLimitsResponseBody(t *testing.T) {
+	const bodySize = 8 << 20 // 8 MiB
+	chunk := bytes.Repeat([]byte("x"), 64<<10)
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		for written := 0; written < bodySize; written += len(chunk) {
+			if _, err := w.Write(chunk); err != nil {
+				return // 客户端读到上限就关连接，写失败是预期行为
+			}
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	sender := &aliyunSender{client: srv.Client()}
+	_, err := sender.Send(context.Background(), aliyunTestProfile(aliyunTestEndpoint(srv)), aliyunTestSendRequest())
+	runtime.ReadMemStats(&after)
+
+	if err == nil {
+		t.Fatal("超大非 JSON body 必须判失败")
+	}
+	var se *SendError
+	if !errors.As(err, &se) {
+		t.Fatalf("错误不是 *SendError: %v", err)
+	}
+	if se.Class != ClassTransient {
+		t.Fatalf("应为 transient, got %s", se.Class)
+	}
+	if !utf8.ValidString(se.Message) || !strings.Contains(se.Message, strings.Repeat("x", 200)) {
+		t.Fatalf("超大 body 仍要留下前 200 字节片段: %q", se.Message)
+	}
+	if strings.Contains(se.Message, strings.Repeat("x", 201)) {
+		t.Fatalf("片段未截断到 200 字节: %q", se.Message)
+	}
+	// 上限 64 KiB：ReadAll 的倍增缓冲 + TLS 握手开销远小于 4 MiB；
+	// 不设上限时 8 MiB body 会让累计分配涨到 ~16 MiB 以上。
+	const allocBudget = 4 << 20
+	delta := after.TotalAlloc - before.TotalAlloc
+	t.Logf("读 %d 字节响应体累计分配 %d 字节（预算 %d）", bodySize, delta, allocBudget)
+	if delta > allocBudget {
+		t.Fatalf("读响应体分配了 %d 字节（> %d）：body 读取没设上限", delta, allocBudget)
 	}
 }
 

@@ -22,6 +22,11 @@ import (
 // aliyunSendTimeout 发送超时 10s；不自动重试——短信按条计费，重试等于重复扣费。
 const aliyunSendTimeout = 10 * time.Second
 
+// aliyunMaxResponseBytes 响应体读取上限 64 KiB。本适配器明确预设了「网关插 HTML／
+// CDN 拦截」这种敌意 body，而 10s 超时内高速链路能灌进数百 MB：先 io.ReadAll 再
+// 截 200 字节等于把整条响应收进内存。片段只需要 200 字节，64 KiB 足够留现场。
+const aliyunMaxResponseBytes = 64 << 10
+
 // aliyunPermanentCodes 已知 permanent 错误码 → 中文提示（规格 §5.6）。
 // 码值核验自官方 API 错误码文档（2026-11-14）；InvalidAccessKeyId.NotFound／
 // Forbidden.AccessKeyDisabled 是 POP 网关级标准码。未列入的码一律 transient，
@@ -99,7 +104,7 @@ func (s *aliyunSender) Send(ctx context.Context, p Profile, req SendRequest) (Se
 		return SendResult{}, &SendError{Class: ClassTransient, Code: "NetworkError", Message: err.Error()}
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, aliyunMaxResponseBytes))
 	if err != nil {
 		return SendResult{}, &SendError{Class: ClassTransient, Code: "ReadResponse", Message: err.Error()}
 	}
@@ -158,10 +163,17 @@ func parseAliyunResponse(status int, body []byte) (SendResult, error) {
 }
 
 // aliyunBodySnippet 原始 body 截断到 200 字节，供日志保留现场。
+// 200 不是 UTF-8 rune 边界：国内网关／WAF／CDN 插进来的中文拦截页是 3 字节 rune，
+// 硬切会留下半个汉字。这条 Message 的唯一目的地是 sms_logs.err_msg（规格 §10.4
+// 「失败也留痕」），utf8mb4 列拒收非法字节序列时整条发送流水写入失败——最需要
+// 留痕的「HTTP 200 非 JSON」反而什么线索都没留下。所以切完必须回到合法边界。
+// 用 ToValidUTF8 而不是「整段 utf8.Valid 就退一字节」的循环：后者会在第一个非法
+// 字节处停住，把其后的现场全部丢掉（非法字节在开头时更是整段清空）；ToValidUTF8
+// 只丢弃非法字节（含被切开的半个 rune），其余现场原样保留，且字节数只减不增。
 func aliyunBodySnippet(body []byte) string {
 	const max = 200
 	if len(body) > max {
 		body = body[:max]
 	}
-	return string(body)
+	return strings.ToValidUTF8(string(body), "")
 }

@@ -5,6 +5,7 @@
     "github.com/alibabacloud-go/darabonba-openapi/v2 v2.2.2"
   ],
   "capturedAt": "2026-11-14",
+  "canonicalNote": "R35：canonicalRequest/stringToSign/canonicalUri/canonicalQuery/canonicalHeaders/signedHeaders/payloadHash 由官方 SDK darabonba-openapi/v2@v2.2.2 utils.GetAuthorization 的逐字副本对同一组冻结输入构造，并与上游导出函数及 SDK 实抓 Authorization 三方交叉验证一致。假凭据，不含真实 AK/SK。",
   "vectors": [
     {
       "name": "domestic",
@@ -34,7 +35,14 @@
         "x-acs-version": "2017-05-25"
       },
       "body": "",
-      "authorization": "ACS3-HMAC-SHA256 Credential=LTAI5tFakeVectorAK00000,SignedHeaders=host;x-acs-action;x-acs-content-sha256;x-acs-date;x-acs-signature-nonce;x-acs-version,Signature=25c97692f64273d4f92da75f3b5bf5eab8bce5b922811d6d5576e9c896b3939f"
+      "authorization": "ACS3-HMAC-SHA256 Credential=LTAI5tFakeVectorAK00000,SignedHeaders=host;x-acs-action;x-acs-content-sha256;x-acs-date;x-acs-signature-nonce;x-acs-version,Signature=25c97692f64273d4f92da75f3b5bf5eab8bce5b922811d6d5576e9c896b3939f",
+      "canonicalRequest": "POST\n/\nOutId=9001\u0026PhoneNumbers=8613900001111\u0026SignName=%E5%AE%89%E4%BC%81%E6%B5%8B%E8%AF%95\u0026TemplateCode=SMS_2026111400001\u0026TemplateParam=%7B%22code%22%3A%22123456%22%7D\nhost:dysmsapi.aliyuncs.com\nx-acs-action:SendSms\nx-acs-content-sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\nx-acs-date:2026-11-14T00:48:30Z\nx-acs-signature-nonce:597463d8225629069e27c01fcce94083\nx-acs-version:2017-05-25\n\nhost;x-acs-action;x-acs-content-sha256;x-acs-date;x-acs-signature-nonce;x-acs-version\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stringToSign": "ACS3-HMAC-SHA256\nafd6cb86b0872effff333fdbb4d10dc3d6896005ebfb9562b7dae848a62bdac5",
+      "canonicalUri": "/",
+      "canonicalQuery": "OutId=9001\u0026PhoneNumbers=8613900001111\u0026SignName=%E5%AE%89%E4%BC%81%E6%B5%8B%E8%AF%95\u0026TemplateCode=SMS_2026111400001\u0026TemplateParam=%7B%22code%22%3A%22123456%22%7D",
+      "canonicalHeaders": "host:dysmsapi.aliyuncs.com\nx-acs-action:SendSms\nx-acs-content-sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\nx-acs-date:2026-11-14T00:48:30Z\nx-acs-signature-nonce:597463d8225629069e27c01fcce94083\nx-acs-version:2017-05-25\n",
+      "signedHeaders": "host;x-acs-action;x-acs-content-sha256;x-acs-date;x-acs-signature-nonce;x-acs-version",
+      "payloadHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
       "name": "international",
@@ -64,7 +72,14 @@
         "x-acs-version": "2017-05-25"
       },
       "body": "",
-      "authorization": "ACS3-HMAC-SHA256 Credential=LTAI5tFakeVectorAK00000,SignedHeaders=host;x-acs-action;x-acs-content-sha256;x-acs-date;x-acs-signature-nonce;x-acs-version,Signature=e3b370c9646f4fd0aad5b90b50dc1e3335c4ae6c3552e9c64cb212a850af90b7"
+      "authorization": "ACS3-HMAC-SHA256 Credential=LTAI5tFakeVectorAK00000,SignedHeaders=host;x-acs-action;x-acs-content-sha256;x-acs-date;x-acs-signature-nonce;x-acs-version,Signature=e3b370c9646f4fd0aad5b90b50dc1e3335c4ae6c3552e9c64cb212a850af90b7",
+      "canonicalRequest": "POST\n/\nOutId=9002\u0026PhoneNumbers=85200001234\u0026SignName=AnQi%20Test\u0026TemplateCode=SMS_2026111400002\u0026TemplateParam=%7B%22verifyCode%22%3A%22654321%22%7D\nhost:dysmsapi.ap-southeast-1.aliyuncs.com\nx-acs-action:SendSms\nx-acs-content-sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\nx-acs-date:2026-11-14T00:48:30Z\nx-acs-signature-nonce:6c02458ed9a4080eb5c8f65c89a9b277\nx-acs-version:2017-05-25\n\nhost;x-acs-action;x-acs-content-sha256;x-acs-date;x-acs-signature-nonce;x-acs-version\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stringToSign": "ACS3-HMAC-SHA256\n653922ec3003cbf5cbab5595870f5dbba60f6fd4dad38c7a97cad58f67bf7e02",
+      "canonicalUri": "/",
+      "canonicalQuery": "OutId=9002\u0026PhoneNumbers=85200001234\u0026SignName=AnQi%20Test\u0026TemplateCode=SMS_2026111400002\u0026TemplateParam=%7B%22verifyCode%22%3A%22654321%22%7D",
+      "canonicalHeaders": "host:dysmsapi.ap-southeast-1.aliyuncs.com\nx-acs-action:SendSms\nx-acs-content-sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\nx-acs-date:2026-11-14T00:48:30Z\nx-acs-signature-nonce:6c02458ed9a4080eb5c8f65c89a9b277\nx-acs-version:2017-05-25\n",
+      "signedHeaders": "host;x-acs-action;x-acs-content-sha256;x-acs-date;x-acs-signature-nonce;x-acs-version",
+      "payloadHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     }
   ]
 }
