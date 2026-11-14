@@ -239,6 +239,9 @@ func AutoMigrateDB(db *gorm.DB, force bool) error {
 			&model.NotificationTemplate{},
 			&model.NotificationEvent{},
 			&model.NotificationDelivery{},
+			// 短信验证码状态机与发送流水
+			&model.SmsCode{},
+			&model.SmsLog{},
 		}
 		//自动迁移数据库
 		err := db.Set("gorm:table_options", "DEFAULT CHARSET=utf8mb4").AutoMigrate(models...)
