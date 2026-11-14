@@ -21,25 +21,26 @@ import (
 //   - Password：空串的语义是「不改密码」，绝不能解释成「把密码清空」。
 //   - Extra：map，nil 已能表达「未传」。
 type UserRequest struct {
-	Id         uint    `json:"id"`              // 用户 ID
-	UserName   string  `json:"user_name"`       // 用户名
-	RealName   *string `json:"real_name"`       // 真实姓名
-	FirstName  *string `json:"first_name"`      // First Name
-	LastName   *string `json:"last_name"`       // Last Name
-	Birthday   *int64  `json:"birthday"`        // 生日（时间戳）
-	AvatarURL  *string `json:"avatar_url"`      // 用户头像地址
-	Introduce  *string `json:"introduce"`       // 用户简介
-	Phone      *string `json:"phone"`           // 手机号
-	Email      *string `json:"email"`           // 邮箱
-	GroupId    *uint   `json:"group_id"`        // 用户组 ID
-	Status     *int    `json:"status"`          // 用户状态：0=待审核，1=正常，-1=禁用
-	Balance    *int64  `json:"balance" ast:"-"` // 余额不在这里写，走 PluginUserChangeBalance，保留字段仅为兼容旧请求体
-	IsRetailer *int    `json:"is_retailer"`     // 是否是分销员
-	ParentId   *uint   `json:"parent_id"`       // 上级用户 ID
-	Password   string  `json:"password"`        // 用户密码，需更新密码时传递
-	InviteCode *string `json:"invite_code"`     // 邀请码
-	ExpireTime *int64  `json:"expire_time"`     // 用户组过期时间（一般用于VIP过期）
-	UpdateAll  bool    `json:"update_all" ast:"-"`
+	Id           uint    `json:"id"`              // 用户 ID
+	UserName     string  `json:"user_name"`       // 用户名
+	RealName     *string `json:"real_name"`       // 真实姓名
+	FirstName    *string `json:"first_name"`      // First Name
+	LastName     *string `json:"last_name"`       // Last Name
+	Birthday     *int64  `json:"birthday"`        // 生日（时间戳）
+	AvatarURL    *string `json:"avatar_url"`      // 用户头像地址
+	Introduce    *string `json:"introduce"`       // 用户简介
+	Phone        *string `json:"phone"`           // 手机号
+	PhoneCountry *string `json:"phone_country"`   // 手机区号，未传不改（否则编辑资料会静默重置成 86）
+	Email        *string `json:"email"`           // 邮箱
+	GroupId      *uint   `json:"group_id"`        // 用户组 ID
+	Status       *int    `json:"status"`          // 用户状态：0=待审核，1=正常，-1=禁用
+	Balance      *int64  `json:"balance" ast:"-"` // 余额不在这里写，走 PluginUserChangeBalance，保留字段仅为兼容旧请求体
+	IsRetailer   *int    `json:"is_retailer"`     // 是否是分销员
+	ParentId     *uint   `json:"parent_id"`       // 上级用户 ID
+	Password     string  `json:"password"`        // 用户密码，需更新密码时传递
+	InviteCode   *string `json:"invite_code"`     // 邀请码
+	ExpireTime   *int64  `json:"expire_time"`     // 用户组过期时间（一般用于VIP过期）
+	UpdateAll    bool    `json:"update_all" ast:"-"`
 	// Partial 走 PATCH 语义：只覆盖显式传入的字段，未传的一律保持原值。
 	// 与 UpdateAll 互为反向开关，且优先——控制器用 req.UpdateAll = !req.Partial 归一。
 	Partial bool `json:"partial" ast:"-"`

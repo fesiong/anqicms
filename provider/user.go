@@ -92,9 +92,43 @@ func (w *Website) GetUserInfoByEmail(email string) (*model.User, error) {
 	})
 }
 
-func (w *Website) GetUserInfoByPhone(phone string) (*model.User, error) {
+// GetUserInfoByPhoneCountry 按 (区号, 手机号) 查用户（规格 §6.6）。
+// country == "" 按默认区号 86 处理，兼容未带区号的旧调用与存量数据。
+func (w *Website) GetUserInfoByPhoneCountry(country, phone string) (*model.User, error) {
+	if country == "" {
+		country = "86"
+	}
 	return w.GetUserByFunc(func(tx *gorm.DB) *gorm.DB {
-		return tx.Where("`phone` = ?", phone)
+		return tx.Where("`phone_country` = ? AND `phone` = ?", country, phone)
+	})
+}
+
+// createUserWithPhoneGuard 把「查重 + 插入用户」收进同一事务，堵住并发双写（规格 §4.4）。
+//
+// 依赖 REPEATABLE READ：RR 下 InnoDB 对非唯一二级索引 idx_users_phone 的
+// FOR UPDATE 取 next-key / gap lock，即使没命中行也锁住间隙，能挡住并发插同号。
+// 若生产库是 READ COMMITTED，这个保证不成立（无间隙锁，两个事务都查不到、都插入），
+// 上线前必须核对生产库隔离级别；若是 RC 需另行决策，不得默认已解决。
+//
+// 三条不可改的约束：
+//  1. WHERE 只用 phone 单列——写成双列会用不上 idx_users_phone、退化成锁全表；区号在应用层比对。
+//  2. phone == "" 跳过查重——66 行空串若参与 FOR UPDATE 会锁住一大片间隙，把无关注册串行化。
+//  3. 仅此函数内持锁；extra 字段、ProcessNewUser、发验证邮件一律留在事务外，不能把 SMTP 圈进事务。
+func (w *Website) createUserWithPhoneGuard(user *model.User) error {
+	return w.DB.Transaction(func(tx *gorm.DB) error {
+		if user.Phone != "" {
+			var existing []model.User
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+				Where("phone = ?", user.Phone).Find(&existing).Error; err != nil {
+				return err
+			}
+			for _, u := range existing {
+				if u.PhoneCountry == user.PhoneCountry {
+					return errors.New(w.Tr("TheMobilePhoneNumberHasBeenRegistered"))
+				}
+			}
+		}
+		return tx.Save(user).Error
 	})
 }
 
@@ -573,10 +607,7 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 		if !w.VerifyCellphoneFormat(req.Phone) {
 			return nil, errors.New(w.Tr("IncorrectMobilePhoneNumber"))
 		}
-		_, err := w.GetUserInfoByPhone(req.Phone)
-		if err == nil {
-			return nil, errors.New(w.Tr("TheMobilePhoneNumberHasBeenRegistered"))
-		}
+		// 手机号查重不再在这里裸读：收进 createUserWithPhoneGuard 的事务内（规格 §4.4）。
 	}
 	if req.Email != "" {
 		if !w.VerifyEmailFormat(req.Email) {
@@ -613,7 +644,9 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 	user.AvatarURL = strings.TrimPrefix(user.AvatarURL, w.PluginStorage.StorageUrl)
 	req.Password = strings.TrimSpace(req.Password)
 	user.EncryptPassword(req.Password)
-	w.DB.Save(&user)
+	if err := w.createUserWithPhoneGuard(&user); err != nil {
+		return nil, err
+	}
 
 	//extra
 	extraFields := map[string]interface{}{}
@@ -1040,17 +1073,25 @@ func (w *Website) UpdateUserInfo(userId uint, req *request.UserRequest) error {
 	// if user.Email != "" {
 	// 	req.Email = ""
 	// }
+	// 查重用的区号：请求显式传了用新值，未传则沿用用户现值（规格 §6.6 / 指针 PATCH 语义）。
+	phoneCountry := user.PhoneCountry
+	if req.PhoneCountry != nil {
+		phoneCountry = *req.PhoneCountry
+	}
 	if req.Phone != nil {
 		// if !w.VerifyCellphoneFormat(*req.Phone) {
 		// 	return errors.New(w.Tr("IncorrectMobilePhoneNumber"))
 		// }
 		if *req.Phone != "" {
-			exist, err := w.GetUserInfoByPhone(*req.Phone)
+			exist, err := w.GetUserInfoByPhoneCountry(phoneCountry, *req.Phone)
 			if err == nil && exist.Id != user.Id {
 				return errors.New(w.Tr("TheMobilePhoneNumberHasBeenRegistered"))
 			}
 		}
 		user.Phone = *req.Phone
+	}
+	if req.PhoneCountry != nil {
+		user.PhoneCountry = *req.PhoneCountry
 	}
 	if req.Email != nil {
 		if *req.Email != "" {

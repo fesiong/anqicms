@@ -32,6 +32,7 @@ type User struct {
 	Email         string `json:"email" gorm:"column:email;type:varchar(100) not null;default:'';index:idx_email"`
 	EmailVerified bool   `json:"email_verified" gorm:"column:email_verified;type:tinyint(1) not null;default:0"`
 	Phone         string `json:"phone" gorm:"column:phone;type:varchar(20) not null;default:'';index"`
+	PhoneCountry  string `json:"phone_country" gorm:"column:phone_country;type:varchar(8);not null;default:'86'"`
 	GroupId       uint   `json:"group_id" gorm:"column:group_id;type:int(10) unsigned not null;default:0"`
 	GoogleId      string `json:"google_id" gorm:"column:google_id;type:varchar(255) not null;default:''"`
 	Password      string `json:"-" gorm:"column:password;type:varchar(255) not null;default:''"`

@@ -1344,7 +1344,7 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 				}
 			}
 			if user.Phone != "" {
-				existUser, err := w.GetUserInfoByPhone(user.Phone)
+				existUser, err := w.GetUserInfoByPhoneCountry(user.PhoneCountry, user.Phone)
 				if err == nil {
 					user = existUser
 				}
