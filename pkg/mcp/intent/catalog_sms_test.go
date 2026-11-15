@@ -227,8 +227,11 @@ func TestSmsIntentParamsMatchEndpoints(t *testing.T) {
 
 // TestSmsSecretFieldNamesCovered 锁住短信配置里的凭据字段全部被出口掩码。
 //
-// 反向对照的价值在这一行：把 _token 加宽成后缀会让 token_expire/token_type
-// 变成 ********，调用方会误判「配置没填」——所以 token_expire 必须为 false。
+// 反向对照的价值在这一行：把 `_token` 加宽成后缀会误掩 url_token/link_token
+// 这类**非凭据**的 URL 别名（request/api.go、config/plugin.go），读回再写回
+// 会把 ******** 写进配置、直接毁链接——所以它们必须为 false。
+// 注意：token_expire/token_type 以 _expire/_type 结尾，_token 后缀根本命中不了，
+// 拿它们当反向对照是恒绿的（2026-11-15 实测纠正）。
 func TestSmsSecretFieldNamesCovered(t *testing.T) {
 	secret := []string{
 		"auth_token",     // Twilio 账号令牌
@@ -243,6 +246,8 @@ func TestSmsSecretFieldNamesCovered(t *testing.T) {
 	notSecret := []string{
 		"token_expire", "token_type", "sign_name", "templates", "texts",
 		"from", "messaging_service_sid", "sms_sdk_app_id", "provider",
+		// 非凭据的 URL 别名：_token 后缀真正的受害面（见本测试注释）。
+		"url_token", "link_token",
 	}
 	for _, name := range secret {
 		if !IsSecretField(name) {

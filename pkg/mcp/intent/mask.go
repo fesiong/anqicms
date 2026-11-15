@@ -61,7 +61,9 @@ func IsSecretField(name string) bool {
 		return true
 	}
 	// 资源前缀形式：mysql_password / smtp_password / auth_secret …；twilio_auth_token 同理。
-	// 刻意不加宽泛的 _token：token_expire / token_type 是普通字段，掩码会让调用方误判配置状态。
+	// 刻意不加宽泛的 _token：真正的受害者是 url_token / link_token 这类**非凭据**的
+	// URL 别名（request/api.go、config/plugin.go），掩码后写回会直接毁链接。
+	// 注意 token_expire / token_type 以 _expire / _type 结尾，_token 后缀命中不了。
 	return strings.HasSuffix(n, "_password") || strings.HasSuffix(n, "_secret") ||
 		strings.HasSuffix(n, "_access_key") || strings.HasSuffix(n, "_api_key") ||
 		strings.HasSuffix(n, "_auth_token")
