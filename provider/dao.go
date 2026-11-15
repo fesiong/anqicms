@@ -329,6 +329,11 @@ func (w *Website) InitModelData() {
 	// sms_logs.template_id 历史列宽只有 varchar(64)，而 Twilio 的该槽承载整段
 	// 未渲染文案（英文文案普遍 > 64 字符），老库必须幂等加宽（R138）。
 	_ = w.ensureSmsLogTemplateColumn()
+	// 旧站升级不会建出 sms_codes / sms_logs / users.phone_country：
+	// AutoMigrateDB 只在 last_run_version != config.Version 时跑，跑过 3.8.4 的
+	// 站点不会再迁移。缺表发码报 1146、缺列注册报 1054，且会被错误出口归约成
+	// 「短信发送失败」而看不出根因。这里每次初始化都幂等补一次。
+	_ = w.ensureSmsSchema()
 	// 商品属性拆表（3.7.1 回填 + 3.8.0 删列），顺序与失败闸门见 initArchiveSchema。
 	w.initArchiveSchema()
 	// 检查默认模型，如果没有，则添加, 默认的模型：1 文章，2 产品
@@ -432,6 +437,52 @@ func (w *Website) InitModelData() {
 			w.UpgradeMultiCategory()
 		}()
 	}
+}
+
+// ensureSmsSchema 幂等补齐短信相关的表与列，不依赖 config.Version。
+//
+// 为什么不能只靠 AutoMigrateDB：它只在 last_run_version != config.Version 时执行。
+// 已经跑过 3.8.4 的站点升级后不会重新迁移，于是：
+//   - sms_codes / sms_logs 不存在 → 发码报 1146；
+//   - users.phone_country 不存在 → 注册/查号报 1054；
+//
+// 两者都会被前台错误出口归约成「短信发送失败」，根因完全不可见。
+//
+// 每一步失败都只记日志并继续（不能让建表失败把后续加列也跳过），最后返回聚合
+// 错误；调用方 InitModelData 与其它 ensure* 一致，选择记日志后继续启动。
+func (w *Website) ensureSmsSchema() error {
+	if w.DB == nil {
+		return nil
+	}
+	var errs []error
+
+	needMigrate := !w.DB.Migrator().HasTable(&model.SmsCode{}) ||
+		!w.DB.Migrator().HasTable(&model.SmsLog{})
+	if needMigrate {
+		if err := w.DB.Set("gorm:table_options", "DEFAULT CHARSET=utf8mb4").
+			AutoMigrate(&model.SmsCode{}, &model.SmsLog{}); err != nil {
+			log.Println("创建短信表 sms_codes / sms_logs 失败：", err)
+			errs = append(errs, err)
+		}
+	}
+
+	// 默认值必须是空串：回填 86 是独立的一次数据迁移，不在本幂等补列里做，
+	// 否则会把「未绑定手机号」的存量用户误标成 86 号码持有者。
+	if w.DB.Migrator().HasTable(&model.User{}) &&
+		!w.DB.Migrator().HasColumn(&model.User{}, "phone_country") {
+		if err := w.DB.Exec("ALTER TABLE `users` ADD COLUMN `phone_country` varchar(10) NOT NULL DEFAULT ''").Error; err != nil {
+			log.Println("添加 users.phone_country 列失败：", err)
+			errs = append(errs, err)
+		}
+	}
+
+	// 表/列建好后仍按 information_schema 复核一次（尤其 sms_logs.template_id
+	// 必须 ≥ 500，Twilio 模板正文会超过历史 varchar(64)）。该函数内部已记日志。
+	if err := w.ensureSmsLogTemplateColumn(); err != nil {
+		errs = append(errs, err)
+	}
+
+	return errors.Join(errs...)
 }
 
 // ensureSmsLogTemplateColumn 把 sms_logs.template_id 从历史 varchar(64) 幂等加宽到

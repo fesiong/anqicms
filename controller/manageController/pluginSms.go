@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log"
 	"strconv"
-	"strings"
 
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
@@ -240,12 +239,10 @@ func respondSmsOpsError(ctx iris.Context, currentSite *provider.Website, err err
 	case errors.Is(err, sms.ErrSmsSendFailed):
 		msg = translate(sms.ErrSmsSendFailed.Error())
 	default:
-		raw := err.Error()
-		translated := raw
-		if !strings.Contains(raw, "%") {
-			translated = translate(raw)
-		}
-		if translated != raw {
+		// 判据与前台统一收敛到 provider.SmsBusinessMessage（内部固定 TplTr）。
+		// 不能再用 currentSite.Tr：Tr = Brandize(tr(x))，OEM 构建下含官方品牌名/
+		// 域名的普通错误文本会被改写，从而被误判成语言键、把原文送出门。
+		if translated, ok := provider.SmsBusinessMessage(currentSite, err); ok {
 			msg = translated
 		} else {
 			// R146②：原始错误只进服务端日志（只记错误对象，不记请求体），对外归约（§10.4）。
@@ -269,6 +266,9 @@ func PluginSmsTest(ctx iris.Context) {
 	if err := ctx.ReadJSON(&req); err != nil {
 		// R146③：请求体不合法，语义是「参数错误」而不是「发送失败」，
 		// 故不经 ops 归约，直接回 SmsParamInvalid（同样不回显解析器文本）。
+		// 服务端必须留一行日志，否则线上只能看到「参数格式不正确」而没有任何线索；
+		// 只记 error 对象，绝不记请求体（可能含手机号）。
+		log.Println("后台短信测试发送失败：", err)
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  currentSite.Tr("SmsParamInvalid"),
@@ -298,7 +298,7 @@ func PluginSmsTest(ctx iris.Context) {
 		PhoneCountry: req.PhoneCountry,
 		Phone:        req.Phone,
 		Scene:        sms.SceneTest,
-		Ip:           ctx.RemoteAddr(),
+		Ip:           provider.SmsClientIP(ctx),
 		UserId:       0,
 	})
 	if err != nil {

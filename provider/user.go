@@ -131,7 +131,10 @@ func (w *Website) createUserWithPhoneGuard(user *model.User) error {
 	// 同号可无限重复注册。
 	// 规范化发生在比对之前并写回 user，保证 tx.Save 落库的区号与比对所用一致。
 	user.PhoneCountry = normalizePhoneCountry(user.PhoneCountry)
-	return w.DB.Transaction(func(tx *gorm.DB) error {
+	// 与发码事务同源：并发注册同一号码时，FOR UPDATE 的 next-key lock 与插入
+	// 也可能互等出 1213。业务错误（查重命中）不是 *mysql.MySQLError，重试助手
+	// 会立即原样返回，不会被重试包成通用错误。
+	return smsRunTxWithRetry(w.DB, "createUserWithPhoneGuard", func(tx *gorm.DB) error {
 		if user.Phone != "" {
 			var existing []model.User
 			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
@@ -1097,24 +1100,29 @@ func (w *Website) UpdateUserInfo(userId uint, req *request.UserRequest) error {
 	// if user.Email != "" {
 	// 	req.Email = ""
 	// }
-	// 查重用的区号：请求显式传了用新值，未传则沿用用户现值（规格 §6.6 / 指针 PATCH 语义）。
-	phoneCountry := user.PhoneCountry
-	if req.PhoneCountry != nil {
-		phoneCountry = *req.PhoneCountry
-	}
+	// 手机号在本分支已升级为登录身份（短信登录按 (phone_country, phone) 查用户），
+	// 因此「编辑资料」不允许直接改号：登录用户若能把手机号改成别人尚未注册的号码，
+	// 该号码的真实主人日后走短信登录时，验证码发到他自己手机上，却会登进攻击者的
+	// 账号；同时这个号码的注册也被攻击者永久占用。换绑必须走短信绑定流程
+	// （校验旧号 + 新号双验证码），不能靠这里直写。
+	//
+	// 允许两种无安全影响的写法：原样回传（值未变，前端编辑资料会带上）与传空串
+	// 主动解绑。传空串之后区号可以顺带更新（此时已无手机身份）。
+	//
+	// 语言键：locales 里没有「请通过手机号绑定流程更换」的既有键，本批又不改
+	// locales（新增键需同步 9 个语言包，另批处理），故语义借用 SaveFailed。
 	if req.Phone != nil {
-		// if !w.VerifyCellphoneFormat(*req.Phone) {
-		// 	return errors.New(w.Tr("IncorrectMobilePhoneNumber"))
-		// }
-		if *req.Phone != "" {
-			exist, err := w.GetUserInfoByPhoneCountry(phoneCountry, *req.Phone)
-			if err == nil && exist.Id != user.Id {
-				return errors.New(w.Tr("TheMobilePhoneNumberHasBeenRegistered"))
-			}
+		newPhone := *req.Phone
+		if newPhone != "" && newPhone != user.Phone {
+			return errors.New(w.Tr("SaveFailed"))
 		}
-		user.Phone = *req.Phone
+		user.Phone = newPhone
 	}
 	if req.PhoneCountry != nil {
+		// 空区号与 86 视为同值（兼容未回填的旧数据），避免编辑资料原样回传被误拒。
+		if user.Phone != "" && normalizePhoneCountry(*req.PhoneCountry) != normalizePhoneCountry(user.PhoneCountry) {
+			return errors.New(w.Tr("SaveFailed"))
+		}
 		user.PhoneCountry = *req.PhoneCountry
 	}
 	if req.Email != nil {
@@ -1153,7 +1161,9 @@ func (w *Website) UpdateUserInfo(userId uint, req *request.UserRequest) error {
 		user.GroupId = w.PluginUser.DefaultGroupId
 	}
 
-	w.DB.Save(user)
+	if err := w.DB.Save(user).Error; err != nil {
+		return err
+	}
 
 	return nil
 }

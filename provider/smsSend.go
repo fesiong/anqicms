@@ -122,7 +122,14 @@ func (w *Website) sendSmsCodeWithSender(in SmsSendInput, sender sms.Sender) (*Sm
 	var codeId, logId uint
 
 	// 第 7 步：DB 事务（不做任何网络 IO）。a→f 顺序不可换。
-	err = w.DB.Transaction(func(tx *gorm.DB) error {
+	// 事务整体走 smsRunTxWithRetry：范围 Delete + 并发 Create 在空/冷表上会互相
+	// 持有 gap 锁与插入意向锁，实测 8 路不同号码并发时 7 路报 1213。
+	// 重试必须整段重跑（含重新生成验证码），因此 plainCode/codeId/logId 在每次
+	// 尝试开始时清零，绝不复用上一轮的事务内产物。
+	err = smsRunTxWithRetry(w.DB, smsPhoneLogTag(phone.Country, phone.Local), func(tx *gorm.DB) error {
+		plainCode = ""
+		codeId, logId = 0, 0
+
 		// a. sms_logs 当日同号码计数（跨场景合计，不带 scene 条件）。
 		var todayCount int64
 		if e := tx.Model(&model.SmsLog{}).

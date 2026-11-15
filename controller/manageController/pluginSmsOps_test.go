@@ -89,7 +89,7 @@ func s13CheckTestUsesSendSmsCode(src string) error {
 	if err := s13Require(src,
 		`currentSite\.SendSmsCode\(`,
 		`Scene:\s*sms\.SceneTest`,
-		`Ip:\s*ctx\.RemoteAddr\(\)`,
+		`Ip:\s*provider\.SmsClientIP\(ctx\)`,
 		`UserId:\s*0`,
 	); err != nil {
 		return err
@@ -102,7 +102,7 @@ func s13CheckTestUsesSendSmsCode(src string) error {
 
 // s13CheckErrorDispatch：R114 错误文案精确分派。平台 *SendError 归约到通用键
 // （不回显原始码/消息）；仅 *WaitError 传 Seconds、*AttemptsError 传 Remaining；
-// 其余错误一律不传参。统一 currentSite.Tr(err.Error(), args...)（方法值 translate）。
+// 其余错误交给统一判据 provider.SmsBusinessMessage（内部 TplTr + 字典即白名单）。
 func s13CheckErrorDispatch(src string) error {
 	if err := s13Require(src,
 		`errors\.Is\(err,\s*sms\.ErrSmsSendFailed\)`, // 平台原始码归约
@@ -110,13 +110,10 @@ func s13CheckErrorDispatch(src string) error {
 		`errors\.As\(err,\s*&attempts\)`,
 		`err\.Error\(\),\s*wait\.Seconds\)`,
 		`err\.Error\(\),\s*attempts\.Remaining\)`,
-		`translate\s*:=\s*currentSite\.Tr`,              // 翻译出口
-		`raw\s*:=\s*err\.Error\(\)`,                     // R146：先取原串
-		`!strings\.Contains\(raw,\s*"%"`,                // R146：含 % 短路归约
-		`translate\(raw\)`,                              // R146：字典查键
-		`translated\s*!=\s*raw`,                         // R146：译文!=键 即真实业务键
-		`translate\(sms\.ErrSmsSendFailed\.Error\(\)\)`, // 查不到键才归约
-		`log\.Println\("后台短信端点内部错误：",\s*err\)`,          // R146②：原始错误只进日志
+		`translate\s*:=\s*currentSite\.Tr`,                   // 类型分支的翻译出口
+		`provider\.SmsBusinessMessage\(currentSite,\s*err\)`, // 统一判据（TplTr，不做品牌替换）
+		`translate\(sms\.ErrSmsSendFailed\.Error\(\)\)`,      // 查不到键才归约
+		`log\.Println\("后台短信端点内部错误：",\s*err\)`,               // R146②：原始错误只进日志
 		`config\.StatusFailed`,
 	); err != nil {
 		return err
@@ -356,7 +353,7 @@ func TestPluginSmsTestBypassesSceneWhitelistOnly(t *testing.T) {
 		t.Log("反向对照：旁路 SendSmsCode 生产入口喂同一检查器 → 判违规（红）")
 	})
 	t.Run("反向对照_去掉Ip限额入参必红", func(t *testing.T) {
-		re := regexp.MustCompile(`Ip:\s*ctx\.RemoteAddr\(\),`)
+		re := regexp.MustCompile(`Ip:\s*provider\.SmsClientIP\(ctx\),`)
 		bad := re.ReplaceAllString(real, "")
 		if bad == real {
 			t.Fatal("反向对照锚点失效：源码里没找到 Ip 入参")
@@ -682,7 +679,8 @@ func s13CaptureOpsMsg(t *testing.T, site *provider.Website, err error) string {
 // 查不到键的内部错误（含 %）仍归约为 SmsSendFailed，并只进服务端日志。
 func TestPluginSmsOpsErrorKeepsBusinessKeys(t *testing.T) {
 	s13LoadTestI18n(t)
-	site := &provider.Website{}
+	// TplTr 在 I18n 非空时会读 w.System.Language，必须给 System，否则空指针 panic。
+	site := &provider.Website{System: &config.SystemConfig{}}
 	translate := site.Tr
 	generic := translate(sms.ErrSmsSendFailed.Error())
 	if generic == sms.ErrSmsSendFailed.Error() {
@@ -736,17 +734,19 @@ func TestPluginSmsOpsErrorKeepsBusinessKeys(t *testing.T) {
 		}
 	})
 
-	// 源码级反向对照：删掉字典查键（译文直接取原串）后，同一护栏必红。
+	// 源码级反向对照：把统一判据换回 currentSite.Tr（OEM 下 Brandize 会污染
+	// 「译文 != 原文」判据）后，同一护栏必红 —— 这正是本缺陷的回退路径。
 	errSrc := smsFuncSource(t, s13PluginSmsFile, "respondSmsOpsError")
 	if err := s13CheckErrorDispatch(errSrc); err != nil {
 		t.Fatalf("真实源码护栏失败：%v", err)
 	}
-	noDict := strings.Replace(errSrc, "translated = translate(raw)", "translated = raw", 1)
-	if noDict == errSrc {
-		t.Fatal("反向对照准备失败：源码里没有 translated = translate(raw)")
+	noUnified := strings.Replace(errSrc, "provider.SmsBusinessMessage(currentSite, err)",
+		"currentSite.Tr(err.Error())", 1)
+	if noUnified == errSrc {
+		t.Fatal("反向对照准备失败：源码里没有 provider.SmsBusinessMessage 调用")
 	}
-	if err := s13CheckErrorDispatch(noDict); err == nil {
-		t.Fatal("反向对照失败：删掉字典查键后的源码仍被判绿")
+	if err := s13CheckErrorDispatch(noUnified); err == nil {
+		t.Fatal("反向对照失败：把统一判据换回 Tr 后的源码仍被判绿")
 	}
 	if err := s13CheckErrorDispatch(errSrc); err != nil {
 		t.Fatalf("恢复绿失败：%v", err)

@@ -91,20 +91,18 @@ func s10CheckLoginDispatch(src string) error {
 // s10CheckRespondSource：respondSmsError 的 R82/R83/R144 源码护栏。
 // 翻译出口经方法值 translate := site.TplTr 调用（规避 Go 1.24+ printf vet 对
 // 无可变参数非常量格式串的误报），语义与 site.TplTr 直接调用一致。
+// R144 的「字典即白名单」判据已抽到 provider.SmsBusinessMessage（内部固定 TplTr），
+// 前后台共用；本检查器只要求出口确实调用了它，不再重复校验字典实现细节。
 func s10CheckRespondSource(src string) error {
 	if err := s10Require(src,
 		`errors\.As\(err,\s*&wait\)`,
 		`errors\.As\(err,\s*&attempts\)`,
 		`err\.Error\(\),\s*wait\.Seconds\)`,
 		`err\.Error\(\),\s*attempts\.Remaining\)`,
-		`translated\s*:=\s*raw`,                         // R145：含 % 时保留原串→归约
 		`translate\s*:=\s*site\.TplTr`,                  // 方法值来源
 		`config\.StatusFailed`,                          // code 恒 StatusFailed（R81）
 		`errors\.Is\(err,\s*sms\.ErrSmsSendFailed\)`,    // 平台原始码归约（R83/§10.2）
-		`raw\s*:=\s*err\.Error\(\)`,                     // R145：先取原串
-		`!strings\.Contains\(raw,\s*"%"`,                // R145：含 % 短路归约
-		`translate\(raw\)`,                              // R144：字典查键
-		`translated\s*!=\s*raw`,                         // R144：译文!=键 即真实键
+		`provider\.SmsBusinessMessage\(site,\s*err\)`,   // R144：统一判据（TplTr，不做品牌替换）
 		`translate\(sms\.ErrSmsSendFailed\.Error\(\)\)`, // R144：查不到键才归约
 		`log\.Println\(`,                                // R144/R145：原始错误只进日志
 	); err != nil {
@@ -321,21 +319,14 @@ func TestApiSmsSendRespondErrorTplTrArgs(t *testing.T) {
 	if err := s10CheckRespondSource(badSrc); err == nil {
 		t.Fatal("反向对照失败：合成坏源码仍被护栏判绿")
 	}
-	// R144 反向对照：删掉字典查键（把译文直接取成原串），等于回到 R139 的一刀切，必红。
-	noDict := strings.Replace(src, "translated = translate(raw)", "translated = raw", 1)
-	if noDict == src {
-		t.Fatal("反向对照准备失败：真实源码里没有 R144 的字典查键")
+	// R144 回退路径：把统一判据换回 site.Tr（OEM 下 Brandize 会污染判据）必红。
+	noUnified := strings.Replace(src, "provider.SmsBusinessMessage(site, err)",
+		"site.Tr(err.Error())", 1)
+	if noUnified == src {
+		t.Fatal("反向对照准备失败：真实源码里没有 provider.SmsBusinessMessage 调用")
 	}
-	if err := s10CheckRespondSource(noDict); err == nil {
-		t.Fatal("反向对照失败：删掉字典查键后的源码仍被判绿")
-	}
-	// R145 反向对照：把「含 % 短路」改成恒真（等于不短路），必红。
-	noPct := strings.Replace(src, `if !strings.Contains(raw, "%") {`, "if true {", 1)
-	if noPct == src {
-		t.Fatal("反向对照准备失败：真实源码里没有 R145 的 % 短路")
-	}
-	if err := s10CheckRespondSource(noPct); err == nil {
-		t.Fatal("反向对照失败：删掉 % 短路后的源码仍被判绿")
+	if err := s10CheckRespondSource(noUnified); err == nil {
+		t.Fatal("反向对照失败：把统一判据换回 Tr 后的源码仍被判绿")
 	}
 	if err := s10CheckRespondSource(src); err != nil {
 		t.Fatalf("恢复绿失败：%v", err)

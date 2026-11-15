@@ -21,6 +21,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider/sms"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
 )
@@ -1336,7 +1337,23 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		if req.Address != nil {
 			user.UserName = req.Address.Name + " " + req.Address.LastName
 			user.Email = req.Address.Email
-			user.Phone = req.Address.Phone
+			// 匿名下单的号码必须先归一化再用于「按手机号复用用户」与建号：
+			// 直接写回原始串会落出 phone_country='' 的重复账号（该账号既不能短信
+			// 登录，也进不了换绑流程），带分隔符/全角数字的输入还会查重查不到。
+			//
+			// 归一化失败（号码非法或为空）不因此拒绝整单：但绝不把原始号码写进
+			// user.Phone（会污染用户数据）；跳过错号复用，建号时 Phone 留空，
+			// 让用户后续自己走绑定流程。区号仍取默认值，避免出现 phone_country='' 的行。
+			if p, perr := sms.NormalizePhone("", req.Address.Phone); perr == nil {
+				user.Phone = p.Local
+				user.PhoneCountry = p.Country
+			} else {
+				user.Phone = ""
+				user.PhoneCountry = normalizePhoneCountry("")
+				if req.Address.Phone != "" {
+					log.Println("匿名下单手机号归一化失败，跳过按号码复用用户：", perr)
+				}
+			}
 			if user.Email != "" {
 				existUser, err := w.GetUserInfoByEmail(user.Email)
 				if err == nil {
@@ -1360,7 +1377,9 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 					user.Subscribed = true
 				}
 
-				w.DB.Save(user)
+				if e := w.DB.Save(user).Error; e != nil {
+					return nil, e
+				}
 			}
 			userId = user.Id
 		}

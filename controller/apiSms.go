@@ -33,22 +33,12 @@ func respondSmsError(ctx iris.Context, site *provider.Website, err error) {
 		// 平台原始错误码与消息只进 sms_logs，前台归约到通用翻译键（规格 §10.2 / R83）。
 		msg = translate(sms.ErrSmsSendFailed.Error())
 	default:
-		// R144：字典即白名单。TplTr 的兜底是「键查不到就原样返回」，因此
-		// 「译文 != 键本身」就说明 err.Error() 是一枚真实存在的语言键
-		// （SmsCodeExpired / GraphicCodeIncorrect / UserNotActive / ...），
-		// 直接输出译文；查不到键的（ctx.ReadJSON 解析错误、DB 驱动错误）才是
-		// 内部措辞：只进服务端日志，对外归约到 SmsSendFailed。
-		// R145：含 % 的文本经 TplTr 的 fmt.Sprintf 兜底会被改写成 %!c(MISSING) 之类，
-		// 改写后必然 != 原串，会被上面的判据误判成语言键而把原文送出门——先短路。
-		// 真正带 %d 的 SmsResendTooSoon / SmsCodeMismatch 由上面两个类型分支处理，
-		// 走不到这里，因此短路不会把它们打回通用文案。
-		// 不传参：对不含格式化指令的键传参会输出 %!(EXTRA int=...)（R82）。
-		raw := err.Error()
-		translated := raw
-		if !strings.Contains(raw, "%") {
-			translated = translate(raw)
-		}
-		if translated != raw {
+		// R144：字典即白名单。判据统一收敛到 provider.SmsBusinessMessage：
+		// 内部固定用 TplTr（不做品牌替换），避免 OEM 构建下 Brandize 改写普通
+		// 错误文本、被误判成语言键而把原文送出门（前台/后台判据必须一致）。
+		// 查不到键的（ctx.ReadJSON 解析错误、DB 驱动错误）才是内部措辞：
+		// 只进服务端日志，对外归约到 SmsSendFailed。
+		if translated, ok := provider.SmsBusinessMessage(site, err); ok {
 			msg = translated
 		} else {
 			log.Println("短信端点内部错误：", err)
@@ -106,12 +96,13 @@ func ApiSmsSend(ctx iris.Context) {
 			return
 		}
 	}
-	// 发码：Ip 取 ctx.RemoteAddr()，不自己解析 X-Forwarded-For（R83）。
+	// 发码：Ip 取 SmsClientIP（公网直连忽略伪造代理头，私有对端才采信 iris 解析），
+	// 详见 provider.SmsClientIP 的注释。
 	result, err := currentSite.SendSmsCode(provider.SmsSendInput{
 		PhoneCountry: req.PhoneCountry,
 		Phone:        req.Phone,
 		Scene:        req.Scene,
-		Ip:           ctx.RemoteAddr(),
+		Ip:           provider.SmsClientIP(ctx),
 		UserId:       ctx.Values().GetUintDefault("userId", 0),
 	})
 	if err != nil {
@@ -161,11 +152,21 @@ func ApiSmsPasswordReset(ctx iris.Context) {
 		return
 	}
 	if err = user.EncryptPassword(req.Password); err != nil {
-		respondSmsError(ctx, currentSite, err)
+		// 此刻验证码已在上面被消费、密码还没改：这不是「短信发送失败」。
+		// 归约成 SmsSendFailed 会让用户去重发验证码，排查方向完全错。
+		log.Println("短信重置密码加密失败：", err)
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.Tr("SaveFailed"),
+		})
 		return
 	}
 	if err = currentSite.DB.Save(user).Error; err != nil {
-		respondSmsError(ctx, currentSite, err)
+		log.Println("短信重置密码保存失败：", err)
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.Tr("SaveFailed"),
+		})
 		return
 	}
 	ctx.JSON(iris.Map{
