@@ -882,3 +882,4 @@
 "SmsCodeLocked": "驗證碼錯誤次數過多，請重新獲取"
 "SmsSendFailed": "簡訊發送失敗，請稍後重試"
 "SmsParamInvalid": "請求參數格式不正確"
+"UserNotActive": "賬號未啟用或已被停用，請聯繫管理員"

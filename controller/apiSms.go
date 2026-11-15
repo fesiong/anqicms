@@ -38,8 +38,17 @@ func respondSmsError(ctx iris.Context, site *provider.Website, err error) {
 		// （SmsCodeExpired / GraphicCodeIncorrect / UserNotActive / ...），
 		// 直接输出译文；查不到键的（ctx.ReadJSON 解析错误、DB 驱动错误）才是
 		// 内部措辞：只进服务端日志，对外归约到 SmsSendFailed。
+		// R145：含 % 的文本经 TplTr 的 fmt.Sprintf 兜底会被改写成 %!c(MISSING) 之类，
+		// 改写后必然 != 原串，会被上面的判据误判成语言键而把原文送出门——先短路。
+		// 真正带 %d 的 SmsResendTooSoon / SmsCodeMismatch 由上面两个类型分支处理，
+		// 走不到这里，因此短路不会把它们打回通用文案。
 		// 不传参：对不含格式化指令的键传参会输出 %!(EXTRA int=...)（R82）。
-		if translated := translate(err.Error()); translated != err.Error() {
+		raw := err.Error()
+		translated := raw
+		if !strings.Contains(raw, "%") {
+			translated = translate(raw)
+		}
+		if translated != raw {
 			msg = translated
 		} else {
 			log.Println("短信端点内部错误：", err)

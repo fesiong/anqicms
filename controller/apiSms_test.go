@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/kataras/iris/v12"
-	"github.com/kataras/iris/v12/i18n"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/provider/sms"
@@ -98,19 +97,21 @@ func s10CheckRespondSource(src string) error {
 		`errors\.As\(err,\s*&attempts\)`,
 		`err\.Error\(\),\s*wait\.Seconds\)`,
 		`err\.Error\(\),\s*attempts\.Remaining\)`,
-		`(?:site\.TplTr|translate)\(err\.Error\(\)\)`,   // 默认分支：不传参
+		`translated\s*:=\s*raw`,                         // R145：含 % 时保留原串→归约
 		`translate\s*:=\s*site\.TplTr`,                  // 方法值来源
 		`config\.StatusFailed`,                          // code 恒 StatusFailed（R81）
 		`errors\.Is\(err,\s*sms\.ErrSmsSendFailed\)`,    // 平台原始码归约（R83/§10.2）
-		`translated\s*:=\s*translate\(err\.Error\(\)\)`, // R144：字典查键
-		`translated\s*!=\s*err\.Error\(\)`,              // R144：译文!=键 即真实键
+		`raw\s*:=\s*err\.Error\(\)`,                     // R145：先取原串
+		`!strings\.Contains\(raw,\s*"%"`,                // R145：含 % 短路归约
+		`translate\(raw\)`,                              // R144：字典查键
+		`translated\s*!=\s*raw`,                         // R144：译文!=键 即真实键
 		`translate\(sms\.ErrSmsSendFailed\.Error\(\)\)`, // R144：查不到键才归约
-		`log\.Println\(`,                                // R144：原始错误只进日志
+		`log\.Println\(`,                                // R144/R145：原始错误只进日志
 	); err != nil {
 		return err
 	}
 	// 不得出现「对普通错误传固定数字参数」的翻译调用（R82 反面）。
-	if regexp.MustCompile(`(?:site\.TplTr|translate)\(err\.Error\(\),\s*\d+\)`).MatchString(src) {
+	if regexp.MustCompile(`(?:site\.TplTr|translate)\((?:err\.Error\(\)|raw),\s*\d+\)`).MatchString(src) {
 		return errors.New("存在对普通错误传固定参数的翻译调用")
 	}
 	// R144：不得再引入手抄的业务键白名单（与字典漂移），字典就是白名单。
@@ -320,15 +321,21 @@ func TestApiSmsSendRespondErrorTplTrArgs(t *testing.T) {
 	if err := s10CheckRespondSource(badSrc); err == nil {
 		t.Fatal("反向对照失败：合成坏源码仍被护栏判绿")
 	}
-	// R144 反向对照：把「译文 != 键」的字典判定改成恒假（等于回到 R139 的一刀切），必红。
-	noDict := strings.Replace(src,
-		"if translated := translate(err.Error()); translated != err.Error() {",
-		"if translated := translate(err.Error()); false && translated != \"\" {", 1)
+	// R144 反向对照：删掉字典查键（把译文直接取成原串），等于回到 R139 的一刀切，必红。
+	noDict := strings.Replace(src, "translated = translate(raw)", "translated = raw", 1)
 	if noDict == src {
-		t.Fatal("反向对照准备失败：真实源码里没有 R144 的字典判定分支")
+		t.Fatal("反向对照准备失败：真实源码里没有 R144 的字典查键")
 	}
 	if err := s10CheckRespondSource(noDict); err == nil {
-		t.Fatal("反向对照失败：删掉字典判定后的源码仍被判绿")
+		t.Fatal("反向对照失败：删掉字典查键后的源码仍被判绿")
+	}
+	// R145 反向对照：把「含 % 短路」改成恒真（等于不短路），必红。
+	noPct := strings.Replace(src, `if !strings.Contains(raw, "%") {`, "if true {", 1)
+	if noPct == src {
+		t.Fatal("反向对照准备失败：真实源码里没有 R145 的 % 短路")
+	}
+	if err := s10CheckRespondSource(noPct); err == nil {
+		t.Fatal("反向对照失败：删掉 % 短路后的源码仍被判绿")
 	}
 	if err := s10CheckRespondSource(src); err != nil {
 		t.Fatalf("恢复绿失败：%v", err)
@@ -369,20 +376,6 @@ func s10TestSite() *provider.Website {
 	return &provider.Website{System: &config.SystemConfig{}}
 }
 
-// s10TestSiteWithDict 返回带站点级翻译字典的最小站点（模拟 DB 里的自定义翻译）。
-// TplTr 的查找顺序是「站点字典 → 全局 locales → Sprintf 兜底」，正好用来验证：
-// 只要字典里有键就会被放行，与键名长什么样无关（R144）。
-func s10TestSiteWithDict(t *testing.T, lang string, dict map[string]interface{}) *provider.Website {
-	t.Helper()
-	inst := i18n.New()
-	if err := inst.LoadKV(i18n.LangMap{lang: dict}, lang); err != nil {
-		t.Fatalf("注入站点字典失败：%v", err)
-	}
-	site := s10TestSite()
-	site.TplI18n = inst
-	return site
-}
-
 // TestSmsRespondErrorPreservesBusinessKeys 是 R144 的核心断言：
 // 业务键必须原样输出译文，不得被归约成「短信发送失败」；只有查不到键的才归约。
 func TestSmsRespondErrorPreservesBusinessKeys(t *testing.T) {
@@ -416,6 +409,8 @@ func TestSmsRespondErrorPreservesBusinessKeys(t *testing.T) {
 		// 非 Sms* 前缀的业务键：R139 的硬编码归约把它们全吞了，R144 必须放行。
 		{"GraphicCodeIncorrect", errors.New("GraphicCodeIncorrect")},
 		{"PleaseFillInAPasswordOfMoreThan6Digits", errors.New("PleaseFillInAPasswordOfMoreThan6Digits")},
+		// R145：三语补了 UserNotActive，这里从「字典注入」改为真键断言。
+		{"UserNotActive", errors.New("UserNotActive")},
 	}
 
 	for _, c := range cases {
@@ -445,23 +440,6 @@ func TestSmsRespondErrorPreservesBusinessKeys(t *testing.T) {
 		got := s10CaptureOn(t, site, &sms.AttemptsError{Remaining: 3}, respondSmsError)
 		if want := translate(sms.ErrSmsCodeMismatch.Error(), 3); got != want {
 			t.Fatalf("出口 msg = %q，期望 %q", got, want)
-		}
-	})
-
-	// UserNotActive 是控制者点名的键，但 9 个语言包里都没有它的条目（已全仓核对），
-	// 字典判据无法识别它；本批范围只允许改 2 个文件，不能顺手补 locales。
-	// 因此这里用站点级字典注入证明「字典里一有该键就原样放行」，补键后无需改测试。
-	t.Run("UserNotActive 字典有条目即放行", func(t *testing.T) {
-		const injected = "Account is inactive or banned"
-		injectedSite := s10TestSiteWithDict(t, "en-US", map[string]interface{}{
-			"UserNotActive": injected,
-		})
-		got := s10CaptureOn(t, injectedSite, errors.New("UserNotActive"), respondSmsError)
-		if got != injected {
-			t.Fatalf("出口 msg = %q，期望站点字典译文 %q", got, injected)
-		}
-		if translate("UserNotActive") == "UserNotActive" {
-			t.Logf("注意：locales 缺 UserNotActive 键，生产环境该错误仍会被归约为通用文案（结转：补三语键）")
 		}
 	})
 }
@@ -552,6 +530,28 @@ func TestSmsRespondErrorReducesUnknownErrors(t *testing.T) {
 		for _, leak := range []string{"1406", "Data too long", "template_id", "Error "} {
 			if strings.Contains(got, leak) {
 				t.Errorf("响应回显了 DB 内部措辞 %q：%q", leak, got)
+			}
+		}
+	})
+
+	t.Run("含百分号的错误串归约为SmsSendFailed", func(t *testing.T) {
+		// R145：TplTr 兜底是 fmt.Sprintf，含 % 的文本会被改写成 %!c(MISSING)，
+		// 改写后必然 != 原串 —— 若不加短路，这里会被误判成语言键、原文照旧出门。
+		s10LoadTestI18n(t)
+		site := s10TestSite()
+		translate := site.TplTr
+		want := translate(sms.ErrSmsSendFailed.Error())
+		if want == sms.ErrSmsSendFailed.Error() {
+			t.Fatalf("locales 缺 SmsSendFailed 译文，断言会失去意义")
+		}
+		got := s10CaptureOn(t, site, errors.New("invalid character '%' looking for beginning of value"), respondSmsError)
+		if got != want {
+			t.Fatalf("含 %% 的错误应归约为 %q，实际 %q", want, got)
+		}
+		// 响应体只有 code/msg 两个字段，msg 即唯一文本出口，检查它就等于检查 body。
+		for _, leak := range []string{"invalid character", "%!"} {
+			if strings.Contains(got, leak) {
+				t.Errorf("响应回显了内部措辞 %q：%q", leak, got)
 			}
 		}
 	})

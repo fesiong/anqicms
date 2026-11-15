@@ -888,3 +888,4 @@
 "SmsCodeLocked": "验证码错误次数过多，请重新获取"
 "SmsSendFailed": "短信发送失败，请稍后重试"
 "SmsParamInvalid": "请求参数格式不正确"
+"UserNotActive": "账号未激活或已被禁用，请联系管理员"
