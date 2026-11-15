@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/kataras/iris/v12"
+	"github.com/kataras/iris/v12/i18n"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/provider/sms"
@@ -87,7 +89,7 @@ func s10CheckLoginDispatch(src string) error {
 	)
 }
 
-// s10CheckRespondSource：respondSmsError 的 R82/R83 源码护栏。
+// s10CheckRespondSource：respondSmsError 的 R82/R83/R144 源码护栏。
 // 翻译出口经方法值 translate := site.TplTr 调用（规避 Go 1.24+ printf vet 对
 // 无可变参数非常量格式串的误报），语义与 site.TplTr 直接调用一致。
 func s10CheckRespondSource(src string) error {
@@ -96,17 +98,24 @@ func s10CheckRespondSource(src string) error {
 		`errors\.As\(err,\s*&attempts\)`,
 		`err\.Error\(\),\s*wait\.Seconds\)`,
 		`err\.Error\(\),\s*attempts\.Remaining\)`,
-		`(?:site\.TplTr|translate)\(err\.Error\(\)\)`, // 默认分支：不传参
-		`translate\s*:=\s*site\.TplTr`,                // 方法值来源
-		`config\.StatusFailed`,                        // code 恒 StatusFailed（R81）
-		`errors\.Is\(err,\s*sms\.ErrSmsSendFailed\)`,  // 平台原始码归约（R83/§10.2）
-		`!s10IsKnownSmsError\(err\)`,                  // 未知错误归约（R139）
+		`(?:site\.TplTr|translate)\(err\.Error\(\)\)`,   // 默认分支：不传参
+		`translate\s*:=\s*site\.TplTr`,                  // 方法值来源
+		`config\.StatusFailed`,                          // code 恒 StatusFailed（R81）
+		`errors\.Is\(err,\s*sms\.ErrSmsSendFailed\)`,    // 平台原始码归约（R83/§10.2）
+		`translated\s*:=\s*translate\(err\.Error\(\)\)`, // R144：字典查键
+		`translated\s*!=\s*err\.Error\(\)`,              // R144：译文!=键 即真实键
+		`translate\(sms\.ErrSmsSendFailed\.Error\(\)\)`, // R144：查不到键才归约
+		`log\.Println\(`,                                // R144：原始错误只进日志
 	); err != nil {
 		return err
 	}
 	// 不得出现「对普通错误传固定数字参数」的翻译调用（R82 反面）。
 	if regexp.MustCompile(`(?:site\.TplTr|translate)\(err\.Error\(\),\s*\d+\)`).MatchString(src) {
 		return errors.New("存在对普通错误传固定参数的翻译调用")
+	}
+	// R144：不得再引入手抄的业务键白名单（与字典漂移），字典就是白名单。
+	if strings.Contains(src, "smsKnownBusinessErrors") || strings.Contains(src, "s10IsKnownSmsError") {
+		return errors.New("引入了手抄的业务键白名单：应改为「译文 != 键」的字典判定（R144）")
 	}
 	return nil
 }
@@ -126,7 +135,14 @@ func s10Capture(t *testing.T, err error, exit s10SmsErrorExit) string {
 	provider.SetI18n(nil)
 	defer provider.SetI18n(old)
 
-	site := &provider.Website{}
+	return s10CaptureOn(t, &provider.Website{}, err, exit)
+}
+
+// s10CaptureOn 与 s10Capture 同款真实 HTTP 调用，但翻译语义取决于调用方已注入的
+// provider.I18n 与 site 语言——R144 的逐键保真断言必须看到真实译文。
+func s10CaptureOn(t *testing.T, site *provider.Website, err error, exit s10SmsErrorExit) string {
+	t.Helper()
+
 	app := iris.New()
 	app.Get("/x", func(ctx iris.Context) { exit(ctx, site, err) })
 	if e := app.Build(); e != nil {
@@ -304,6 +320,16 @@ func TestApiSmsSendRespondErrorTplTrArgs(t *testing.T) {
 	if err := s10CheckRespondSource(badSrc); err == nil {
 		t.Fatal("反向对照失败：合成坏源码仍被护栏判绿")
 	}
+	// R144 反向对照：把「译文 != 键」的字典判定改成恒假（等于回到 R139 的一刀切），必红。
+	noDict := strings.Replace(src,
+		"if translated := translate(err.Error()); translated != err.Error() {",
+		"if translated := translate(err.Error()); false && translated != \"\" {", 1)
+	if noDict == src {
+		t.Fatal("反向对照准备失败：真实源码里没有 R144 的字典判定分支")
+	}
+	if err := s10CheckRespondSource(noDict); err == nil {
+		t.Fatal("反向对照失败：删掉字典判定后的源码仍被判绿")
+	}
 	if err := s10CheckRespondSource(src); err != nil {
 		t.Fatalf("恢复绿失败：%v", err)
 	}
@@ -320,13 +346,143 @@ func TestApiSmsSendRespondErrorTplTrArgs(t *testing.T) {
 	}
 }
 
-// TestSmsRespondErrorReducesUnknownErrors 是 R139 的两条行为断言。
+// ---------------------------------------------------------------------------
+// R144：出口改为「翻译字典即白名单」——逐键保真 + 泄露关闭
+// ---------------------------------------------------------------------------
+
+// s10LoadTestI18n 注入真实语言包（controller 测试进程的 ExecPath 不含 locales，
+// 故用相对路径 glob 加载）。逐键断言必须看到真实译文，不能靠 nil 兜底。
+func s10LoadTestI18n(t *testing.T) {
+	t.Helper()
+	app := iris.New()
+	if err := app.I18n.Load("../locales/*/*.yml", config.LoadLocales()...); err != nil {
+		t.Fatalf("加载 locales 失败：%v", err)
+	}
+	old := provider.I18n
+	provider.SetI18n(app.I18n)
+	t.Cleanup(func() { provider.SetI18n(old) })
+}
+
+// s10TestSite 返回一个可安全调用 TplTr 的最小站点。Website.System 是
+// *config.SystemConfig，空指针会在 TplTr 里被解引用（I18n 非空时读 w.System.Language）。
+func s10TestSite() *provider.Website {
+	return &provider.Website{System: &config.SystemConfig{}}
+}
+
+// s10TestSiteWithDict 返回带站点级翻译字典的最小站点（模拟 DB 里的自定义翻译）。
+// TplTr 的查找顺序是「站点字典 → 全局 locales → Sprintf 兜底」，正好用来验证：
+// 只要字典里有键就会被放行，与键名长什么样无关（R144）。
+func s10TestSiteWithDict(t *testing.T, lang string, dict map[string]interface{}) *provider.Website {
+	t.Helper()
+	inst := i18n.New()
+	if err := inst.LoadKV(i18n.LangMap{lang: dict}, lang); err != nil {
+		t.Fatalf("注入站点字典失败：%v", err)
+	}
+	site := s10TestSite()
+	site.TplI18n = inst
+	return site
+}
+
+// TestSmsRespondErrorPreservesBusinessKeys 是 R144 的核心断言：
+// 业务键必须原样输出译文，不得被归约成「短信发送失败」；只有查不到键的才归约。
+func TestSmsRespondErrorPreservesBusinessKeys(t *testing.T) {
+	s10LoadTestI18n(t)
+	site := s10TestSite()
+	// 方法值：规避 Go 1.24+ printf vet 对「无可变参数非常量格式串」的误报。
+	translate := site.TplTr
+	generic := translate(sms.ErrSmsSendFailed.Error())
+	if generic == sms.ErrSmsSendFailed.Error() {
+		t.Fatalf("locales 缺 SmsSendFailed 译文，逐键断言会失去意义（generic=%q）", generic)
+	}
+
+	cases := []struct {
+		key string
+		err error
+	}{
+		// 不带 %d 的 Sms* 键（SmsResendTooSoon / SmsCodeMismatch 带 %d，见下方类型分支）。
+		{"SmsServiceNotEnabled", sms.ErrSmsServiceNotEnabled},
+		{"SmsSceneNotEnabled", sms.ErrSmsSceneNotEnabled},
+		{"SmsPhoneInvalid", sms.ErrSmsPhoneInvalid},
+		{"SmsRegionUnsupported", sms.ErrSmsRegionUnsupported},
+		{"SmsCredentialMissing", sms.ErrSmsCredentialMissing},
+		{"SmsSignMissing", sms.ErrSmsSignMissing},
+		{"SmsTemplateMissing", sms.ErrSmsTemplateMissing},
+		{"SmsIpLimited", sms.ErrSmsIpLimited},
+		{"SmsPhoneLimited", sms.ErrSmsPhoneLimited},
+		{"SmsCodeNotFound", sms.ErrSmsCodeNotFound},
+		{"SmsCodeExpired", sms.ErrSmsCodeExpired},
+		{"SmsCodeLocked", sms.ErrSmsCodeLocked},
+		{"SmsSendFailed", sms.ErrSmsSendFailed},
+		// 非 Sms* 前缀的业务键：R139 的硬编码归约把它们全吞了，R144 必须放行。
+		{"GraphicCodeIncorrect", errors.New("GraphicCodeIncorrect")},
+		{"PleaseFillInAPasswordOfMoreThan6Digits", errors.New("PleaseFillInAPasswordOfMoreThan6Digits")},
+	}
+
+	for _, c := range cases {
+		t.Run(c.key, func(t *testing.T) {
+			want := translate(c.key)
+			if want == c.key {
+				t.Fatalf("locales 缺 %q 的译文，断言会失去意义", c.key)
+			}
+			if c.key != sms.ErrSmsSendFailed.Error() && want == generic {
+				t.Fatalf("%q 的译文与 SmsSendFailed 相同（%q），断言会失去意义", c.key, want)
+			}
+			got := s10CaptureOn(t, site, c.err, respondSmsError)
+			if got != want {
+				t.Fatalf("出口 msg = %q，期望 %q（业务键被吞或被改写）", got, want)
+			}
+		})
+	}
+
+	// 带 %d 的两条键走类型分支，同样必须输出译文而不是键名或通用文案。
+	t.Run("SmsResendTooSoon 带秒数", func(t *testing.T) {
+		got := s10CaptureOn(t, site, &sms.WaitError{Seconds: 42}, respondSmsError)
+		if want := translate(sms.ErrSmsResendTooSoon.Error(), 42); got != want {
+			t.Fatalf("出口 msg = %q，期望 %q", got, want)
+		}
+	})
+	t.Run("SmsCodeMismatch 带剩余次数", func(t *testing.T) {
+		got := s10CaptureOn(t, site, &sms.AttemptsError{Remaining: 3}, respondSmsError)
+		if want := translate(sms.ErrSmsCodeMismatch.Error(), 3); got != want {
+			t.Fatalf("出口 msg = %q，期望 %q", got, want)
+		}
+	})
+
+	// UserNotActive 是控制者点名的键，但 9 个语言包里都没有它的条目（已全仓核对），
+	// 字典判据无法识别它；本批范围只允许改 2 个文件，不能顺手补 locales。
+	// 因此这里用站点级字典注入证明「字典里一有该键就原样放行」，补键后无需改测试。
+	t.Run("UserNotActive 字典有条目即放行", func(t *testing.T) {
+		const injected = "Account is inactive or banned"
+		injectedSite := s10TestSiteWithDict(t, "en-US", map[string]interface{}{
+			"UserNotActive": injected,
+		})
+		got := s10CaptureOn(t, injectedSite, errors.New("UserNotActive"), respondSmsError)
+		if got != injected {
+			t.Fatalf("出口 msg = %q，期望站点字典译文 %q", got, injected)
+		}
+		if translate("UserNotActive") == "UserNotActive" {
+			t.Logf("注意：locales 缺 UserNotActive 键，生产环境该错误仍会被归约为通用文案（结转：补三语键）")
+		}
+	})
+}
+
+// TestApiSmsRespondHasNoHandWrittenWhitelist 守 R144 的「字典即白名单」：
+// 不得再引入 smsKnownBusinessErrors / s10IsKnownSmsError 这类手抄表（会与字典漂移）。
+func TestApiSmsRespondHasNoHandWrittenWhitelist(t *testing.T) {
+	raw, err := os.ReadFile("apiSms.go")
+	if err != nil {
+		t.Fatalf("读取 apiSms.go 失败：%v", err)
+	}
+	for _, banned := range []string{"smsKnownBusinessErrors", "s10IsKnownSmsError"} {
+		if strings.Contains(string(raw), banned) {
+			t.Errorf("apiSms.go 仍含手抄白名单 %q：应改为「译文 != 键」的字典判定（R144）", banned)
+		}
+	}
+}
+
+// TestSmsRespondErrorReducesUnknownErrors 是 R139/R144 的泄露关闭断言。
 func TestSmsRespondErrorReducesUnknownErrors(t *testing.T) {
 	t.Run("非法JSON不回显解析器措辞", func(t *testing.T) {
-		old := provider.I18n
-		provider.SetI18n(nil)
-		defer provider.SetI18n(old)
-
 		app := iris.New()
 		// CurrentSite(ctx) 里的 ctx.GetLocale() 依赖 app.I18n；不加载 locales 会空指针 panic
 		// （与 middleware/accountProbe_test.go 的 newProbeTestApp 同款）。
@@ -334,6 +490,12 @@ func TestSmsRespondErrorReducesUnknownErrors(t *testing.T) {
 			t.Fatalf("加载 locales 失败：%v", err)
 		}
 		app.I18n.SetDefault("zh-CN")
+		// 生产启动时 bootstrap 会把 app.I18n 注入 provider；测试同款注入，
+		// 才能断言「归约后输出的是 SmsSendFailed 的译文」而不是键名。
+		old := provider.I18n
+		provider.SetI18n(app.I18n)
+		defer provider.SetI18n(old)
+
 		app.Post("/sms/send", ApiSmsSend)
 		if err := app.Build(); err != nil {
 			t.Fatalf("构建测试应用失败：%v", err)
@@ -363,20 +525,34 @@ func TestSmsRespondErrorReducesUnknownErrors(t *testing.T) {
 		if resp.Code != config.StatusFailed {
 			t.Errorf("code = %d，期望 %d", resp.Code, config.StatusFailed)
 		}
-		if resp.Msg == "" {
-			t.Error("msg 为空：错误出口必须给出可翻译文案")
+		site := s10TestSite()
+		translate := site.TplTr
+		want := translate(sms.ErrSmsSendFailed.Error())
+		if want == sms.ErrSmsSendFailed.Error() {
+			t.Fatalf("locales 缺 SmsSendFailed 译文，断言会失去意义")
+		}
+		if resp.Msg != want {
+			t.Errorf("msg = %q，期望归约文案 %q", resp.Msg, want)
 		}
 	})
 
 	t.Run("DB错误归约为SmsSendFailed", func(t *testing.T) {
+		s10LoadTestI18n(t)
+		site := s10TestSite()
+		translate := site.TplTr
+		want := translate(sms.ErrSmsSendFailed.Error())
+		if want == sms.ErrSmsSendFailed.Error() {
+			t.Fatalf("locales 缺 SmsSendFailed 译文，断言会失去意义")
+		}
 		synthetic := errors.New("Error 1406: Data too long for column 'template_id' at row 1")
-		got := s10Capture(t, synthetic, respondSmsError)
-		// s10Capture 强制 I18n 为 nil，TplTr 兜底返回键本身。
-		if want := sms.ErrSmsSendFailed.Error(); got != want {
+		got := s10CaptureOn(t, site, synthetic, respondSmsError)
+		if got != want {
 			t.Fatalf("合成 DB 错误应归约为 %q，实际 %q", want, got)
 		}
-		if strings.Contains(got, "1406") || strings.Contains(got, "template_id") {
-			t.Errorf("响应回显了 DB 内部措辞：%q", got)
+		for _, leak := range []string{"1406", "Data too long", "template_id", "Error "} {
+			if strings.Contains(got, leak) {
+				t.Errorf("响应回显了 DB 内部措辞 %q：%q", leak, got)
+			}
 		}
 	})
 }

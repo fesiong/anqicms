@@ -2,6 +2,7 @@ package controller
 
 import (
 	"errors"
+	"log"
 	"strings"
 
 	"github.com/kataras/iris/v12"
@@ -11,49 +12,11 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
-// smsKnownBusinessErrors 是 R139 的「已知短信错误」白名单：只有这些哨兵允许把
-// err.Error() 直接当翻译键送出去。其余错误（ctx.ReadJSON 的解析错误、DB 驱动错误、
-// 任何内部措辞）一律归约到 sms.ErrSmsSendFailed，绝不回显给客户端（§10.2）。
-// 不允许用「字符串含 Sms 前缀」之类的猜测：那会让任意内部错误冒充业务错误。
-var smsKnownBusinessErrors = []error{
-	sms.ErrSmsServiceNotEnabled,
-	sms.ErrSmsSceneNotEnabled,
-	sms.ErrSmsPhoneInvalid,
-	sms.ErrSmsRegionUnsupported,
-	sms.ErrSmsCredentialMissing,
-	sms.ErrSmsSignMissing,
-	sms.ErrSmsTemplateMissing,
-	sms.ErrSmsIpLimited,
-	sms.ErrSmsPhoneLimited,
-	sms.ErrSmsCodeNotFound,
-	sms.ErrSmsCodeExpired,
-	sms.ErrSmsSendFailed,
-}
-
-// s10IsKnownSmsError 判定 err 是否命中已知短信哨兵（逐个 errors.Is 枚举）。
-func s10IsKnownSmsError(err error) bool {
-	for _, known := range smsKnownBusinessErrors {
-		if errors.Is(err, known) {
-			return true
-		}
-	}
-	return false
-}
-
-// respondSmsError 是前台短信端点的统一错误出口（R81/R82/R83）。
-// code 恒为 config.StatusFailed；msg 只暴露可翻译键，绝不回显平台原始错误码/消息。
+// respondSmsError 是前台短信端点的统一错误出口（R81/R82/R83/R144）。
+// code 恒为 config.StatusFailed；msg 只暴露可翻译文案，绝不回显解析器/DB 原始措辞。
 func respondSmsError(ctx iris.Context, site *provider.Website, err error) {
 	var wait *sms.WaitError
 	var attempts *sms.AttemptsError
-	// 平台原始错误码与消息只进 sms_logs，前台归约到通用翻译键（规格 §10.2 / R83）。
-	// *WaitError / *AttemptsError 虽不在哨兵白名单里，但它们带 %d 参数、必须走下面
-	// 的类型分支，故先按类型放行；其余非已知错误一律归约（R139）。
-	if errors.Is(err, sms.ErrSmsSendFailed) {
-		err = sms.ErrSmsSendFailed
-	} else if !errors.As(err, &wait) && !errors.As(err, &attempts) && !s10IsKnownSmsError(err) {
-		// R139：ReadJSON / DB 等非业务错误一律归约，原始措辞不得出门。
-		err = sms.ErrSmsSendFailed
-	}
 	// 方法值：site.TplTr 内部兜底是 fmt.Sprintf(str, args...)，被 Go 1.24+ printf
 	// vet 识别为 printf wrapper；对「无可变参数的非常量格式串」会报
 	// non-constant format string。经方法值调用可规避，翻译语义与直接调用完全一致。
@@ -66,9 +29,22 @@ func respondSmsError(ctx iris.Context, site *provider.Website, err error) {
 	case errors.As(err, &attempts):
 		// 仅 *AttemptsError 携带 %d 参数：把 Remaining 传入（R82）。
 		msg = translate(err.Error(), attempts.Remaining)
+	case errors.Is(err, sms.ErrSmsSendFailed):
+		// 平台原始错误码与消息只进 sms_logs，前台归约到通用翻译键（规格 §10.2 / R83）。
+		msg = translate(sms.ErrSmsSendFailed.Error())
 	default:
-		// 其余错误一律不传参：对不含格式化指令的键传参会输出 %!(EXTRA int=...)（R82）。
-		msg = translate(err.Error())
+		// R144：字典即白名单。TplTr 的兜底是「键查不到就原样返回」，因此
+		// 「译文 != 键本身」就说明 err.Error() 是一枚真实存在的语言键
+		// （SmsCodeExpired / GraphicCodeIncorrect / UserNotActive / ...），
+		// 直接输出译文；查不到键的（ctx.ReadJSON 解析错误、DB 驱动错误）才是
+		// 内部措辞：只进服务端日志，对外归约到 SmsSendFailed。
+		// 不传参：对不含格式化指令的键传参会输出 %!(EXTRA int=...)（R82）。
+		if translated := translate(err.Error()); translated != err.Error() {
+			msg = translated
+		} else {
+			log.Println("短信端点内部错误：", err)
+			msg = translate(sms.ErrSmsSendFailed.Error())
+		}
 	}
 	ctx.JSON(iris.Map{
 		"code": config.StatusFailed,
