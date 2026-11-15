@@ -100,6 +100,7 @@ func s10CheckRespondSource(src string) error {
 		`translate\s*:=\s*site\.TplTr`,                // 方法值来源
 		`config\.StatusFailed`,                        // code 恒 StatusFailed（R81）
 		`errors\.Is\(err,\s*sms\.ErrSmsSendFailed\)`,  // 平台原始码归约（R83/§10.2）
+		`!s10IsKnownSmsError\(err\)`,                  // 未知错误归约（R139）
 	); err != nil {
 		return err
 	}
@@ -316,5 +317,111 @@ func TestApiSmsSendRespondErrorTplTrArgs(t *testing.T) {
 	}
 	if err := s10CheckBehavior(t, respondSmsError); err != nil {
 		t.Fatalf("行为断言恢复绿失败：%v", err)
+	}
+}
+
+// TestSmsRespondErrorReducesUnknownErrors 是 R139 的两条行为断言。
+func TestSmsRespondErrorReducesUnknownErrors(t *testing.T) {
+	t.Run("非法JSON不回显解析器措辞", func(t *testing.T) {
+		old := provider.I18n
+		provider.SetI18n(nil)
+		defer provider.SetI18n(old)
+
+		app := iris.New()
+		// CurrentSite(ctx) 里的 ctx.GetLocale() 依赖 app.I18n；不加载 locales 会空指针 panic
+		// （与 middleware/accountProbe_test.go 的 newProbeTestApp 同款）。
+		if err := app.I18n.Load("../locales/*/*.yml", config.LoadLocales()...); err != nil {
+			t.Fatalf("加载 locales 失败：%v", err)
+		}
+		app.I18n.SetDefault("zh-CN")
+		app.Post("/sms/send", ApiSmsSend)
+		if err := app.Build(); err != nil {
+			t.Fatalf("构建测试应用失败：%v", err)
+		}
+		const rawBody = `{"scene": not-json`
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/sms/send", strings.NewReader(rawBody))
+		req.Header.Set("Content-Type", "application/json")
+		app.ServeHTTP(rec, req)
+
+		body := rec.Body.String()
+		for _, leak := range []string{"invalid character", "cannot unmarshal", "unexpected end of JSON", "looking for beginning"} {
+			if strings.Contains(body, leak) {
+				t.Errorf("响应回显了 JSON 解析器措辞 %q：%s", leak, body)
+			}
+		}
+		if strings.Contains(body, "not-json") {
+			t.Errorf("响应回显了原始请求文本：%s", body)
+		}
+		var resp struct {
+			Code int    `json:"code"`
+			Msg  string `json:"msg"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("解析响应失败：%v（body=%s）", err, body)
+		}
+		if resp.Code != config.StatusFailed {
+			t.Errorf("code = %d，期望 %d", resp.Code, config.StatusFailed)
+		}
+		if resp.Msg == "" {
+			t.Error("msg 为空：错误出口必须给出可翻译文案")
+		}
+	})
+
+	t.Run("DB错误归约为SmsSendFailed", func(t *testing.T) {
+		synthetic := errors.New("Error 1406: Data too long for column 'template_id' at row 1")
+		got := s10Capture(t, synthetic, respondSmsError)
+		// s10Capture 强制 I18n 为 nil，TplTr 兜底返回键本身。
+		if want := sms.ErrSmsSendFailed.Error(); got != want {
+			t.Fatalf("合成 DB 错误应归约为 %q，实际 %q", want, got)
+		}
+		if strings.Contains(got, "1406") || strings.Contains(got, "template_id") {
+			t.Errorf("响应回显了 DB 内部措辞：%q", got)
+		}
+	})
+}
+
+// s10CheckResetStepOrder 钉住 ApiSmsPasswordReset 的步骤顺序：
+// ReadJSON → 密码长度 → NormalizePhone → VerifySmsCode(reset) → 按号码查用户
+// → EncryptPassword → DB.Save。provider 侧的 TestSmsFullResetJourney 按同一
+// 顺序跑真库；本护栏保证 handler 没有偏离那条路径。
+func s10CheckResetStepOrder(src string) error {
+	steps := []string{
+		"ctx.ReadJSON(&req)",
+		"sms.NormalizePhone(",
+		"sms.SceneReset",
+		"GetUserInfoByPhoneCountry(",
+		"EncryptPassword(",
+		"currentSite.DB.Save(user)",
+	}
+	prev := -1
+	for _, step := range steps {
+		i := strings.Index(src, step)
+		if i < 0 {
+			return fmt.Errorf("缺步骤 %q", step)
+		}
+		if i <= prev {
+			return fmt.Errorf("步骤顺序错误：%q 出现在前一阶段之前", step)
+		}
+		prev = i
+	}
+	return nil
+}
+
+// TestSmsResetHandlerStepOrder：真实源码绿 / 合成「删掉 EncryptPassword」源码红 / 恢复绿。
+func TestSmsResetHandlerStepOrder(t *testing.T) {
+	src := readFuncSource(t, "apiSms.go", "ApiSmsPasswordReset")
+	if err := s10CheckResetStepOrder(src); err != nil {
+		t.Fatalf("真实源码护栏失败：%v", err)
+	}
+	bad := strings.Replace(src, "if err = user.EncryptPassword(req.Password); err != nil {", "", 1)
+	if bad == src {
+		t.Fatal("反向对照准备失败：真实源码里没有 EncryptPassword 调用")
+	}
+	if err := s10CheckResetStepOrder(bad); err == nil {
+		t.Fatal("反向对照失败：删掉 EncryptPassword 的源码仍判绿")
+	}
+	if err := s10CheckResetStepOrder(src); err != nil {
+		t.Fatalf("恢复绿失败：%v", err)
 	}
 }

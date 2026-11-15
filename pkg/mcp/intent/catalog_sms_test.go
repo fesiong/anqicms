@@ -140,6 +140,18 @@ func TestSmsIntentParamsMatchEndpoints(t *testing.T) {
 		"logs":         smsCatalogParams(t, doc, "GET", logsPath),
 	}
 
+	// R137②：test 动作的落点参数集必须恰为 {phone_country, phone}。
+	testParams := endpointParams["test"]
+	gotTest := make([]string, 0, len(testParams))
+	for name := range testParams {
+		gotTest = append(gotTest, name)
+	}
+	sort.Strings(gotTest)
+	wantTest := []string{"phone", "phone_country"}
+	if strings.Join(gotTest, ",") != strings.Join(wantTest, ",") {
+		t.Errorf("POST %s 的参数集应为 %v，实得 %v（多传会被 ReadJSON 静默忽略）", testPath, wantTest, gotTest)
+	}
+
 	// 第二步：Compose 的落点必须与接口约定逐字一致。
 	wantRoutes := map[string]string{
 		"setting_get":  "GET " + settingPath,
@@ -256,7 +268,7 @@ func TestSmsSecretFieldNamesCovered(t *testing.T) {
 	}
 	for _, name := range notSecret {
 		if IsSecretField(name) {
-			t.Errorf("%s 不是凭据，被掩码会让调用方误判配置状态", name)
+			t.Errorf("%s 不是凭据，掩码后写回会毁链接/误改配置", name)
 		}
 	}
 }

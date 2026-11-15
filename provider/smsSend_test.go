@@ -868,7 +868,7 @@ func TestSmsDoesNotReuseCodeCache(t *testing.T) {
 	if checked != len(prodFiles) {
 		t.Errorf("检查器报告检查了 %d 个文件，实际传入 %d 个", checked, len(prodFiles))
 	}
-	t.Logf("[R64] 已检查 %d 个生产文件：%v；smsVerify.go 属任务 9、当前不存在故跳过该路径，目录级 glob 会在其创建后自动纳入",
+	t.Logf("[R64] 已检查 %d 个生产文件：%v（含任务 9 创建的 smsVerify.go；目录级 glob 会在新增 sms*.go 后自动纳入）",
 		checked, prodNames)
 
 	t.Run("反向对照_合成含CodeCache源码必须变红", func(t *testing.T) {
@@ -1455,5 +1455,53 @@ func TestSmsSendTestSceneRequiresLoginTemplate(t *testing.T) {
 	}, &fakeSmsSender{})
 	if !errors.Is(err, sms.ErrSmsTemplateMissing) {
 		t.Fatalf("只留 test 模板时 test 发码应报 ErrSmsTemplateMissing，得到 %v", err)
+	}
+}
+
+// TestSmsSendLongTwilioTemplatePersistsVerbatim 是 R138 的真库回归：
+// Twilio 的 TemplateId 槽承载整段未渲染文案，历史列宽 varchar(64) 会让英文文案
+// 插入时报 MySQL 1406 Data too long，整条发码链路失败。这里用 >64 字符的文案
+// 走测试接缝发码（假 sender、不触网），并回读 sms_logs.template_id 逐字比对。
+func TestSmsSendLongTwilioTemplatePersistsVerbatim(t *testing.T) {
+	w := setupSmsTest(t)
+
+	const longText = "Your verification code is {{code}}. This message is intentionally longer than sixty-four chars."
+	if len(longText) <= 64 {
+		t.Fatalf("测试文案只有 %d 字符，起不到 >64 的回归作用", len(longText))
+	}
+	cfg := s8TwilioConfig("login")
+	cfg.Twilio.International.Texts["login"] = longText
+	s8UseConfig(t, w, cfg)
+
+	country, local := smsTestPhone(t, w)
+	start := s8TestStart.Load()
+
+	fake := &fakeSmsSender{res: sms.SendResult{BizId: "B-long-template"}}
+	if _, err := w.sendSmsCodeWithSender(SmsSendInput{
+		PhoneCountry: country, Phone: local, Scene: "login", Ip: s8TestIp,
+	}, fake); err != nil {
+		t.Fatalf(">64 字符的 Twilio 文案发码应成功（修复前会触发 1406 Data too long）：%v", err)
+	}
+	if fake.calls != 1 {
+		t.Fatalf("sender.Send 应被调用 1 次，实际 %d", fake.calls)
+	}
+
+	var logRow model.SmsLog
+	if err := w.DB.Where("phone_country = ? AND phone = ? AND created_time >= ?", country, local, start).
+		Order("id DESC").First(&logRow).Error; err != nil {
+		t.Fatalf("读回 sms_logs 失败：%v", err)
+	}
+	if logRow.TemplateId != longText {
+		t.Errorf("sms_logs.template_id 与文案不是逐字相等：\n got=%q\nwant=%q", logRow.TemplateId, longText)
+	}
+	if logRow.Status != 1 {
+		t.Errorf("sms_logs.status = %d，期望 1（success）", logRow.Status)
+	}
+	// 未渲染文案进日志、渲染后的正文只进平台请求（§4.3 / §10.5）。
+	if !strings.Contains(fake.lastReq.Text, fake.lastCode) {
+		t.Errorf("发送给平台的正文应含验证码：%q", fake.lastReq.Text)
+	}
+	if strings.Contains(logRow.TemplateId, fake.lastCode) {
+		t.Errorf("sms_logs.template_id 不得含验证码明文：%q", logRow.TemplateId)
 	}
 }

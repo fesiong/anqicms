@@ -25,7 +25,9 @@ type SmsCode struct {
 }
 
 // SmsLog 短信发送流水：不存验证码明文，也不存渲染后的正文。
-// 字段与列定义逐字来自规格 §4.3。
+// 字段与列定义逐字来自规格 §4.3；TemplateId 列宽 500（R138）：Twilio 的该槽
+// 承载整段未渲染文案（provider/sms/resolve.go），英文文案普遍超过 64 字符，
+// 老库由 provider/dao.go 的 ensureSmsLogTemplateColumn 幂等加宽。
 type SmsLog struct {
 	Id           uint   `json:"id" gorm:"column:id;type:int unsigned;primaryKey;autoIncrement"`
 	SiteId       uint   `json:"site_id" gorm:"column:site_id;type:int unsigned;not null;default:0;index:idx_site_created,priority:1"`
@@ -34,7 +36,7 @@ type SmsLog struct {
 	Scene        string `json:"scene" gorm:"column:scene;type:varchar(32);not null;default:''"`
 	Provider     string `json:"provider" gorm:"column:provider;type:varchar(16);not null;default:''"`
 	Region       string `json:"region" gorm:"column:region;type:varchar(16);not null;default:''"`
-	TemplateId   string `json:"template_id" gorm:"column:template_id;type:varchar(64);not null;default:''"`
+	TemplateId   string `json:"template_id" gorm:"column:template_id;type:varchar(500);not null;default:''"`
 	SignName     string `json:"sign_name" gorm:"column:sign_name;type:varchar(64);not null;default:''"`
 	BizId        string `json:"biz_id" gorm:"column:biz_id;type:varchar(64);not null;default:''"`
 

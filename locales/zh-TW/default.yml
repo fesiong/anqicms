@@ -881,3 +881,4 @@
 "SmsCodeMismatch": "驗證碼錯誤，還可嘗試 %d 次"
 "SmsCodeLocked": "驗證碼錯誤次數過多，請重新獲取"
 "SmsSendFailed": "簡訊發送失敗，請稍後重試"
+"SmsParamInvalid": "請求參數格式不正確"

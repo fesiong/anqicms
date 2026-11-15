@@ -3,6 +3,7 @@ package provider
 import (
 	"crypto/rand"
 	"errors"
+	"log"
 	"math/big"
 
 	"gorm.io/gorm"
@@ -65,7 +66,9 @@ func (w *Website) LoginViaSms(req *request.ApiLoginRequest) (*model.User, error)
 		return user, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		// DB 故障不能当作「用户不存在」，否则会误建号。
+		// DB 故障不能当作「用户不存在」，否则会误建号。对外仍由 respondSmsError
+		// 归约成通用文案（R139），这里必须把真实原因留在服务端日志（R99②）。
+		log.Println("LoginViaSms 查询手机号用户失败：", err)
 		return nil, err
 	}
 

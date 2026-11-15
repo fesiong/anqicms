@@ -11,15 +11,49 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// smsKnownBusinessErrors 是 R139 的「已知短信错误」白名单：只有这些哨兵允许把
+// err.Error() 直接当翻译键送出去。其余错误（ctx.ReadJSON 的解析错误、DB 驱动错误、
+// 任何内部措辞）一律归约到 sms.ErrSmsSendFailed，绝不回显给客户端（§10.2）。
+// 不允许用「字符串含 Sms 前缀」之类的猜测：那会让任意内部错误冒充业务错误。
+var smsKnownBusinessErrors = []error{
+	sms.ErrSmsServiceNotEnabled,
+	sms.ErrSmsSceneNotEnabled,
+	sms.ErrSmsPhoneInvalid,
+	sms.ErrSmsRegionUnsupported,
+	sms.ErrSmsCredentialMissing,
+	sms.ErrSmsSignMissing,
+	sms.ErrSmsTemplateMissing,
+	sms.ErrSmsIpLimited,
+	sms.ErrSmsPhoneLimited,
+	sms.ErrSmsCodeNotFound,
+	sms.ErrSmsCodeExpired,
+	sms.ErrSmsSendFailed,
+}
+
+// s10IsKnownSmsError 判定 err 是否命中已知短信哨兵（逐个 errors.Is 枚举）。
+func s10IsKnownSmsError(err error) bool {
+	for _, known := range smsKnownBusinessErrors {
+		if errors.Is(err, known) {
+			return true
+		}
+	}
+	return false
+}
+
 // respondSmsError 是前台短信端点的统一错误出口（R81/R82/R83）。
 // code 恒为 config.StatusFailed；msg 只暴露可翻译键，绝不回显平台原始错误码/消息。
 func respondSmsError(ctx iris.Context, site *provider.Website, err error) {
-	// 平台原始错误码与消息只进 sms_logs，前台归约到通用翻译键（规格 §10.2 / R83）。
-	if errors.Is(err, sms.ErrSmsSendFailed) {
-		err = sms.ErrSmsSendFailed
-	}
 	var wait *sms.WaitError
 	var attempts *sms.AttemptsError
+	// 平台原始错误码与消息只进 sms_logs，前台归约到通用翻译键（规格 §10.2 / R83）。
+	// *WaitError / *AttemptsError 虽不在哨兵白名单里，但它们带 %d 参数、必须走下面
+	// 的类型分支，故先按类型放行；其余非已知错误一律归约（R139）。
+	if errors.Is(err, sms.ErrSmsSendFailed) {
+		err = sms.ErrSmsSendFailed
+	} else if !errors.As(err, &wait) && !errors.As(err, &attempts) && !s10IsKnownSmsError(err) {
+		// R139：ReadJSON / DB 等非业务错误一律归约，原始措辞不得出门。
+		err = sms.ErrSmsSendFailed
+	}
 	// 方法值：site.TplTr 内部兜底是 fmt.Sprintf(str, args...)，被 Go 1.24+ printf
 	// vet 识别为 printf wrapper；对「无可变参数的非常量格式串」会报
 	// non-constant format string。经方法值调用可规避，翻译语义与直接调用完全一致。

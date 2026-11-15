@@ -326,6 +326,9 @@ func (w *Website) InitModelData() {
 	_ = w.ensureUserGroupCategoryTable()
 	// PayPal 退款字段（payments.capture_id / order_refunds.terrace_id）：退款链路缺列直接报错。
 	_ = w.ensurePaypalColumns()
+	// sms_logs.template_id 历史列宽只有 varchar(64)，而 Twilio 的该槽承载整段
+	// 未渲染文案（英文文案普遍 > 64 字符），老库必须幂等加宽（R138）。
+	_ = w.ensureSmsLogTemplateColumn()
 	// 商品属性拆表（3.7.1 回填 + 3.8.0 删列），顺序与失败闸门见 initArchiveSchema。
 	w.initArchiveSchema()
 	// 检查默认模型，如果没有，则添加, 默认的模型：1 文章，2 产品
@@ -429,6 +432,39 @@ func (w *Website) InitModelData() {
 			w.UpgradeMultiCategory()
 		}()
 	}
+}
+
+// ensureSmsLogTemplateColumn 把 sms_logs.template_id 从历史 varchar(64) 幂等加宽到
+// varchar(500)（R138）。
+//
+// 为什么不能只靠 AutoMigrateDB：它只在 last_run_version != config.Version 时执行
+// （升级才跑），而模型标签已改成 varchar(500)，老站库的物理列仍是 varchar(64)。
+// Twilio 的 TemplateId 槽承载整段未渲染文案（provider/sms/resolve.go），英文文案
+// 普遍超过 64 字符，插入会触发 MySQL 1406 Data too long，整条发码链路直接失败。
+//
+// 只在 information_schema 报的列宽 < 500 时执行 ALTER；失败只记日志不 panic；
+// 绝不 DROP 列、绝不改数据。
+func (w *Website) ensureSmsLogTemplateColumn() error {
+	if w.DB == nil || !w.DB.Migrator().HasTable(&model.SmsLog{}) {
+		return nil
+	}
+	var length int64
+	if err := w.DB.Raw(
+		"SELECT COALESCE(CHARACTER_MAXIMUM_LENGTH, 0) FROM information_schema.COLUMNS " +
+			"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sms_logs' AND COLUMN_NAME = 'template_id'").
+		Row().Scan(&length); err != nil {
+		log.Println("检查 sms_logs.template_id 列宽失败：", err)
+		return err
+	}
+	if length >= 500 {
+		return nil
+	}
+	if err := w.DB.Exec("ALTER TABLE `sms_logs` MODIFY COLUMN `template_id` varchar(500) NOT NULL DEFAULT ''").Error; err != nil {
+		log.Println("加宽 sms_logs.template_id 失败：", err)
+		return err
+	}
+	log.Printf("sms_logs.template_id 列宽已从 %d 加宽到 500\n", length)
+	return nil
 }
 
 func getTableEngine(db *gorm.DB, tableName string) (string, error) {

@@ -3,6 +3,7 @@ package manageController
 import (
 	"encoding/json"
 	"errors"
+	"strconv"
 
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
@@ -200,16 +201,46 @@ type pluginSmsTestRequest struct {
 	Phone        string `json:"phone"`         // 本地号码
 }
 
+// smsOpsKnownBusinessErrors 与前台 respondSmsError 同口径（R139/R120①）：
+// 只有这些哨兵允许把 err.Error() 当翻译键送出；ReadJSON、DB 等非业务错误一律
+// 归约到 sms.ErrSmsSendFailed，绝不回显解析器或驱动的内部措辞。
+var smsOpsKnownBusinessErrors = []error{
+	sms.ErrSmsServiceNotEnabled,
+	sms.ErrSmsSceneNotEnabled,
+	sms.ErrSmsPhoneInvalid,
+	sms.ErrSmsRegionUnsupported,
+	sms.ErrSmsCredentialMissing,
+	sms.ErrSmsSignMissing,
+	sms.ErrSmsTemplateMissing,
+	sms.ErrSmsIpLimited,
+	sms.ErrSmsPhoneLimited,
+	sms.ErrSmsCodeNotFound,
+	sms.ErrSmsCodeExpired,
+	sms.ErrSmsSendFailed,
+}
+
+func s13IsKnownSmsError(err error) bool {
+	for _, known := range smsOpsKnownBusinessErrors {
+		if errors.Is(err, known) {
+			return true
+		}
+	}
+	return false
+}
+
 // respondSmsOpsError 是后台短信端点（test / logs）的统一错误出口（R114）。
 // code 恒为 config.StatusFailed；msg 只暴露可翻译键，绝不回显平台原始错误码/消息。
 // 平台 *SendError 经其 Unwrap 归约到 sms.ErrSmsSendFailed；仅 *WaitError 传 Seconds、
 // *AttemptsError 传 Remaining，其余错误一律不传参（Tr 兜底是字符串拼接，多传参会污染文案）。
+// R120①：ReadJSON 失败也走这里，非已知业务错误统一归约，不回显解析文本。
 func respondSmsOpsError(ctx iris.Context, currentSite *provider.Website, err error) {
-	if errors.Is(err, sms.ErrSmsSendFailed) {
-		err = sms.ErrSmsSendFailed
-	}
 	var wait *sms.WaitError
 	var attempts *sms.AttemptsError
+	if errors.Is(err, sms.ErrSmsSendFailed) {
+		err = sms.ErrSmsSendFailed
+	} else if !errors.As(err, &wait) && !errors.As(err, &attempts) && !s13IsKnownSmsError(err) {
+		err = sms.ErrSmsSendFailed
+	}
 	// 方法值：与前台 respondSmsError 口径一致（统一 currentSite.Tr(err.Error(), args...)）。
 	translate := currentSite.Tr
 	var msg string
@@ -235,10 +266,8 @@ func PluginSmsTest(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req pluginSmsTestRequest
 	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+		// R120①：与 test/logs 的其它错误统一出口（非业务错误归约，不回显解析文本）。
+		respondSmsOpsError(ctx, currentSite, err)
 		return
 	}
 	// 归一化定 region（与 SendSmsCode 第 3 步同口径）。
@@ -278,6 +307,57 @@ func PluginSmsTest(ctx iris.Context) {
 	})
 }
 
+// smsLogFilterParams 是 logs 查询的强类型筛选参数（R119② / R120③）。
+// status 的 0 是合法筛选值，因此必须用 hasStatus 区分「未传」与「传 0」。
+type smsLogFilterParams struct {
+	status    int
+	hasStatus bool
+	startTS   int64
+	endTS     int64
+}
+
+// smsParseLogFilters 校验并解析 status / start_time / end_time。
+//
+// 口径（R119② / R120③）：status 只允许 ""（不筛选）/ "0" / "1" / "-1"；
+// start_time / end_time 只允许 "" 或正整数 Unix 秒；两者都传且 start > end 非法。
+// ok = false 时 handler 必须返回 SmsParamInvalid，绝不静默当成未传 —— 静默忽略会
+// 让非法的筛选条件退化成「全量」，结果集被放大且界面看不出原因。
+func smsParseLogFilters(status, startTime, endTime string) (smsLogFilterParams, bool) {
+	var p smsLogFilterParams
+	switch status {
+	case "":
+	case "0":
+		p.status, p.hasStatus = 0, true
+	case "1":
+		p.status, p.hasStatus = 1, true
+	case "-1":
+		p.status, p.hasStatus = -1, true
+	default:
+		return p, false
+	}
+	parseTS := func(raw string) (int64, bool) {
+		if raw == "" {
+			return 0, true
+		}
+		v, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || v <= 0 {
+			return 0, false
+		}
+		return v, true
+	}
+	var ok bool
+	if p.startTS, ok = parseTS(startTime); !ok {
+		return p, false
+	}
+	if p.endTS, ok = parseTS(endTime); !ok {
+		return p, false
+	}
+	if startTime != "" && endTime != "" && p.startTS > p.endTS {
+		return p, false
+	}
+	return p, true
+}
+
 // PluginSmsLogs 分页查询短信发送记录（GET /plugin/sms/logs，规格 §7.2）。
 //
 // 参数说明：
@@ -309,6 +389,15 @@ func PluginSmsLogs(ctx iris.Context) {
 	phone := ctx.URLParam("phone")
 	startTime := ctx.URLParam("start_time")
 	endTime := ctx.URLParam("end_time")
+	// R120③：非法筛选参数明确报错（SmsParamInvalid），不得静默当成未传。
+	filters, ok := smsParseLogFilters(status, startTime, endTime)
+	if !ok {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.Tr("SmsParamInvalid"),
+		})
+		return
+	}
 
 	list, total := currentSite.GetSmsLogList(func(tx *gorm.DB) *gorm.DB {
 		if scene != "" {
@@ -317,17 +406,17 @@ func PluginSmsLogs(ctx iris.Context) {
 		if providerName != "" {
 			tx = tx.Where("provider = ?", providerName)
 		}
-		if status != "" {
-			tx = tx.Where("status = ?", status)
+		if filters.hasStatus {
+			tx = tx.Where("status = ?", filters.status)
 		}
 		if phone != "" {
 			tx = tx.Where("phone = ?", phone)
 		}
-		if startTime != "" {
-			tx = tx.Where("created_time >= ?", startTime)
+		if filters.startTS > 0 {
+			tx = tx.Where("created_time >= ?", filters.startTS)
 		}
-		if endTime != "" {
-			tx = tx.Where("created_time <= ?", endTime)
+		if filters.endTS > 0 {
+			tx = tx.Where("created_time <= ?", filters.endTS)
 		}
 		return tx
 	}, page, pageSize)

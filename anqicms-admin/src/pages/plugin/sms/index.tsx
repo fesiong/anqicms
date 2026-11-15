@@ -69,11 +69,16 @@ const PluginSms: React.FC = () => {
 
   // 读回配置：非空凭据是 ******** 掩码，直接回填输入框，不清空。
   const loadSetting = async () => {
-    const res = await pluginSmsSetting();
-    const data = res.data || {};
-    setSetting(data);
-    formRef.current?.setFieldsValue(data);
-    return data;
+    try {
+      const res = await pluginSmsSetting();
+      const data = res.data || {};
+      setSetting(data);
+      formRef.current?.setFieldsValue(data);
+      return data;
+    } catch (err: any) {
+      message.error(err?.message || String(err));
+      return undefined;
+    }
   };
 
   useEffect(() => {
@@ -102,6 +107,8 @@ const PluginSms: React.FC = () => {
       message.success(res.msg || t('plugin.sms.save.success'));
       // 保存成功后重新拉取，让掩码状态与后端一致。
       await loadSetting();
+    } catch (err: any) {
+      message.error(err?.message || String(err));
     } finally {
       hide();
     }

@@ -1,7 +1,6 @@
 package manageController
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"go/ast"
@@ -12,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/provider/sms"
 )
@@ -103,6 +101,7 @@ func s13CheckTestUsesSendSmsCode(src string) error {
 func s13CheckErrorDispatch(src string) error {
 	if err := s13Require(src,
 		`errors\.Is\(err,\s*sms\.ErrSmsSendFailed\)`,
+		`!s13IsKnownSmsError\(err\)`, // R139/R120①：未知错误归约
 		`errors\.As\(err,\s*&wait\)`,
 		`errors\.As\(err,\s*&attempts\)`,
 		`err\.Error\(\),\s*wait\.Seconds\)`,
@@ -374,10 +373,10 @@ func TestPluginSmsLogsFilters(t *testing.T) {
 	}{
 		{"scene", `tx = tx.Where("scene = ?", scene)`},
 		{"provider", `tx = tx.Where("provider = ?", providerName)`},
-		{"status", `tx = tx.Where("status = ?", status)`},
+		{"status", `tx = tx.Where("status = ?", filters.status)`},
 		{"phone", `tx = tx.Where("phone = ?", phone)`},
-		{"start_time", `tx = tx.Where("created_time >= ?", startTime)`},
-		{"end_time", `tx = tx.Where("created_time <= ?", endTime)`},
+		{"start_time", `tx = tx.Where("created_time >= ?", filters.startTS)`},
+		{"end_time", `tx = tx.Where("created_time <= ?", filters.endTS)`},
 	}
 	for _, c := range cases {
 		t.Run("筛选_"+c.name, func(t *testing.T) {
@@ -411,8 +410,12 @@ func TestPluginSmsLogsFilters(t *testing.T) {
 	})
 }
 
-// TestPluginSmsLogsNeverReturnsCode：go/ast 断言返回结构不含码字段；
-// 端到端 JSON 序列化复核不出现 code_hash（SmsCode.CodeHash json:"-" 由任务 6 钉住）。
+// TestPluginSmsLogsNeverReturnsCode：go/ast 断言 GetSmsLogList 返回结构不含码字段。
+//
+// R120②：这里曾经序列化手工构造的 []*model.SmsLog 字面量（恒绿且证明不了真实
+// 返回值）。真库 + 假 sender 的端到端 JSON 复核需要 DB 与未导出的测试接缝，
+// 而本包测试进程不加载 config.json、拿不到 DB，故真实序列化复核已迁到
+// provider/sms_integration_test.go 的 TestSmsLogListJSONHasNoCodeOrPlaintext。
 func TestPluginSmsLogsNeverReturnsCode(t *testing.T) {
 	service := smsFuncSource(t, s13SmsServiceFile, "GetSmsLogList")
 	if err := s13CheckNoCodeInLogList(service); err != nil {
@@ -431,23 +434,146 @@ func TestPluginSmsLogsNeverReturnsCode(t *testing.T) {
 	if err := s13CheckNoCodeInLogList(service); err != nil {
 		t.Fatalf("恢复绿失败：%v", err)
 	}
+	t.Log("恢复绿：GetSmsLogList 返回 SmsLog、源码无码字段 ✓（真实 JSON 复核见 provider 集成测试）")
+}
 
-	// 端到端 JSON 序列化复核。
-	logJSON, err := json.Marshal([]*model.SmsLog{{Phone: "19900000001", TemplateId: "LOGIN {{code}}"}})
-	if err != nil {
-		t.Fatalf("序列化 SmsLog 失败：%v", err)
+// s13CheckTestReadJSONExit（R120①）：PluginSmsTest 的 ReadJSON 失败必须走
+// respondSmsOpsError，不得直接 ctx.JSON 回显 err.Error()。
+func s13CheckTestReadJSONExit(src string) error {
+	if err := s13Require(src,
+		`if err := ctx\.ReadJSON\(&req\); err != nil \{`,
+	); err != nil {
+		return err
 	}
-	if strings.Contains(string(logJSON), "code_hash") {
-		t.Errorf("SmsLog JSON 出现 code_hash：%s", logJSON)
+	// 只截取 ReadJSON 失败分支（到该分支的 return 为止）：全函数里还有其它
+	// respondSmsOpsError 调用，不截断会让合成坏源码被后面的分支“救活”。
+	start := strings.Index(src, "if err := ctx.ReadJSON(&req); err != nil {")
+	if start < 0 {
+		return errors.New("未找到 ReadJSON 失败分支")
 	}
-	codeJSON, err := json.Marshal(&model.SmsCode{CodeHash: "SUPERSECRETCODEHASH"})
-	if err != nil {
-		t.Fatalf("序列化 SmsCode 失败：%v", err)
+	rest := src[start:]
+	end := strings.Index(rest, "return")
+	if end < 0 {
+		return errors.New("ReadJSON 失败分支结构异常（未找到 return）")
 	}
-	if strings.Contains(string(codeJSON), "code_hash") || strings.Contains(string(codeJSON), "SUPERSECRETCODEHASH") {
-		t.Errorf("SmsCode.CodeHash 未被 json:\"-\" 屏蔽：%s", codeJSON)
+	branch := rest[:end]
+	if !strings.Contains(branch, "respondSmsOpsError(ctx, currentSite, err)") {
+		return errors.New("ReadJSON 失败未走 respondSmsOpsError（会回显 JSON 解析器文本）")
 	}
-	t.Log("恢复绿 + 端到端：GetSmsLogList 返回 SmsLog 无码字段，JSON 序列化不出现 code_hash ✓")
+	if strings.Contains(branch, "err.Error()") {
+		return errors.New("ReadJSON 失败分支仍把 err.Error() 直接写进响应")
+	}
+	return nil
+}
+
+// TestPluginSmsTestReadJSONGoesThroughOpsError 三段式：真实源码绿 / 合成回显
+// err.Error() 的源码红 / 恢复绿。
+func TestPluginSmsTestReadJSONGoesThroughOpsError(t *testing.T) {
+	real := smsFuncSource(t, s13PluginSmsFile, "PluginSmsTest")
+	if err := s13CheckTestReadJSONExit(real); err != nil {
+		t.Fatalf("真实源码护栏失败：%v", err)
+	}
+	bad := strings.Replace(real, "respondSmsOpsError(ctx, currentSite, err)",
+		`ctx.JSON(iris.Map{"code": config.StatusFailed, "msg": err.Error()})`, 1)
+	if bad == real {
+		t.Fatal("反向对照锚点失效：源码里没找到 respondSmsOpsError(ctx, currentSite, err)")
+	}
+	if err := s13CheckTestReadJSONExit(bad); err == nil {
+		t.Fatal("反向对照失败：ReadJSON 失败直接把 err.Error() 写进响应的源码仍判绿")
+	}
+	if err := s13CheckTestReadJSONExit(real); err != nil {
+		t.Fatalf("恢复绿失败：%v", err)
+	}
+}
+
+// s13CheckLogParamValidation（R119②/R120③）：logs handler 必须先经
+// smsParseLogFilters 校验，非法时返回 SmsParamInvalid，且校验在查询之前。
+func s13CheckLogParamValidation(src string) error {
+	if err := s13Require(src,
+		`status := ctx\.URLParam\("status"\)`,
+		`startTime := ctx\.URLParam\("start_time"\)`,
+		`endTime := ctx\.URLParam\("end_time"\)`,
+		`smsParseLogFilters\(status, startTime, endTime\)`,
+		`currentSite\.Tr\("SmsParamInvalid"\)`,
+		`config\.StatusFailed`,
+	); err != nil {
+		return err
+	}
+	iValidate := strings.Index(src, "smsParseLogFilters(")
+	iList := strings.Index(src, "GetSmsLogList(")
+	if iValidate < 0 || iList < 0 || iValidate >= iList {
+		return errors.New("参数校验未在查询之前（非法参数会静默退化成全量）")
+	}
+	return nil
+}
+
+// TestPluginSmsLogsParamValidation：status / start_time / end_time 的解析口径
+// 逐值表驱动（每个非法值一条 + 合法值不误伤），并钉住 handler 真的用了它。
+func TestPluginSmsLogsParamValidation(t *testing.T) {
+	cases := []struct {
+		name               string
+		status, start, end string
+		ok                 bool
+	}{
+		{"不传", "", "", "", true},
+		{"status0", "0", "", "", true},
+		{"status1", "1", "", "", true},
+		{"status-1", "-1", "", "", true},
+		{"status超出枚举", "2", "", "", false},
+		{"status只有空格", " ", "", "", false},
+		{"status非数字", "abc", "", "", false},
+		{"status小数", "1.0", "", "", false},
+		{"start合法", "", "1700000000", "", true},
+		{"start为0非法", "", "0", "", false},
+		{"start负数非法", "", "-1", "", false},
+		{"start非数字非法", "", "abc", "", false},
+		{"start小数非法", "", "1.5", "", false},
+		{"end合法", "", "", "1700000100", true},
+		{"end为0非法", "", "", "0", false},
+		{"end非数字非法", "", "", "abc", false},
+		{"区间合法", "", "1700000000", "1700000100", true},
+		{"区间相等合法", "", "1700000000", "1700000000", true},
+		{"区间反向非法", "", "1700000100", "1700000000", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if _, ok := smsParseLogFilters(c.status, c.start, c.end); ok != c.ok {
+				t.Errorf("smsParseLogFilters(%q,%q,%q) ok=%v，期望 %v",
+					c.status, c.start, c.end, ok, c.ok)
+			}
+		})
+	}
+
+	// 合法值不误伤：解析结果逐字段核对（status=0 必须区分「传了 0」与「没传」）。
+	p, ok := smsParseLogFilters("0", "1700000000", "1700000100")
+	if !ok {
+		t.Fatal("合法参数被判非法")
+	}
+	if !p.hasStatus || p.status != 0 {
+		t.Errorf("status=0 应作为合法筛选值：hasStatus=%v status=%d", p.hasStatus, p.status)
+	}
+	if p.startTS != 1700000000 || p.endTS != 1700000100 {
+		t.Errorf("时间戳解析错误：start=%d end=%d", p.startTS, p.endTS)
+	}
+	if p, ok := smsParseLogFilters("", "", ""); !ok || p.hasStatus || p.startTS != 0 || p.endTS != 0 {
+		t.Errorf("未传筛选时不应产生任何条件：%+v ok=%v", p, ok)
+	}
+
+	// handler 真的调用校验器（三段式）。
+	real := smsFuncSource(t, s13PluginSmsFile, "PluginSmsLogs")
+	if err := s13CheckLogParamValidation(real); err != nil {
+		t.Fatalf("真实源码护栏失败：%v", err)
+	}
+	bad := strings.Replace(real, `"msg":  currentSite.Tr("SmsParamInvalid")`, `"msg":  ""`, 1)
+	if bad == real {
+		t.Fatal("反向对照锚点失效：源码里没找到 SmsParamInvalid 文案")
+	}
+	if err := s13CheckLogParamValidation(bad); err == nil {
+		t.Fatal("反向对照失败：非法参数不报 SmsParamInvalid 的源码仍判绿")
+	}
+	if err := s13CheckLogParamValidation(real); err != nil {
+		t.Fatalf("恢复绿失败：%v", err)
+	}
 }
 
 // TestPluginSmsOpsRequireAdminPermission：go/ast 解析 route/manage.go，

@@ -324,6 +324,84 @@ func smsCheckFormReadJSON(funcSrc string) error {
 	return nil
 }
 
+// smsCheckSettingFormIdentityWrite（R111①）用 go/ast 钉住写端点的六步顺序与
+// 指针身份：恰好一次具名 ReadJSON → `*currentSite.PluginSms = req` → SaveSettingValue
+// → AddAdminLog。写成 `currentSite.PluginSms = &req` 会换掉指针身份，其它持有该
+// 指针的发码流程（provider/smsSend.go 等）将看不到新配置。
+func smsCheckSettingFormIdentityWrite(funcSrc string) error {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "pluginSms.go", "package manageController\n"+funcSrc, 0)
+	if err != nil {
+		return fmt.Errorf("解析函数源码失败：%w", err)
+	}
+	readJSON := 0
+	foundDeref, foundPointer := false, false
+	assignOff, saveOff, logOff := -1, -1, -1
+	ast.Inspect(file, func(n ast.Node) bool {
+		switch node := n.(type) {
+		case *ast.AssignStmt:
+			if node.Tok != token.ASSIGN || len(node.Lhs) != 1 || len(node.Rhs) != 1 {
+				return true
+			}
+			if star, ok := node.Lhs[0].(*ast.StarExpr); ok && smsIsCurrentSitePluginSms(star.X) {
+				if id, ok := node.Rhs[0].(*ast.Ident); ok && id.Name == "req" {
+					foundDeref = true
+					assignOff = fset.Position(node.Pos()).Offset
+				}
+			}
+			if sel, ok := node.Lhs[0].(*ast.SelectorExpr); ok && smsIsCurrentSitePluginSms(sel) {
+				if u, ok := node.Rhs[0].(*ast.UnaryExpr); ok && u.Op == token.AND {
+					if id, ok := u.X.(*ast.Ident); ok && id.Name == "req" {
+						foundPointer = true
+					}
+				}
+			}
+		case *ast.CallExpr:
+			sel, ok := node.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			switch sel.Sel.Name {
+			case "ReadJSON":
+				if id, ok := sel.X.(*ast.Ident); ok && id.Name == "ctx" {
+					readJSON++
+				}
+			case "SaveSettingValue":
+				if len(node.Args) == 2 {
+					if k, ok := node.Args[0].(*ast.SelectorExpr); ok {
+						if id, ok := k.X.(*ast.Ident); ok && id.Name == "provider" && k.Sel.Name == "SmsSettingKey" {
+							saveOff = fset.Position(node.Pos()).Offset
+						}
+					}
+				}
+			case "AddAdminLog":
+				logOff = fset.Position(node.Pos()).Offset
+			}
+		}
+		return true
+	})
+
+	if foundPointer {
+		return errors.New("写成 currentSite.PluginSms = &req：指针身份被替换，其它持有者看不到新配置")
+	}
+	if !foundDeref {
+		return errors.New("缺 `*currentSite.PluginSms = req` 解引用赋值")
+	}
+	if readJSON != 1 {
+		return fmt.Errorf("ctx.ReadJSON 出现 %d 次（必须恰好一次）", readJSON)
+	}
+	if saveOff < 0 {
+		return errors.New("缺 currentSite.SaveSettingValue(provider.SmsSettingKey, ...)")
+	}
+	if logOff < 0 {
+		return errors.New("缺 currentSite.AddAdminLog（配置变更无审计）")
+	}
+	if !(assignOff < saveOff && saveOff < logOff) {
+		return errors.New("顺序必须是 赋值 → SaveSettingValue → AddAdminLog")
+	}
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // 六条测试
 // ---------------------------------------------------------------------------
@@ -602,6 +680,41 @@ func TestSmsSettingFormKeepsNamedReadJSON(t *testing.T) {
 	}
 
 	if err := smsCheckFormReadJSON(real); err != nil {
+		t.Fatalf("恢复绿失败：%v", err)
+	}
+}
+
+// TestSmsSettingFormKeepsPointerIdentity（R111①）：写端点必须对
+// *currentSite.PluginSms 解引用赋值（保持指针身份），并完成
+// SaveSettingValue(provider.SmsSettingKey, ...) → AddAdminLog 的顺序。
+// 反向对照：换成 `currentSite.PluginSms = &req`、删掉 AddAdminLog 都必须判红。
+func TestSmsSettingFormKeepsPointerIdentity(t *testing.T) {
+	real := smsFuncSource(t, "pluginSms.go", "PluginSmsSettingForm")
+	if err := smsCheckSettingFormIdentityWrite(real); err != nil {
+		t.Fatalf("真实源码护栏失败：%v", err)
+	}
+
+	badPointer := strings.Replace(real, "*currentSite.PluginSms = req", "currentSite.PluginSms = &req", 1)
+	if badPointer == real {
+		t.Fatal("反向对照准备失败：真实源码里没有 `*currentSite.PluginSms = req`")
+	}
+	if err := smsCheckSettingFormIdentityWrite(badPointer); err == nil {
+		t.Fatal("反向对照失败：写成 currentSite.PluginSms = &req 的源码仍判绿")
+	} else {
+		t.Logf("反向对照：`currentSite.PluginSms = &req` 判红 ✓（%v）", err)
+	}
+
+	badNoLog := strings.Replace(real, "currentSite.AddAdminLog(ctx, ctx.Tr(\"ConfigurationUpdated\"))", "", 1)
+	if badNoLog == real {
+		t.Fatal("反向对照准备失败：真实源码里没有 AddAdminLog 调用")
+	}
+	if err := smsCheckSettingFormIdentityWrite(badNoLog); err == nil {
+		t.Fatal("反向对照失败：删掉 AddAdminLog 的源码仍判绿")
+	} else {
+		t.Logf("反向对照：删掉 AddAdminLog 判红 ✓（%v）", err)
+	}
+
+	if err := smsCheckSettingFormIdentityWrite(real); err != nil {
 		t.Fatalf("恢复绿失败：%v", err)
 	}
 }

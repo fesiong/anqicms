@@ -881,3 +881,4 @@
 "SmsCodeMismatch": "Incorrect verification code, %d attempts remaining"
 "SmsCodeLocked": "Too many incorrect verification code attempts, please request a new one"
 "SmsSendFailed": "Failed to send SMS, please try again later"
+"SmsParamInvalid": "Invalid request parameter"
