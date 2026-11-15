@@ -1032,7 +1032,7 @@ git commit -m "feat(短信): MCP channel_sms 意图接入，默认关闭并补�
 
 **这一步不写新产品代码，只做端到端验证与文档。**
 
-- [ ] **步骤 1：写端到端回归测试**
+- [x] **步骤 1：写端到端回归测试**（16A `6ea0e65e` + 返工 `8c37bbc4`/`0567a9a4`/`93170aff`，`provider/sms_integration_test.go`）
 
 `provider/sms_integration_test.go`（真库 + 假 sender，复用任务 8 基建）：
 
@@ -1041,7 +1041,7 @@ git commit -m "feat(短信): MCP channel_sms 意图接入，默认关闭并补�
 - `TestSmsFullResetJourney`：建号 → 发 `reset` 码 → 重置密码 → 用新密码走既有密码登录成功。
 - `TestSmsSceneCrossReplayRejected`：`login` 码拿去 `reset`、`reset` 码拿去 `bind_new`，全部 `ErrSmsCodeNotFound`。
 
-- [ ] **步骤 2：跑复测三板斧**
+- [x] **步骤 2：跑复测三板斧**（16B `4f1cc4d2`；build/vet/`apicatalog -check`/`apilive` 两连全绿，`go test` 三个目标包绿，唯一失败是 BASE 固有 `TestWebsiteDetailNoPasswordField`——护栏把对齐写死成 5 空格，`request/website.go:42` 实为 7 空格，属测试自身脆弱）
 
 ```bash
 go build ./... && go vet ./...
@@ -1053,7 +1053,7 @@ go run ./cmd/apilive -wire
 ```
 预期：全绿。**provider 按 `-run` 分批，不整跑。** `apilive` 的写操作是可逆验证，跑完核对站点数据未被残留修改。
 
-- [ ] **步骤 3：真机 MCP 冒烟（临时端口，不动 8001）**
+- [x] **步骤 3：真机 MCP 冒烟（临时端口，不动 8001）**（16B `4f1cc4d2` 四件事 + 16C 运行期复验 ④）
 
 ```bash
 go run kandaoni.com/anqicms/main -port 8011 > /tmp/anqicms_sms_verify.log 2>&1
@@ -1063,12 +1063,21 @@ go run kandaoni.com/anqicms/main -port 8011 > /tmp/anqicms_sms_verify.log 2>&1
 验证四件事：① `channel_sms` 默认**不在**工具面；② 打开暴露后 `setting_get` 返回掩码；③ `setting_save` 只传 `code_ttl` 不清掉厂商配置；④ 业务失败时 `isError=true` 且能看到中文拒绝原因。
 **验证完恢复 `api_exposure.mode=read`、删临时数据、停 8011。**
 
-- [ ] **步骤 4：前端真机核对**
+> ⚠️ **落地差异（2026-11-15 实测，勿按原文「修正」实现）**：
+> 1. **端口 8011 在本机被微信客户端占用**，临时服务统一用 **8099**（`make`/`go run ./main -port 8099`）。`go run ./main` 必须后台跑，前台会随 shell 退出被杀。
+> 2. **`api_exposure.mode` 的本机原值是 `all`，不是 `read`**。恢复时的口径是「**原样恢复**」，不得顺手改成 `read` —— 把「恢复现场」偷换成「顺便改状态」是不可接受的。`mode=all` 意味着本机站点对所有后台端点开放 `api_invoke`，属开发库既有状态。
+> 3. 本实现是 **stateless**，响应头**没有** `Mcp-Session-Id`，跳过取会话头这一步。
+> 4. ④「业务失败文案中文可读」在 16B 首次冒烟时**只部分达成**：`setting_save` 的类型错误回的是 `json: cannot unmarshal ...`。已由 `96d30cce` 收口（解析失败 → `SmsParamInvalid`，落库失败 → `SaveFailed`，原文只进服务端日志），16C 运行期复验：A/B 均回「请求参数格式不正确」、对照 C 回「手机号格式不正确」（证明错误没被一律拍平）。
+> 5. `SaveFailed` 分支**只有源码护栏、没有运行期验证**（要触发需让 DB 写失败），不得视为已通过。
+
+- [ ] **步骤 4：前端真机核对 —— 未执行**（替代做法已全部执行；**界面可用性未声称已验证**）
+
+> 本步**故意保持未勾选**。沙箱内 `max dev` 有已知缓存坑（需先删 `node_modules/.cache/{mfsu,mfsu-deps,bundler-webpack}`），且真实浏览器逐项核对需人工操作，本批不具备条件。已执行的替代证据（16B 报告 §4）：`check-sms-payload.mjs` 四条断言 + 反向对照、三文件 esbuild 语法校验、三语键集合差集（85/85/85 无缺无多）、`routes.ts` 绝对路径静态校验（150 条仅 `'*'` 非绝对，为既有 404 兜底）、`config/menu.go` 的 `/plugin/channel/sms` 与前端逐字一致。**结论口径固定为「静态校验 + 代码审查」，不得改写成「界面已验证」。**
 
 起前端 dev，进 `/plugin/channel/sms`，逐项核对：六 tab 切换不丢输入、掩码读回不清空、只改一个字段保存后其余配置不变、发送记录筛选生效。
 ⚠️ **后端未部署真实凭据时，发送测试必然失败**——如实记录「界面可用、真实发送未验证」，**不得把 mock 结果写成通过**。
 
-- [ ] **步骤 5：写 CHANGELOG 与已知限制**
+- [x] **步骤 5：写 CHANGELOG 与已知限制**（16B `4f1cc4d2`，`CHANGELOG.md:3-41`：四条发布须知 + 5 条已知限制 + 4 项未验证，标题用 `## 未发布`——本次不发版，不自造版本号）
 
 `CHANGELOG.md` 按既有格式分节（新增功能／功能优化／问题修复）。必须写进发布说明的四条：
 ① 自动注册用户的 UserName 是随机串，**不能用用户名登录**，只能用手机号登录或到资料页补全；
@@ -1077,7 +1086,9 @@ go run kandaoni.com/anqicms/main -port 8011 > /tmp/anqicms_sms_verify.log 2>&1
 ④ 默认前台模板 `template/default/login.html` **没有手机号登录入口**（实测只有一个 Google 登录链接），站长需自行改模板。
 **四项无法验证的事如实列出**：真实发送、模板审核通过率、国际到达率、生产库隔离级别。
 
-- [ ] **步骤 6：同步知识图谱并 Commit**
+- [x] **步骤 6：同步知识图谱并 Commit**（图谱 `bash graphify-out/rebuild.sh` 成功；产物 `graphify-out/` 被 `.gitignore:24` 忽略、按既有状态不入库。提交按任务拆开：16A `6ea0e65e`→`93170aff`（测试与修复）、16B `4f1cc4d2`（CHANGELOG）、16B-fix1 `96d30cce`（配置保存端点错误出口））
+
+> ⚠️ 本步原文的 `graphify update` **不要直接跑**：build root 漂移时它会把全语料判成新增。刷新一律用 `bash graphify-out/rebuild.sh`。脚本末尾的权限审计数字是写死常量（未改）。
 
 ```bash
 graphify update   # 增量优先；启动前确认没有其它 graphify 进程在跑
