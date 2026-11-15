@@ -372,7 +372,7 @@ type SmsLog struct {
     Scene        string `json:"scene" gorm:"column:scene;type:varchar(32);not null;default:''"`
     Provider     string `json:"provider" gorm:"column:provider;type:varchar(16);not null;default:''"`
     Region       string `json:"region" gorm:"column:region;type:varchar(16);not null;default:''"`
-    TemplateId   string `json:"template_id" gorm:"column:template_id;type:varchar(64);not null;default:''"`
+    TemplateId   string `json:"template_id" gorm:"column:template_id;type:varchar(500);not null;default:''"`
     SignName     string `json:"sign_name" gorm:"column:sign_name;type:varchar(64);not null;default:''"`
     BizId        string `json:"biz_id" gorm:"column:biz_id;type:varchar(64);not null;default:''"`
 
@@ -391,6 +391,8 @@ type SmsLog struct {
 **不存验证码明文，也不存渲染后的正文。** 只存 `template_id` + `sign_name` + `scene`，足以反查发了什么。把含验证码的正文写进日志等于把凭据抄进一张查询权限更宽的表。
 
 `idx_site_created` 列序必须是 `(site_id, created_time)`：后台查询恒为 `WHERE site_id=? ORDER BY created_time DESC`，列序反了站点过滤就用不上索引前缀。这一条要有 go/ast 护栏（复用 `channel_model_test.go` 的 `gormIndexPriority`）。
+
+⚠️ `template_id` 是 **varchar(500)** 而不是 64（2026-11-15 实测更正）：Twilio 的 TemplateId 槽承载**整段未渲染文案**（见 `provider/sms/resolve.go`），英文文案普遍超过 64 字符；在 `STRICT_TRANS_TABLES` 下插入会触发 `1406 Data too long`，整条发码链路直接失败。已由 `provider.ensureSmsLogTemplateColumn()` 对老站库做幂等加宽（information_schema 判宽，绝不 DROP）。
 
 ### 4.4 手机号唯一性：事务内应用层查重
 
