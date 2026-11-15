@@ -466,11 +466,19 @@ func (w *Website) ensureSmsSchema() error {
 		}
 	}
 
-	// 默认值必须是空串：回填 86 是独立的一次数据迁移，不在本幂等补列里做，
-	// 否则会把「未绑定手机号」的存量用户误标成 86 号码持有者。
+	// 列定义必须与 model.User 的 gorm tag **逐字一致**（varchar(8) / NOT NULL / DEFAULT '86'），
+	// 不能在这里另立一套。
+	//
+	// 为什么不是「默认空串」：模型 tag 是 `type:varchar(8);not null;default:'86'`，
+	// 新装站的 AutoMigrateDB 按 tag 建列；这里若写成 varchar(10) DEFAULT ''，
+	// 同一张表在「新装」与「老站升级」两条路径上会长出两种形态（宽度与默认值都不同），
+	// 之后任何按 COLUMN_TYPE/DEFAULT 判定的逻辑都会二义，且 `sms_user_test.go`
+	// 与 `sms_schema_test.go` 会互相打架（2026-11-15 实测踩到）。
+	// 空串与 '86' 在业务上等价（normalizePhoneCountry 把两者都归一成 86），
+	// 所以「未绑定手机号」不会被误判成 86 号码持有者——回填 86 仍是独立的数据迁移。
 	if w.DB.Migrator().HasTable(&model.User{}) &&
 		!w.DB.Migrator().HasColumn(&model.User{}, "phone_country") {
-		if err := w.DB.Exec("ALTER TABLE `users` ADD COLUMN `phone_country` varchar(10) NOT NULL DEFAULT ''").Error; err != nil {
+		if err := w.DB.Exec("ALTER TABLE `users` ADD COLUMN `phone_country` varchar(8) NOT NULL DEFAULT '86'").Error; err != nil {
 			log.Println("添加 users.phone_country 列失败：", err)
 			errs = append(errs, err)
 		}

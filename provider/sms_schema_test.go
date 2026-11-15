@@ -145,6 +145,13 @@ func TestSmsSchemaAddsPhoneCountry(t *testing.T) {
 		t.Fatal("ensureSmsSchema 未加回 users.phone_country（旧站注册会报 1054）")
 	}
 
+	// 列定义必须与 model.User 的 gorm tag 逐字一致：varchar(8) / NOT NULL / DEFAULT '86'。
+	// 断言 '86' 而不是空串，是因为模型 tag 就是 default:'86'，而新装站由
+	// AutoMigrateDB 按 tag 建列 —— 两条路径（新装 / 老站升级）必须长出同一个形态，
+	// 否则按 COLUMN_DEFAULT 判定的逻辑会二义（2026-11-15 实测：这里写 ''、
+	// sms_user_test.go 断言 '86'，两条用例互相打架）。
+	// 空串与 '86' 在业务上等价（normalizePhoneCountry 把两者都归一成 86），
+	// 「未绑定手机号」不会被误判成 86 号码持有者。
 	var def sql.NullString
 	if err := w.DB.Raw(
 		"SELECT COLUMN_DEFAULT FROM information_schema.COLUMNS " +
@@ -152,9 +159,19 @@ func TestSmsSchemaAddsPhoneCountry(t *testing.T) {
 		Row().Scan(&def); err != nil {
 		t.Fatalf("读取 phone_country 默认值失败：%v", err)
 	}
-	// MySQL 的 information_schema 对 DEFAULT '' 既可能回空串，也可能回带引号的
-	// `''`（取决于版本/驱动）；两者都表示空默认值，86 才是需要拒绝的。
-	if !def.Valid || (def.String != "" && def.String != "''") {
-		t.Fatalf("phone_country 默认值必须是空串（回填 86 是另一批），实际 %q（valid=%v）", def.String, def.Valid)
+	// MariaDB 的 information_schema 把字符串默认值回成带单引号的 `'86'`，
+	// 部分版本/驱动会回成裸的 `86`；两者都表示 86，只有空串或其他值才是错的。
+	if !def.Valid || (def.String != "86" && def.String != "'86'") {
+		t.Fatalf("phone_country 默认值必须与模型 tag 一致为 \"86\"，实际 %q（valid=%v）", def.String, def.Valid)
+	}
+	var colType string
+	if err := w.DB.Raw(
+		"SELECT COLUMN_TYPE FROM information_schema.COLUMNS " +
+			"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'phone_country'").
+		Row().Scan(&colType); err != nil {
+		t.Fatalf("读取 phone_country 类型失败：%v", err)
+	}
+	if colType != "varchar(8)" {
+		t.Fatalf("phone_country 类型必须与模型 tag 一致为 varchar(8)，实际 %q", colType)
 	}
 }
