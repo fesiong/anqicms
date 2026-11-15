@@ -52,6 +52,17 @@ func TestEnsureSmsLogTemplateColumnIdempotent(t *testing.T) {
 			t.Fatalf("临时收窄列宽失败：%v", err)
 		}
 		narrowed = true
+		// R146④：收窄是对共享开发库的临时改动，注册**无条件**恢复：即使进程被信号杀掉
+		// （provider 整包会 137），cleanup 也会把列宽改回 500，不会让开发库停在 varchar(64)。
+		t.Cleanup(func() {
+			if err := w.DB.Exec("ALTER TABLE `sms_logs` MODIFY COLUMN `template_id` varchar(500) NOT NULL DEFAULT ''").Error; err != nil {
+				t.Errorf("[R146 cleanup] 恢复 template_id 列宽失败：%v", err)
+				return
+			}
+			if got := smsLogTemplateColumnLen(t, w); got != 500 {
+				t.Errorf("[R146 cleanup] 恢复后列宽 = %d，期望 500", got)
+			}
+		})
 		if got := smsLogTemplateColumnLen(t, w); got != 64 {
 			t.Fatalf("收窄后列宽 = %d，期望 64", got)
 		}
@@ -258,10 +269,12 @@ func TestSmsSceneCrossReplayRejected(t *testing.T) {
 	}
 }
 
-// TestSmsLogListJSONHasNoCodeOrPlaintext（R120②）：用假 sender 造真实 sms_logs /
+// TestSmsLogsJSONNeverExposesCodeHash（R120②/R146⑤）：用假 sender 造真实 sms_logs /
 // sms_codes 行 → 调 GetSmsLogList 拿真实返回值 → json.Marshal 断言：
 // 不含 code_hash、不含验证码明文、不含渲染后的正文，且含 template_id。
-func TestSmsLogListJSONHasNoCodeOrPlaintext(t *testing.T) {
+// 名字与内容对齐后，manageController 的同名源码护栏（TestPluginSmsLogsNeverReturnsCode）
+// 注释里指向这里，避免按名字 grep 得出「没有真实序列化」的错误结论。
+func TestSmsLogsJSONNeverExposesCodeHash(t *testing.T) {
 	w := setupSmsTest(t)
 	cfg := s8TwilioConfig(sms.SceneLogin)
 	const template = "Your verification code is {{code}}. Do not share it with anyone."

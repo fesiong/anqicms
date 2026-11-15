@@ -1,16 +1,21 @@
 package manageController
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/kataras/iris/v12"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/provider/sms"
 )
@@ -100,21 +105,29 @@ func s13CheckTestUsesSendSmsCode(src string) error {
 // 其余错误一律不传参。统一 currentSite.Tr(err.Error(), args...)（方法值 translate）。
 func s13CheckErrorDispatch(src string) error {
 	if err := s13Require(src,
-		`errors\.Is\(err,\s*sms\.ErrSmsSendFailed\)`,
-		`!s13IsKnownSmsError\(err\)`, // R139/R120①：未知错误归约
+		`errors\.Is\(err,\s*sms\.ErrSmsSendFailed\)`, // 平台原始码归约
 		`errors\.As\(err,\s*&wait\)`,
 		`errors\.As\(err,\s*&attempts\)`,
 		`err\.Error\(\),\s*wait\.Seconds\)`,
 		`err\.Error\(\),\s*attempts\.Remaining\)`,
-		`(?:currentSite\.Tr|translate)\(err\.Error\(\)\)`,
-		`translate\s*:=\s*currentSite\.Tr`,
+		`translate\s*:=\s*currentSite\.Tr`,              // 翻译出口
+		`raw\s*:=\s*err\.Error\(\)`,                     // R146：先取原串
+		`!strings\.Contains\(raw,\s*"%"`,                // R146：含 % 短路归约
+		`translate\(raw\)`,                              // R146：字典查键
+		`translated\s*!=\s*raw`,                         // R146：译文!=键 即真实业务键
+		`translate\(sms\.ErrSmsSendFailed\.Error\(\)\)`, // 查不到键才归约
+		`log\.Println\("后台短信端点内部错误：",\s*err\)`,          // R146②：原始错误只进日志
 		`config\.StatusFailed`,
 	); err != nil {
 		return err
 	}
 	// 反面：不得出现「对所有错误统一传固定数字参数」的翻译调用。
-	if regexp.MustCompile(`(?:currentSite\.Tr|translate)\(err\.Error\(\),\s*\d+\)`).MatchString(src) {
+	if regexp.MustCompile(`(?:currentSite\.Tr|translate)\((?:err\.Error\(\)|raw),\s*\d+\)`).MatchString(src) {
 		return errors.New("存在对所有错误传固定数字参数的翻译调用（应只对 WaitError/AttemptsError 精确传参）")
+	}
+	// R146①：不得再引入手抄的业务键白名单（漏了 SmsCodeLocked，且会与字典漂移）。
+	if strings.Contains(src, "smsOpsKnownBusinessErrors") || strings.Contains(src, "s13IsKnownSmsError") {
+		return errors.New("引入了手抄的业务键白名单：应改为「Tr(raw) != raw」的字典判定（R146）")
 	}
 	return nil
 }
@@ -434,7 +447,8 @@ func TestPluginSmsLogsNeverReturnsCode(t *testing.T) {
 	if err := s13CheckNoCodeInLogList(service); err != nil {
 		t.Fatalf("恢复绿失败：%v", err)
 	}
-	t.Log("恢复绿：GetSmsLogList 返回 SmsLog、源码无码字段 ✓（真实 JSON 复核见 provider 集成测试）")
+	t.Log("恢复绿：GetSmsLogList 返回 SmsLog、源码无码字段 ✓" +
+		"（真实 JSON 序列化在 provider 包 TestSmsLogsJSONNeverExposesCodeHash）")
 }
 
 // s13CheckTestReadJSONExit（R120①）：PluginSmsTest 的 ReadJSON 失败必须走
@@ -457,8 +471,13 @@ func s13CheckTestReadJSONExit(src string) error {
 		return errors.New("ReadJSON 失败分支结构异常（未找到 return）")
 	}
 	branch := rest[:end]
-	if !strings.Contains(branch, "respondSmsOpsError(ctx, currentSite, err)") {
-		return errors.New("ReadJSON 失败未走 respondSmsOpsError（会回显 JSON 解析器文本）")
+	// R146③：请求体不合法的语义是「参数错误」，必须直接回 SmsParamInvalid，
+	// 不能再经 ops 归约（那样会变成「短信发送失败」），也不得回显解析器文本。
+	if !strings.Contains(branch, `currentSite.Tr("SmsParamInvalid")`) {
+		return errors.New("ReadJSON 失败未返回 SmsParamInvalid（R146③：参数错误语义）")
+	}
+	if strings.Contains(branch, "respondSmsOpsError") {
+		return errors.New("ReadJSON 失败仍走 ops 归约（会被误报成「短信发送失败」）")
 	}
 	if strings.Contains(branch, "err.Error()") {
 		return errors.New("ReadJSON 失败分支仍把 err.Error() 直接写进响应")
@@ -466,20 +485,25 @@ func s13CheckTestReadJSONExit(src string) error {
 	return nil
 }
 
-// TestPluginSmsTestReadJSONGoesThroughOpsError 三段式：真实源码绿 / 合成回显
-// err.Error() 的源码红 / 恢复绿。
-func TestPluginSmsTestReadJSONGoesThroughOpsError(t *testing.T) {
+// TestPluginSmsTestReadJSONReturnsParamInvalid 三段式：真实源码绿 / 合成回显
+// err.Error() 的源码红 / 恢复绿（R146③：参数错误不回「短信发送失败」）。
+func TestPluginSmsTestReadJSONReturnsParamInvalid(t *testing.T) {
 	real := smsFuncSource(t, s13PluginSmsFile, "PluginSmsTest")
 	if err := s13CheckTestReadJSONExit(real); err != nil {
 		t.Fatalf("真实源码护栏失败：%v", err)
 	}
-	bad := strings.Replace(real, "respondSmsOpsError(ctx, currentSite, err)",
-		`ctx.JSON(iris.Map{"code": config.StatusFailed, "msg": err.Error()})`, 1)
+	bad := strings.Replace(real, `currentSite.Tr("SmsParamInvalid")`, "err.Error()", 1)
 	if bad == real {
-		t.Fatal("反向对照锚点失效：源码里没找到 respondSmsOpsError(ctx, currentSite, err)")
+		t.Fatal("反向对照锚点失效：源码里没找到 currentSite.Tr(\"SmsParamInvalid\")")
 	}
 	if err := s13CheckTestReadJSONExit(bad); err == nil {
 		t.Fatal("反向对照失败：ReadJSON 失败直接把 err.Error() 写进响应的源码仍判绿")
+	}
+	// 第二个反面对照：退回旧行为（走 ops 归约 → 被误报成发送失败）也必须判红。
+	oldBehavior := strings.Replace(real, `currentSite.Tr("SmsParamInvalid")`,
+		"currentSite.Tr(\"SmsSendFailed\")", 1)
+	if err := s13CheckTestReadJSONExit(oldBehavior); err == nil {
+		t.Fatal("反向对照失败：ReadJSON 失败退回通用文案的源码仍判绿")
 	}
 	if err := s13CheckTestReadJSONExit(real); err != nil {
 		t.Fatalf("恢复绿失败：%v", err)
@@ -611,4 +635,120 @@ func TestPluginSmsOpsRequireAdminPermission(t *testing.T) {
 		t.Fatalf("恢复绿失败：%v", err)
 	}
 	t.Log("恢复：挂 AdminPermissionRequired 且含两条新路由的真实源码 → 判合规（绿）")
+}
+
+// ---------------------------------------------------------------------------
+// R146①：后台出口改用「翻译字典即白名单」——漏掉的 SmsCodeLocked 必须自动覆盖
+// ---------------------------------------------------------------------------
+
+// s13LoadTestI18n 注入真实语言包（本包测试进程的 config.ExecPath 不含 locales，
+// 故用相对路径 glob 加载）；行为断言必须看到真实译文，不能靠兜底原样返回。
+func s13LoadTestI18n(t *testing.T) {
+	t.Helper()
+	app := iris.New()
+	if err := app.I18n.Load("../../locales/*/*.yml", config.LoadLocales()...); err != nil {
+		t.Fatalf("加载 locales 失败：%v", err)
+	}
+	old := provider.I18n
+	provider.SetI18n(app.I18n)
+	t.Cleanup(func() { provider.SetI18n(old) })
+}
+
+// s13CaptureOpsMsg 经真实 HTTP 调 respondSmsOpsError 并解析 {code,msg}。
+func s13CaptureOpsMsg(t *testing.T, site *provider.Website, err error) string {
+	t.Helper()
+	app := iris.New()
+	app.Get("/x", func(ctx iris.Context) { respondSmsOpsError(ctx, site, err) })
+	if e := app.Build(); e != nil {
+		t.Fatalf("构建测试应用失败：%v", e)
+	}
+	rec := httptest.NewRecorder()
+	app.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/x", nil))
+	var body struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+	}
+	if e := json.Unmarshal(rec.Body.Bytes(), &body); e != nil {
+		t.Fatalf("解析响应失败：%v（body=%s）", e, rec.Body.String())
+	}
+	if body.Code != config.StatusFailed {
+		t.Fatalf("code = %d，期望 config.StatusFailed(%d)", body.Code, config.StatusFailed)
+	}
+	return body.Msg
+}
+
+// TestPluginSmsOpsErrorKeepsBusinessKeys 钉住 R146①：
+// 手抄白名单漏掉的 SmsCodeLocked 与其它业务键一样原样输出译文；
+// 查不到键的内部错误（含 %）仍归约为 SmsSendFailed，并只进服务端日志。
+func TestPluginSmsOpsErrorKeepsBusinessKeys(t *testing.T) {
+	s13LoadTestI18n(t)
+	site := &provider.Website{}
+	translate := site.Tr
+	generic := translate(sms.ErrSmsSendFailed.Error())
+	if generic == sms.ErrSmsSendFailed.Error() {
+		t.Fatalf("locales 缺 SmsSendFailed 译文，断言会失去意义（generic=%q）", generic)
+	}
+
+	t.Run("SmsCodeLocked 不被吞", func(t *testing.T) {
+		want := translate(sms.ErrSmsCodeLocked.Error())
+		if want == sms.ErrSmsCodeLocked.Error() {
+			t.Fatalf("locales 缺 SmsCodeLocked 译文，断言会失去意义")
+		}
+		got := s13CaptureOpsMsg(t, site, sms.ErrSmsCodeLocked)
+		if got != want {
+			t.Fatalf("出口 msg = %q，期望 %q（R146①：旧手抄表漏了 ErrSmsCodeLocked）", got, want)
+		}
+		if got == generic {
+			t.Fatalf("SmsCodeLocked 被归约成了通用文案 %q", generic)
+		}
+	})
+
+	t.Run("DB错误归约为SmsSendFailed", func(t *testing.T) {
+		got := s13CaptureOpsMsg(t, site, errors.New("Error 1406: Data too long for column 'template_id' at row 1"))
+		if got != generic {
+			t.Fatalf("出口 msg = %q，期望归约文案 %q", got, generic)
+		}
+		for _, leak := range []string{"1406", "Data too long", "template_id"} {
+			if strings.Contains(got, leak) {
+				t.Errorf("响应回显了 DB 内部措辞 %q：%q", leak, got)
+			}
+		}
+	})
+
+	t.Run("含百分号的错误串归约为SmsSendFailed", func(t *testing.T) {
+		got := s13CaptureOpsMsg(t, site, errors.New("invalid character '%' looking for beginning of value"))
+		if got != generic {
+			t.Fatalf("出口 msg = %q，期望归约文案 %q", got, generic)
+		}
+		for _, leak := range []string{"invalid character", "%!"} {
+			if strings.Contains(got, leak) {
+				t.Errorf("响应回显了内部措辞 %q：%q", leak, got)
+			}
+		}
+	})
+
+	t.Run("类型分支仍带数字", func(t *testing.T) {
+		if got := s13CaptureOpsMsg(t, site, &sms.WaitError{Seconds: 42}); !strings.Contains(got, "42") {
+			t.Errorf("WaitError 秒数未进入文案：%q", got)
+		}
+		if got := s13CaptureOpsMsg(t, site, &sms.AttemptsError{Remaining: 3}); !strings.Contains(got, "3") {
+			t.Errorf("AttemptsError 剩余次数未进入文案：%q", got)
+		}
+	})
+
+	// 源码级反向对照：删掉字典查键（译文直接取原串）后，同一护栏必红。
+	errSrc := smsFuncSource(t, s13PluginSmsFile, "respondSmsOpsError")
+	if err := s13CheckErrorDispatch(errSrc); err != nil {
+		t.Fatalf("真实源码护栏失败：%v", err)
+	}
+	noDict := strings.Replace(errSrc, "translated = translate(raw)", "translated = raw", 1)
+	if noDict == errSrc {
+		t.Fatal("反向对照准备失败：源码里没有 translated = translate(raw)")
+	}
+	if err := s13CheckErrorDispatch(noDict); err == nil {
+		t.Fatal("反向对照失败：删掉字典查键后的源码仍被判绿")
+	}
+	if err := s13CheckErrorDispatch(errSrc); err != nil {
+		t.Fatalf("恢复绿失败：%v", err)
+	}
 }

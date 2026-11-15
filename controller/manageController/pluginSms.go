@@ -3,7 +3,9 @@ package manageController
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"strconv"
+	"strings"
 
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
@@ -201,47 +203,19 @@ type pluginSmsTestRequest struct {
 	Phone        string `json:"phone"`         // 本地号码
 }
 
-// smsOpsKnownBusinessErrors 与前台 respondSmsError 同口径（R139/R120①）：
-// 只有这些哨兵允许把 err.Error() 当翻译键送出；ReadJSON、DB 等非业务错误一律
-// 归约到 sms.ErrSmsSendFailed，绝不回显解析器或驱动的内部措辞。
-var smsOpsKnownBusinessErrors = []error{
-	sms.ErrSmsServiceNotEnabled,
-	sms.ErrSmsSceneNotEnabled,
-	sms.ErrSmsPhoneInvalid,
-	sms.ErrSmsRegionUnsupported,
-	sms.ErrSmsCredentialMissing,
-	sms.ErrSmsSignMissing,
-	sms.ErrSmsTemplateMissing,
-	sms.ErrSmsIpLimited,
-	sms.ErrSmsPhoneLimited,
-	sms.ErrSmsCodeNotFound,
-	sms.ErrSmsCodeExpired,
-	sms.ErrSmsSendFailed,
-}
-
-func s13IsKnownSmsError(err error) bool {
-	for _, known := range smsOpsKnownBusinessErrors {
-		if errors.Is(err, known) {
-			return true
-		}
-	}
-	return false
-}
-
-// respondSmsOpsError 是后台短信端点（test / logs）的统一错误出口（R114）。
-// code 恒为 config.StatusFailed；msg 只暴露可翻译键，绝不回显平台原始错误码/消息。
-// 平台 *SendError 经其 Unwrap 归约到 sms.ErrSmsSendFailed；仅 *WaitError 传 Seconds、
-// *AttemptsError 传 Remaining，其余错误一律不传参（Tr 兜底是字符串拼接，多传参会污染文案）。
-// R120①：ReadJSON 失败也走这里，非已知业务错误统一归约，不回显解析文本。
+// respondSmsOpsError 是后台短信端点（test / logs）的统一错误出口（R114/R146）。
+// code 恒为 config.StatusFailed；msg 只暴露可翻译文案，绝不回显解析器或驱动的内部措辞。
+// 判定顺序与前台 respondSmsError 同一机制（R144/R145，字典即白名单）：
+//  1. *WaitError / *AttemptsError 按类型分支（唯一需要传参的两类）；
+//  2. errors.Is(err, sms.ErrSmsSendFailed) 直接归约（*SendError 经 Unwrap 落这里）；
+//  3. 其余：Tr(raw) != raw 即说明 raw 是一枚真实业务键（Tr 兜底同样是原样返回）；
+//     含 % 的文本经兜底格式化会被改写、从而被误判成键，先短路归约。
+//
+// 原先手抄的 smsOpsKnownBusinessErrors 已删除（漏了 SmsCodeLocked，且与字典漂移）。
 func respondSmsOpsError(ctx iris.Context, currentSite *provider.Website, err error) {
 	var wait *sms.WaitError
 	var attempts *sms.AttemptsError
-	if errors.Is(err, sms.ErrSmsSendFailed) {
-		err = sms.ErrSmsSendFailed
-	} else if !errors.As(err, &wait) && !errors.As(err, &attempts) && !s13IsKnownSmsError(err) {
-		err = sms.ErrSmsSendFailed
-	}
-	// 方法值：与前台 respondSmsError 口径一致（统一 currentSite.Tr(err.Error(), args...)）。
+	// 方法值：统一 currentSite.Tr(key, args...) 的翻译出口。
 	translate := currentSite.Tr
 	var msg string
 	switch {
@@ -249,8 +223,21 @@ func respondSmsOpsError(ctx iris.Context, currentSite *provider.Website, err err
 		msg = translate(err.Error(), wait.Seconds)
 	case errors.As(err, &attempts):
 		msg = translate(err.Error(), attempts.Remaining)
+	case errors.Is(err, sms.ErrSmsSendFailed):
+		msg = translate(sms.ErrSmsSendFailed.Error())
 	default:
-		msg = translate(err.Error())
+		raw := err.Error()
+		translated := raw
+		if !strings.Contains(raw, "%") {
+			translated = translate(raw)
+		}
+		if translated != raw {
+			msg = translated
+		} else {
+			// R146②：原始错误只进服务端日志（只记错误对象，不记请求体），对外归约（§10.4）。
+			log.Println("后台短信端点内部错误：", err)
+			msg = translate(sms.ErrSmsSendFailed.Error())
+		}
 	}
 	ctx.JSON(iris.Map{
 		"code": config.StatusFailed,
@@ -266,8 +253,12 @@ func PluginSmsTest(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req pluginSmsTestRequest
 	if err := ctx.ReadJSON(&req); err != nil {
-		// R120①：与 test/logs 的其它错误统一出口（非业务错误归约，不回显解析文本）。
-		respondSmsOpsError(ctx, currentSite, err)
+		// R146③：请求体不合法，语义是「参数错误」而不是「发送失败」，
+		// 故不经 ops 归约，直接回 SmsParamInvalid（同样不回显解析器文本）。
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.Tr("SmsParamInvalid"),
+		})
 		return
 	}
 	// 归一化定 region（与 SendSmsCode 第 3 步同口径）。
