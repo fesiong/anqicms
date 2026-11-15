@@ -557,6 +557,7 @@ type Sender interface {
 | 可选参数 | `From`、`MessagingServiceSid`、`Body`、`StatusCallback`、`ContentSid` |
 | 响应字段 | `sid`、`status`、`error_code`、`error_message`、`num_segments`、`price` |
 | 失败状态 | `failed`、`undelivered` |
+| 成功状态码 | **200 与 201 都算受理** —— Twilio 的 POST 创建返回 `201 Created`（官方「Twilio API responses」状态码表：201 Created (For POST requests only)），204 之类没有 Message 资源体的 2xx 不算受理（R42） |
 
 **无签名器**——Basic auth 就是全部鉴权。
 
@@ -586,7 +587,7 @@ Twilio 到中国大陆的到达率不可靠，这是它只用于国际号码的�
 |---|---|
 | 阿里云 | 签名不存在／未审核、模板不存在／未审核、AK 无效或无权限、账户余额不足、号码格式非法、触发平台级流控 |
 | 腾讯云 | 签名未审核、模板未审核、SecretId 无效、SmsSdkAppId 不存在、余额不足、号码格式非法 |
-| Twilio | 20003（鉴权失败）、21211（To 非法）、21606（From 非法）、21610（收件人已退订）、余额不足 |
+| Twilio | 20003（鉴权失败）、21211（To 非法）、21606（From 非法）、21610（收件人已退订）、**20005 账户未激活 / 30002 账户已暂停**（官方标题分别是 `Account not active` / `Account suspended`；**余额不足只是常见原因之一**，20005 另有试用未激活／父账户被停／ToS 审核，30002 另有 AUP 违规／欺诈流量。两码都判 permanent：都需人工充值或申诉。措辞按 R48 降级为「常见原因为余额不足」，不写成「余额不足」的定论） |
 
 ⚠️ 错误码表**不写死总数断言**，但每条映射要有单测。未识别的码必须原样落进 `sms_logs.err_code`，不能被吞成「发送失败」——那是排查时唯一的线索。
 
@@ -892,11 +893,11 @@ Twilio tab 顶部固定提示：**仅支持国际号码，`+86` 号码将被拒�
         "page":       {Type: "integer", Default: 1},
         "page_size":  {Type: "integer", Default: 20},
         "scene":      {Type: "string", Desc: "logs 筛选：场景码"},
-        "provider":   {Type: "string", Desc: "logs 筛选：厂商"},
+        "provider":   {Type: "string", Desc: "logs 筛选：厂商（仅 logs 用；setting_save 要切换生效厂商请传 values.provider）"},
         "status":     {Type: "integer", Desc: "logs 筛选：0 待发 1 成功 -1 失败"},
         "phone":      {Type: "string", Desc: "logs 筛选：号码"},
-        "start_time": {Type: "integer", Desc: "logs 筛选：起始时间戳"},
-        "end_time":   {Type: "integer", Desc: "logs 筛选：结束时间戳"},
+        "start_time": {Type: "integer", Desc: "logs 筛选：起始时间戳，必须 > 0（传 0 视为非法）"},
+        "end_time":   {Type: "integer", Desc: "logs 筛选：结束时间戳，必须 > 0，且需 >= start_time"},
     },
     Required: []string{"action"},
     Caps:     []string{"api_invoke"},
@@ -910,6 +911,15 @@ Twilio tab 顶部固定提示：**仅支持国际号码，`+86` 号码将被拒�
 ```
 
 `ParamSpec` 的类型必须与端点请求结构体的 json tag **严格一致**。加 cap 时逐个核对「handler 有、schema 无」的参数——漏了不报错，只是值被静默清空。
+
+⚠️ **勘误（2026-11-15，裁决 L716 结转）**：本节原文把顶层 `provider` 写成「logs 筛选：厂商」，而 `setting_save` 用的又是「厂商」这个词（配置里的生效厂商字段），字面上看不出两者是**不同的位置**：
+
+| 位置 | 含义 | 何时用 |
+|---|---|---|
+| 顶层 `provider` | 发送流水的筛选条件（按厂商过滤） | 只有 `logs` 用 |
+| `values.provider` | **切换生效厂商**（aliyun / tencent / twilio） | `setting_save` 用 |
+
+顶层 `provider` **不会**切厂商，`setting_save` 时传了会被忽略。已把两处 Desc 都改成「logs 筛选：厂商（仅 logs 用；setting_save 要切换生效厂商请传 values.provider）」，避免调用方把厂商开关传错位置。
 
 ### 9.2 DefaultOff 的四处平行名单
 
