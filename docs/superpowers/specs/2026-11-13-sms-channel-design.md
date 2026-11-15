@@ -282,7 +282,7 @@ type SmsTwilioRegion struct {
 5. 逐字段掩码回写保护后赋值给 `currentSite.PluginSms`。
 6. `SaveSettingValue` + `AddAdminLog`。
 
-⚠️ `MergeJSONPayload` 只处理**顶层字段**。`aliyun`／`tencent`／`twilio` 是嵌套对象，整体出现在 payload 里就会整体替换。因此前端提交这三个对象时必须带**完整子树**（含未改动的掩码哨兵），不能只传改动的叶子字段。这一条要写进前端表单约定与 MCP desc。
+⚠️ `MergeJSONPayload` 对**顶层字段**逐个 `json.Unmarshal` 进结构体，因此合并是**深合并**：只覆盖 payload 里出现的键，未出现的键保留基底原值；嵌套对象（`aliyun`／`tencent`／`twilio`）同理，只覆盖出现的叶子字段，不会清掉同级配置。但**数组 / 映射类型的字段**（如 `templates`／`texts`）一旦出现就整段替换，`null` 解进 map 会把该 map 置 nil（见下表）。因此前端提交全量、MCP 只传改动的叶子字段都能得到正确结果，**不需要**回传整棵子树。
 
 ⚠️ **`null` 的两种行为不同，必须区分**（`library/merge.go:40` 直接调 `json.Unmarshal`）：
 
@@ -856,7 +856,7 @@ Twilio tab 顶部固定提示：**仅支持国际号码，`+86` 号码将被拒�
 ### 8.3 表单约定
 
 1. **配置类 tab 共用一个 ProForm 实例**，提交用 `formRef.current?.getFieldsValue(true)` 取全量。虽然后端支持部分更新，但仓库既有 tab 式设置页的约定是提交全量（`setting/system|content|safe|contact` 是整包覆盖），保持一致避免后人误判。
-2. **三个厂商对象必须带完整子树提交**（§3.5）：`MergeJSONPayload` 只处理顶层字段，只传改动的叶子字段会让整个厂商对象被替换成残缺失效配置。
+2. **厂商对象按深合并提交即可**（§3.5）：`MergeJSONPayload` 只覆盖 payload 里出现的键，只传改动的叶子字段不会清掉同级配置。前端仍按仓库既有 tab 式设置页的约定提交全量 store 值；`templates`／`texts` 这类 map 字段一旦出现就整段替换（`null` 会清空），所以 `buildSmsPayload` 的 null map 护栏仍然必须保留。
 3. **凭据字段 placeholder 写明掩码语义**：「`********` 表示未改动，原样保存即可保持不变」。读回掩码后不要清空输入框。
 4. **场景模板留空的语义要在界面上说清**：留空 = 该场景不可用，发码时会明确报错。不要让人以为留空会走默认模板。
 5. 区号输入用带默认值 `86` 的文本框 + 常用区号下拉，**不做成必填的纯手填**——绝大多数站长只用国内。
@@ -881,8 +881,9 @@ Twilio tab 顶部固定提示：**仅支持国际号码，`+86` 号码将被拒�
     Name: "channel_sms", Title: "短信服务", Domain: DomainChannel, Risk: RiskWrite,
     Desc: "短信渠道配置、测试发送与发送记录。action: setting_get/setting_save/test/logs。" +
         "返回统一为标准信封 {code,msg,ok,status,data}。" +
-        "⚠️ setting_save 的顶层字段是部分更新，但 aliyun/tencent/twilio 三个对象是**整体替换**：" +
-        "传它们时必须带完整子树，只传改动的叶子字段会清掉其余配置。" +
+        "⚠️ setting_save 是**深合并**：顶层字段与嵌套对象都只覆盖 payload 里出现的叶子，" +
+        "未出现的键保留原值；但数组 / 映射类型的字段（如 templates / texts）一旦出现就整段替换，" +
+        "`null` 会清空对应的 map。因此改一个叶子字段只需传该叶子，不必回传整棵子树。" +
         "⚠️ setting_get 返回的凭据是掩码 ********，表示「未改动」；原样写回即可保持不变。" +
         "⚠️ 同一时刻只有一家厂商生效；Twilio 只支持国际号码，+86 会被拒发。",
     DefaultOff: true,
@@ -1069,7 +1070,7 @@ IP 取值沿用 `ctx.RemoteAddr()`。iris 已配 `WithRemoteAddrHeader("X-Real-I
 | OTP 状态机 | 过期、错码、超次、重放、跨场景、发送失败的码不可用、并发消费只成一个 |
 | 限额 | 重发间隔、号码日限、IP 小时／日限；被拒的请求**不延长窗口** |
 | 查重事务 | 并发同 `(区号, 号码)` 只成一个；空号跳过查重；跨国同号允许并存 |
-| 部分更新 | 只传一个顶层字段不清空其余；厂商对象整体替换语义符合 §3.5 |
+| 部分更新 | 只传一个顶层字段不清空其余；嵌套对象深合并、数组/映射字段整体替换，语义符合 §3.5 |
 | 掩码 | `setting_get` 后内存真值不变；哨兵写回沿用真值；显式空串才清空 |
 | 自动注册 | `Status=0` 拒登；UserName 随机且不含手机号；复用 `RegisterUser` 的默认组与状态 |
 | 换绑 | 旧新双验；任一失败整体回滚；**未绑号时跳过旧号校验** |
@@ -1118,7 +1119,7 @@ go run ./cmd/apicatalog -check
 
 用 `./node_modules/.bin/esbuild` 对改动文件做语法校验。不跑全量 `tsc`（会 SIGTERM），不跑 `npm run format`（会动全仓）。判断是否引入类型错误看**是否命中改动文件**，不看总数（存量 38 个）。
 
-界面验收：切 tab 不丢输入、掩码字段保存后不变空、厂商对象提交带完整子树、Twilio tab 的 `+86` 拒发提示可见。
+界面验收：切 tab 不丢输入、掩码字段保存后不变空、厂商对象提交后未改动的同级键不丢失（深合并）、Twilio tab 的 `+86` 拒发提示可见。
 
 ## 12. 交付后待验项与已知限制
 

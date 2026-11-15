@@ -3,8 +3,9 @@
 
 // 场景模板 / 文案 map 的声明式路径清单，按 config/sms.go 实际结构穷举。
 // 不写死总数：新增厂商或区域时只需在此补一条路径。
-// 后端 MergeJSONPayload 只处理顶层字段，厂商对象是整体替换；若这些 map
-// 以 null 进入 payload，json.Unmarshal 会把站长已配的模板静默清空。
+// 后端 MergeJSONPayload 是深合并（未出现的键保留原值），但 map 字段一旦出现就
+// 整段替换；若这些 map 以 null 进入 payload，json.Unmarshal 会把站长已配的模板
+// 静默清空。
 const NULL_MAP_PATHS: string[][] = [
   ['aliyun', 'domestic', 'templates'],
   ['aliyun', 'international', 'templates'],
@@ -41,8 +42,8 @@ function parentAt(root: Record<string, any>, parts: string[]): Record<string, an
 
 /**
  * 把 ProForm.getFieldsValue(true) 的全量表单值整理成保存端点的 payload：
- * 三个厂商对象必须带完整子树提交（未生效厂商也提交），凭据掩码 ******** 原样保留，
- * 仅把值为 null 的 templates / texts map 从 payload 中省略。
+ * 按全量提交（未生效厂商也提交，与仓库既有 tab 式设置页一致），凭据掩码 ********
+ * 原样保留，仅把值为 null 的 templates / texts map 从 payload 中省略。
  */
 export function buildSmsPayload(values: Record<string, any>): Record<string, any> {
   const payload = cloneValue(values) as Record<string, any>;

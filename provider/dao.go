@@ -485,15 +485,16 @@ func (w *Website) ensureSmsSchema() error {
 	return errors.Join(errs...)
 }
 
-// ensureSmsLogTemplateColumn 把 sms_logs.template_id 从历史 varchar(64) 幂等加宽到
-// varchar(500)（R138）。
+// ensureSmsLogTemplateColumn 把 sms_logs.template_id 从历史 varchar(64)/varchar(500)
+// 幂等加宽到 varchar(2000)（R153）。
 //
 // 为什么不能只靠 AutoMigrateDB：它只在 last_run_version != config.Version 时执行
-// （升级才跑），而模型标签已改成 varchar(500)，老站库的物理列仍是 varchar(64)。
-// Twilio 的 TemplateId 槽承载整段未渲染文案（provider/sms/resolve.go），英文文案
-// 普遍超过 64 字符，插入会触发 MySQL 1406 Data too long，整条发码链路直接失败。
+// （升级才跑），而模型标签已改成 varchar(2000)，老站库的物理列仍可能是 varchar(64)
+// 或 varchar(500)。Twilio 的 TemplateId 槽承载整段未渲染文案（provider/sms/resolve.go），
+// Body 上限是 1600 字符，varchar(500) 仍会触发 MySQL 1406 Data too long，整条发码
+// 链路直接失败。
 //
-// 只在 information_schema 报的列宽 < 500 时执行 ALTER；失败只记日志不 panic；
+// 只在 information_schema 报的列宽 < 2000 时执行 ALTER；失败只记日志不 panic；
 // 绝不 DROP 列、绝不改数据。
 func (w *Website) ensureSmsLogTemplateColumn() error {
 	if w.DB == nil || !w.DB.Migrator().HasTable(&model.SmsLog{}) {
@@ -507,14 +508,14 @@ func (w *Website) ensureSmsLogTemplateColumn() error {
 		log.Println("检查 sms_logs.template_id 列宽失败：", err)
 		return err
 	}
-	if length >= 500 {
+	if length >= 2000 {
 		return nil
 	}
-	if err := w.DB.Exec("ALTER TABLE `sms_logs` MODIFY COLUMN `template_id` varchar(500) NOT NULL DEFAULT ''").Error; err != nil {
+	if err := w.DB.Exec("ALTER TABLE `sms_logs` MODIFY COLUMN `template_id` varchar(2000) NOT NULL DEFAULT ''").Error; err != nil {
 		log.Println("加宽 sms_logs.template_id 失败：", err)
 		return err
 	}
-	log.Printf("sms_logs.template_id 列宽已从 %d 加宽到 500\n", length)
+	log.Printf("sms_logs.template_id 列宽已从 %d 加宽到 2000\n", length)
 	return nil
 }
 

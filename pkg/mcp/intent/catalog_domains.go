@@ -790,8 +790,9 @@ var domainIntentCatalog = append([]*IntentSpec{
 		Name: "channel_sms", Title: "短信服务", Domain: DomainChannel, Risk: RiskWrite,
 		Desc: "短信渠道配置、测试发送与发送记录。action: setting_get/setting_save/test/logs。" +
 			"返回统一为标准信封 {code,msg,ok,status,data}。" +
-			"⚠️ setting_save 的顶层字段是部分更新，但 aliyun/tencent/twilio 三个对象是**整体替换**：" +
-			"传它们时必须带完整子树，只传改动的叶子字段会清掉其余配置。" +
+			"⚠️ setting_save 是**深合并**：顶层字段与嵌套对象都只覆盖 payload 里出现的叶子，" +
+			"未出现的键保留原值；但数组 / 映射类型的字段（如 templates / texts）一旦出现就整段替换，" +
+			"`null` 会清空对应的 map。因此改一个叶子字段只需传该叶子，不必回传整棵子树。" +
 			"⚠️ setting_get 返回的凭据是掩码 ********，表示「未改动」；原样写回即可保持不变。" +
 			"⚠️ 同一时刻只有一家厂商生效；Twilio 只支持国际号码，+86 会被拒发。",
 		DefaultOff: true,

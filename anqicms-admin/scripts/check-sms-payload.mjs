@@ -164,7 +164,7 @@ const checkReal = (build) => {
     values2.aliyun.international,
     'aliyun.international 整棵子树丢失',
   );
-  console.log('  ② 完整子树（厂商对象整体替换）：OK');
+  console.log('  ② 完整子树（payload 不丢失同级键）：OK');
 
   // ③ 掩码 ******** 原样保留（不清空、不转空串）
   const values3 = makeFullValues();

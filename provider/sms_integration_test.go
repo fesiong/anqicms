@@ -34,9 +34,9 @@ func smsLogTemplateColumnLen(t *testing.T, w *Website) int64 {
 	return length
 }
 
-// TestEnsureSmsLogTemplateColumnIdempotent（R138）：真实建表后把列收窄回 64，
-// 复现 1406，再调用 ensureSmsLogTemplateColumn 两次：第一次加宽到 500，
-// 第二次不报错且列宽仍 500。收窄只在表内没有超长值时执行（不删任何行）。
+// TestEnsureSmsLogTemplateColumnIdempotent（R138/R153）：真实建表后把列收窄回 64，
+// 复现 1406，再调用 ensureSmsLogTemplateColumn 两次：第一次加宽到 2000，
+// 第二次不报错且列宽仍 2000。收窄只在表内没有超长值时执行（不删任何行）。
 func TestEnsureSmsLogTemplateColumnIdempotent(t *testing.T) {
 	w := setupSmsTest(t)
 
@@ -53,14 +53,14 @@ func TestEnsureSmsLogTemplateColumnIdempotent(t *testing.T) {
 		}
 		narrowed = true
 		// R146④：收窄是对共享开发库的临时改动，注册**无条件**恢复：即使进程被信号杀掉
-		// （provider 整包会 137），cleanup 也会把列宽改回 500，不会让开发库停在 varchar(64)。
+		// （provider 整包会 137），cleanup 也会把列宽改回 2000，不会让开发库停在 varchar(64)。
 		t.Cleanup(func() {
-			if err := w.DB.Exec("ALTER TABLE `sms_logs` MODIFY COLUMN `template_id` varchar(500) NOT NULL DEFAULT ''").Error; err != nil {
+			if err := w.DB.Exec("ALTER TABLE `sms_logs` MODIFY COLUMN `template_id` varchar(2000) NOT NULL DEFAULT ''").Error; err != nil {
 				t.Errorf("[R146 cleanup] 恢复 template_id 列宽失败：%v", err)
 				return
 			}
-			if got := smsLogTemplateColumnLen(t, w); got != 500 {
-				t.Errorf("[R146 cleanup] 恢复后列宽 = %d，期望 500", got)
+			if got := smsLogTemplateColumnLen(t, w); got != 2000 {
+				t.Errorf("[R146 cleanup] 恢复后列宽 = %d，期望 2000", got)
 			}
 		})
 		if got := smsLogTemplateColumnLen(t, w); got != 64 {
@@ -84,21 +84,21 @@ func TestEnsureSmsLogTemplateColumnIdempotent(t *testing.T) {
 		t.Logf("[R138] 表内已有 %d 行超长 template_id，跳过收窄（不删数据），仅验证幂等", longRows)
 	}
 
-	// 第一次：加宽到 500。
+	// 第一次：加宽到 2000。
 	if err := w.ensureSmsLogTemplateColumn(); err != nil {
 		t.Fatalf("第一次 ensureSmsLogTemplateColumn 失败：%v", err)
 	}
-	if got := smsLogTemplateColumnLen(t, w); got != 500 {
-		t.Fatalf("加宽后列宽 = %d，期望 500", got)
+	if got := smsLogTemplateColumnLen(t, w); got != 2000 {
+		t.Fatalf("加宽后列宽 = %d，期望 2000", got)
 	}
-	t.Log("[R138] information_schema 列宽（ALTER 后）= 500")
+	t.Log("[R153] information_schema 列宽（ALTER 后）= 2000")
 
-	// 第二次：幂等，不报错、列宽仍 500。
+	// 第二次：幂等，不报错、列宽仍 2000。
 	if err := w.ensureSmsLogTemplateColumn(); err != nil {
 		t.Fatalf("第二次 ensureSmsLogTemplateColumn 应幂等成功，实际 %v", err)
 	}
-	if got := smsLogTemplateColumnLen(t, w); got != 500 {
-		t.Fatalf("幂等调用后列宽 = %d，期望 500", got)
+	if got := smsLogTemplateColumnLen(t, w); got != 2000 {
+		t.Fatalf("幂等调用后列宽 = %d，期望 2000", got)
 	}
 
 	if narrowed {
@@ -114,6 +114,66 @@ func TestEnsureSmsLogTemplateColumnIdempotent(t *testing.T) {
 		}
 		t.Log("[R138 GREEN] 加宽后 65 字符插入成功（事务已回滚）")
 	}
+}
+
+// TestSmsLogTemplateColumnFitsTwilioBody（R153）：Twilio 的 Body 上限是 1600
+// 字符，template_id 存的是整段未渲染文案，列宽必须覆盖它并留余量。
+//
+// 用例插一条 1200 字符的 template_id：varchar(500) 上必然 1406，varchar(2000)
+// 上成功；再断言 information_schema 的列宽 ≥ 2000。
+//
+// 反向对照：把 ensureSmsLogTemplateColumn 的阈值/ALTER 改回 500（且库中列已被
+// 收窄到 500）→ 1200 字符插入失败，本用例必红。
+func TestSmsLogTemplateColumnFitsTwilioBody(t *testing.T) {
+	w := setupSmsTest(t)
+
+	// 自己把列收窄到 500，模拟「老库停在 R138 的 500」这一真实升级路径，
+	// 不依赖共享开发库此前跑过哪条用例。表内已有超长值时不收窄（不删数据）。
+	var longRows int64
+	if err := w.DB.Raw("SELECT COUNT(*) FROM `sms_logs` WHERE CHAR_LENGTH(`template_id`) > 500").
+		Row().Scan(&longRows); err != nil {
+		t.Fatalf("统计超长 template_id 失败：%v", err)
+	}
+	if longRows == 0 {
+		if err := w.DB.Exec("ALTER TABLE `sms_logs` MODIFY COLUMN `template_id` varchar(500) NOT NULL DEFAULT ''").Error; err != nil {
+			t.Fatalf("临时收窄到 500 失败：%v", err)
+		}
+		t.Cleanup(func() {
+			if err := w.DB.Exec("ALTER TABLE `sms_logs` MODIFY COLUMN `template_id` varchar(2000) NOT NULL DEFAULT ''").Error; err != nil {
+				t.Errorf("[R153 cleanup] 恢复 template_id 列宽失败：%v", err)
+				return
+			}
+			if got := smsLogTemplateColumnLen(t, w); got != 2000 {
+				t.Errorf("[R153 cleanup] 恢复后列宽 = %d，期望 2000", got)
+			}
+		})
+		if got := smsLogTemplateColumnLen(t, w); got != 500 {
+			t.Fatalf("收窄后列宽 = %d，期望 500", got)
+		}
+	} else {
+		t.Logf("[R153] 表内已有 %d 行超过 500 字符，跳过收窄（不删数据）", longRows)
+	}
+
+	// 迁移必须把 500 老库升到 2000。
+	if err := w.ensureSmsLogTemplateColumn(); err != nil {
+		t.Fatalf("ensureSmsLogTemplateColumn 失败：%v", err)
+	}
+	if got := smsLogTemplateColumnLen(t, w); got < 2000 {
+		t.Fatalf("template_id 列宽 = %d，应 ≥ 2000（Twilio Body 上限 1600）", got)
+	}
+
+	// 1200 字符：大于 500、小于 Twilio 的 1600 上限，必须能落库。
+	longText := strings.Repeat("T", 1200)
+	tx := w.DB.Begin()
+	err := tx.Create(&model.SmsLog{
+		SiteId: w.Id, PhoneCountry: s8IntlCountry, Phone: "5550100997",
+		Scene: "login", Provider: config.SmsProviderTwilio, TemplateId: longText,
+	}).Error
+	tx.Rollback()
+	if err != nil {
+		t.Fatalf("1200 字符 template_id 插入失败（列宽不足会 1406，整条发码链路回滚）：%v", err)
+	}
+	t.Log("[R153 GREEN] 1200 字符 template_id 插入成功（事务已回滚）")
 }
 
 // TestSmsFullLoginJourney（计划步骤 1）：未注册号 → 发 login 码 → LoginViaSms →

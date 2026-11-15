@@ -283,3 +283,29 @@ func TestSmsDomainMapping(t *testing.T) {
 		t.Errorf("DomainOfPath(/system/api/plugin/sms/logs) 应为 %s，实得 %s", DomainChannel, got)
 	}
 }
+
+// TestSmsIntentDescDescribesDeepMerge 锁住 setting_save 的合并语义文案。
+//
+// 旧 desc 写「aliyun/tencent/twilio 三个对象是整体替换，必须带完整子树」，与
+// library.MergeJSONPayload 的实际行为相反（嵌套结构体是深合并，未出现的键保留），
+// 还逼着调用方把掩码整包回传，制造「掩码写回被判错」的失败。这里同时做正反断言：
+// 不得出现「整体替换」，且必须写明「深合并」与 templates/null 的例外。
+//
+// 反向对照：把 Desc 改回「整体替换」→ 本用例必红。
+func TestSmsIntentDescDescribesDeepMerge(t *testing.T) {
+	spec, ok := specByName("channel_sms")
+	if !ok {
+		t.Fatal("意图 channel_sms 不存在")
+	}
+	if strings.Contains(spec.Desc, "整体替换") {
+		t.Error("channel_sms.Desc 不得再写「整体替换」：嵌套对象是深合并，只有数组/映射字段才整段替换")
+	}
+	if !strings.Contains(spec.Desc, "深合并") {
+		t.Error("channel_sms.Desc 必须写明「深合并」，否则调用方会误以为只传叶子字段会清空同级配置")
+	}
+	for _, want := range []string{"templates", "null"} {
+		if !strings.Contains(spec.Desc, want) {
+			t.Errorf("channel_sms.Desc 应说明 %s 的整段替换 / 清空语义（这是深合并的例外）", want)
+		}
+	}
+}

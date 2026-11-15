@@ -98,12 +98,18 @@ const PluginSms: React.FC = () => {
 
   const handleFinish = async (values: any) => {
     // 页面按 tab 常驻挂载但未访问过的字段未注册，onFinish 的 values 不含它们；
-    // 后端厂商对象是整体替换，必须取全量 store 值再经 null map 护栏。
+    // 取全量 store 值（仓库既有 tab 式设置页约定）再经 null map 护栏。
+    // 后端对厂商对象是深合并，这里取全量只是保持前端一致，不是后端的硬要求。
     const allValues = formRef.current?.getFieldsValue(true) || values;
     const payload = buildSmsPayload(allValues);
     const hide = message.loading(t('plugin.sms.saving'), 0);
     try {
       const res = await pluginSmsSettingSave(payload);
+      // 后端失败也走 HTTP 200 + code != 0；不看 code 会把「保存失败」弹成「保存成功」。
+      if (!res || res.code !== 0) {
+        message.error(res?.msg || t('plugin.sms.save.failed'));
+        return;
+      }
       message.success(res.msg || t('plugin.sms.save.success'));
       // 保存成功后重新拉取，让掩码状态与后端一致。
       await loadSetting();

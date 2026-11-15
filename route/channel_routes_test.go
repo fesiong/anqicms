@@ -69,3 +69,43 @@ func TestChannelRoutesRegisteredExactPaths(t *testing.T) {
 		}
 	}
 }
+
+// TestSmsRoutesRegisteredExactPaths 锁住短信相关的 7 条真实路由。
+//
+// 背景：源码级护栏只间接提到 /test 与 /logs，/plugin/sms/setting 的 GET/POST
+// 以及三条前台端点此前没有任何 route 层断言——把注册删掉 go test 依然全绿。
+// 这里断言 Register() 之后的真实路由表（方法 + 完整路径），而不是源码字符串。
+//
+// 反向对照：注释掉 `sms.Get("/setting", ...)` → 本用例必红。
+func TestSmsRoutesRegisteredExactPaths(t *testing.T) {
+	routes := registeredRoutes(t)
+
+	want := []string{
+		// 后台配置（AdminPermissionRequired）
+		"GET /system/api/plugin/sms/setting",
+		"POST /system/api/plugin/sms/setting",
+		"POST /system/api/plugin/sms/test",
+		"GET /system/api/plugin/sms/logs",
+		// 前台发码 / 找回密码 / 换绑
+		"POST /api/sms/send",
+		"POST /api/sms/password/reset",
+		"POST /api/sms/phone/bind",
+	}
+	for _, route := range want {
+		if !routes[route] {
+			t.Errorf("路由表里没有 %s（删掉注册也不会变红，前端会 404）", route)
+		}
+	}
+
+	// 方法必须对得上：写成 GET 的写端点或 POST 的读端点同样会让前端 404/405。
+	for _, route := range []string{
+		"GET /system/api/plugin/sms/test",
+		"POST /system/api/plugin/sms/logs",
+		"GET /api/sms/send",
+		"GET /api/sms/phone/bind",
+	} {
+		if routes[route] {
+			t.Errorf("路由表里出现了错误方法的 %s", route)
+		}
+	}
+}

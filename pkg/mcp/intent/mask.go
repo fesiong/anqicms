@@ -16,6 +16,9 @@ const MaskedSecret = "********"
 // 只收**确凿是凭据**的名字，不做宽泛的子串匹配：
 // 误掩码会把 token_expire / token_type 这类普通字段也打成 ********，
 // 反而让调用方误判配置状态。新增资源时按实际字段名补进来。
+//
+// 回写保护：这些字段出现在可写端点上时，掩码原样写回由 MCP 的
+// api_invoke 兜底（用同路径 GET 回查真值）；端点自身不一定有哨兵判断。
 var secretFieldNames = map[string]bool{
 	"password":          true,
 	"passwd":            true,
@@ -52,6 +55,14 @@ var secretFieldNames = map[string]bool{
 	"qiniu_access_key":         true,
 	"qiniu_secret_key":         true,
 	"upai_token":               true,
+	// GCP 服务账号 JSON（内含 private_key）与 reCAPTCHA 通信密钥：
+	// 前者整段是一个字符串，字段名不叫 private_key，必须按整字段名匹配；
+	// 后者以 _key 结尾而不是 _private_key，宽泛后缀救不了（也不该加宽）。
+	"google_credentials_json": true,
+	"recaptcha_private_key":   true,
+	// OAuth 刷新令牌（Google Merchant 的 token 对象与扁平副本都用这个键名）。
+	// 只收精确名，绝不加宽泛的 _token 后缀（见下方说明）。
+	"refresh_token": true,
 }
 
 // IsSecretField 判断字段名是否为凭据类字段。
