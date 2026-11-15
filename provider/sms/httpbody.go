@@ -1,7 +1,9 @@
 package sms
 
 import (
+	"errors"
 	"io"
+	"net/url"
 	"strings"
 )
 
@@ -37,4 +39,46 @@ func smsBodySnippet(body []byte) string {
 		body = body[:smsBodySnippetMaxBytes]
 	}
 	return strings.ToValidUTF8(string(body), "")
+}
+
+// networkErrorMessage 从网络错误里剥掉 URL，只留内层原因。
+//
+// ⚠️ 这不是洁癖，是**安全修复**：http.Client.Do 的失败错误是 *url.Error，
+// 它的 Error() 形如
+//
+//	Post "https://dysmsapi.aliyuncs.com/?PhoneNumbers=…&TemplateParam={"code":"123456"}": dial tcp: lookup …
+//
+// —— 整条 URL（含 query）都在里面。阿里云的**验证码就在 TemplateParam 里**，
+// Twilio 的 AccountSid 在 URL 路径里。这条 Message 的唯一目的地是
+// sms_logs.err_msg（规格 §10.4「失败也留痕」），等于把验证码明文落库。
+// smsErrSnippet 的 200 字节截断救不了：URL 前缀已吃掉大半，验证码正好落在
+// 窗口内（实测 179 字节的 Message 里，验证码在偏移 153）。
+//
+// http.NewRequestWithContext 的失败同样是 *url.Error（url.Parse 返回的），
+// 错误文本形如 `parse "https://…&TemplateParam=…": invalid port`，
+// 所以「构造请求」这一步也必须走本函数，不能只修 Do。
+//
+// 只保留外层 Op（"Post"）与内层原因（dial tcp / timeout / 连接被拒）——
+// 排查需要的现场一条不丢，要丢的只有 URL。重定向时内层仍是 *url.Error，
+// 故循环剥到不再是指针类型为止。
+func networkErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	op := ""
+	for {
+		var ue *url.Error
+		if !errors.As(err, &ue) || ue.Err == nil {
+			break
+		}
+		if op == "" && ue.Op != "" {
+			op = ue.Op
+		}
+		err = ue.Err
+	}
+	msg := err.Error()
+	if op != "" {
+		return op + " 失败: " + msg
+	}
+	return msg
 }

@@ -27,6 +27,17 @@ var smsLocales = []string{"zh-CN", "zh-TW", "en-US"}
 // smsParameterizedKeys 是文案必须带恰好一个 %d 的两个键（裁决 R9 ②）。
 var smsParameterizedKeys = []string{"SmsResendTooSoon", "SmsCodeMismatch"}
 
+// smsControllerOnlyKeys 是**只在 controller 层使用**、不对应 sms 包错误哨兵的
+// 文案键：语义属于「入参不合法」而不是「发送链路失败」，因此不该进 sms 包。
+// 目前只有 SmsParamInvalid（controller/manageController/pluginSms.go 的请求体
+// 解析与筛选参数校验出口；它由任务 16A 加文案时引入）。
+//
+// 白名单本身也要被守卫：每个白名单键必须在三份 locale 里都真实存在，
+// 否则删了 locale 文案就会变成「前台看到裸键名」而无人察觉（裁决 R151）。
+var smsControllerOnlyKeys = map[string]string{
+	"SmsParamInvalid": "controller/manageController/pluginSms.go 的入参校验出口",
+}
+
 // errorsNewKey 判断表达式是否 errors.New("<字面量>")，是则返回键名。
 func errorsNewKey(expr ast.Expr) (string, bool) {
 	call, ok := expr.(*ast.CallExpr)
@@ -155,6 +166,11 @@ func TestSmsSentinelKeysMatchLocales(t *testing.T) {
 			orphans := make([]string, 0)
 			for k := range msgs {
 				if !inSource[k] {
+					// controller 专用键没有 sms 哨兵是**预期**的（见 smsControllerOnlyKeys），
+					// 但白名单本身由下面的断言守住（必须在 locale 里存在）。
+					if _, ok := smsControllerOnlyKeys[k]; ok {
+						continue
+					}
 					orphans = append(orphans, k)
 				}
 			}
@@ -162,7 +178,31 @@ func TestSmsSentinelKeysMatchLocales(t *testing.T) {
 			for _, k := range orphans {
 				t.Errorf("locale %s 的键 %q 没有对应哨兵（孤儿文案）", locale, k)
 			}
+			// 白名单键必须在 locale 里真实存在（白名单不得腐化）。
+			for k := range smsControllerOnlyKeys {
+				if _, ok := msgs[k]; !ok {
+					t.Errorf("locale %s 缺少 controller 专用键 %q（白名单里登记过）", locale, k)
+				}
+			}
 		})
+	}
+}
+
+// TestSmsControllerOnlyKeysAreReallyUsed 白名单不得退化成「永久豁免口袋」：
+// 每个 controller 专用键都必须在 controller 源码里被真实引用，且引用处是
+// `Tr("键名")` 形态。若该键将来被挪进 sms 包（变成哨兵），本测试会红，
+// 提醒把白名单条目删掉。
+func TestSmsControllerOnlyKeysAreReallyUsed(t *testing.T) {
+	controllerSrc := filepath.Join("..", "..", "controller", "manageController", "pluginSms.go")
+	data, err := os.ReadFile(controllerSrc)
+	if err != nil {
+		t.Fatalf("读取 %s 失败: %v", controllerSrc, err)
+	}
+	src := string(data)
+	for k := range smsControllerOnlyKeys {
+		if !strings.Contains(src, `Tr("`+k+`")`) {
+			t.Errorf("controller 专用键 %q 在 %s 里没有真实引用（白名单会退化成永久豁免）", k, controllerSrc)
+		}
 	}
 }
 

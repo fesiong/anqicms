@@ -3,6 +3,7 @@ package sms
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"kandaoni.com/anqicms/config"
 )
@@ -80,6 +81,13 @@ func ApplyDefaults(cfg *config.PluginSmsConfig) {
 	if cfg.Aliyun.International.Endpoint == "" {
 		cfg.Aliyun.International.Endpoint = aliyunInternationalEndpoint
 	}
+	// 防御性归一化（裁决 R36）：库里既有值可能是站长带 scheme 填进来的，
+	// 而适配器裸拼 "https://"+endpoint+"/?" → 会拼出 https://https//… 的畸形 URL，
+	// 直到发请求才炸（DNS 失败 → transient → 站点误以为平台抖动）。
+	// 只在 ApplyDefaults 里归一化还不够：ApplyDefaults 跑在副本上，
+	// 站点内存里的原值不变；写入口（后台保存）另有一份归一化，见 provider 侧调用。
+	cfg.Aliyun.Domestic.Endpoint = NormalizeEndpointHost(cfg.Aliyun.Domestic.Endpoint)
+	cfg.Aliyun.International.Endpoint = NormalizeEndpointHost(cfg.Aliyun.International.Endpoint)
 	if cfg.Aliyun.Domestic.ParamName == "" {
 		cfg.Aliyun.Domestic.ParamName = aliyunDefaultParamName
 	}
@@ -92,6 +100,27 @@ func ApplyDefaults(cfg *config.PluginSmsConfig) {
 	if cfg.Tencent.International.Region == "" {
 		cfg.Tencent.International.Region = tencentDefaultRegion
 	}
+}
+
+// NormalizeEndpointHost 归一化阿里云 endpoint：剥 scheme、剥尾斜杠、剥首尾空白。
+//
+// 裁决 R36：站长最常见的填法是「https://dysmsapi.aliyuncs.com」（带 scheme），
+// 而 aliyun.go 裸拼 "https://"+endpoint+"/?" → 拼出 https://https//… 的畸形 URL，
+// 要到发请求才暴露（DNS 失败被判成 transient + retryable，站点以为是平台抖动）。
+//
+// 只剥 scheme 与尾斜杠，**不剥路径**：R36 已核过腾讯云/Twilio 的接入点要么是纯
+// host、要么是代码常量里的完整 URL，带路径的 endpoint 归一化不得削掉它。
+// 腾讯云与 Twilio 的 endpoint 不是用户可填字段，故只对阿里云两槽调用本函数。
+func NormalizeEndpointHost(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return ""
+	}
+	if i := strings.Index(s, "://"); i >= 0 {
+		s = s[i+3:]
+	}
+	s = strings.TrimRight(s, "/")
+	return strings.TrimSpace(s)
 }
 
 // Resolve 是「配置 → 可用 Profile」的唯一入口（规格 §3.3）。
@@ -240,6 +269,13 @@ func resolveTwilio(cfg *config.PluginSmsConfig, region, scene string) (*Profile,
 	text := slot.Texts[scene]
 	if text == "" {
 		return nil, ErrSmsTemplateMissing
+	}
+	// ⚠️ Twilio 没有模板 ID，短信正文就是站长自己写的这段文案，验证码靠
+	// {{code}} 占位符注入。文案漏写占位符时，渲染结果是一段**不含验证码**的
+	// 普通短信——用户收到短信却收不到码，而系统照样记「发送成功」。
+	// 这必须在发送前拒掉，不能等到用户投诉（裁决 R151）。
+	if !strings.Contains(text, "{{code}}") {
+		return nil, ErrSmsTemplateInvalid
 	}
 	return &Profile{
 		Provider:            cfg.Provider,

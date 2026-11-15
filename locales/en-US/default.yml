@@ -873,6 +873,7 @@
 "SmsCredentialMissing": "SMS service is not fully configured"
 "SmsSignMissing": "SMS signature is not configured"
 "SmsTemplateMissing": "SMS template for this scene is not configured"
+"SmsTemplateInvalid": "SMS template for this scene is missing the verification code placeholder"
 "SmsIpLimited": "Too many requests, please try again later"
 "SmsPhoneLimited": "This number has reached today's sending limit"
 "SmsResendTooSoon": "Please try again in %d seconds"

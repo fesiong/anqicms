@@ -879,6 +879,7 @@
 "SmsCredentialMissing": "短信服务未配置完整"
 "SmsSignMissing": "短信签名未配置"
 "SmsTemplateMissing": "该场景的短信模板未配置"
+"SmsTemplateInvalid": "该场景的短信模板缺少验证码占位符"
 "SmsIpLimited": "请求过于频繁，请稍后再试"
 "SmsPhoneLimited": "该号码今日发送次数已达上限"
 "SmsResendTooSoon": "请 %d 秒后再试"

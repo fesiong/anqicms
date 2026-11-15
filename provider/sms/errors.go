@@ -59,6 +59,7 @@ var (
 	ErrSmsCredentialMissing = errors.New("SmsCredentialMissing")
 	ErrSmsSignMissing       = errors.New("SmsSignMissing")
 	ErrSmsTemplateMissing   = errors.New("SmsTemplateMissing")
+	ErrSmsTemplateInvalid   = errors.New("SmsTemplateInvalid")
 	ErrSmsIpLimited         = errors.New("SmsIpLimited")
 	ErrSmsPhoneLimited      = errors.New("SmsPhoneLimited")
 	ErrSmsResendTooSoon     = errors.New("SmsResendTooSoon")

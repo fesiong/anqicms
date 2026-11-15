@@ -32,9 +32,14 @@ const twilioSendTimeout = 10 * time.Second
 //
 // 「余额不足」规格没给码：官方字典里没有任何一条标题叫 insufficient funds，
 // 余额耗尽被停机落在 20005（Account not active，请求即拒）与 30002
-// （Account suspended，已入队但投递前被停）两条上，二者的官方描述都明确点名
-// 余额为负／欠费。未列入的码一律 transient，且原样保留进 SendError.Code
-// （排查唯一线索，不得吞成「发送失败」）。平台消息为空时回落这里的中文提示。
+// （Account suspended，已入队但投递前被停）两条上，二者的官方描述都提到
+// 余额为负／欠费。
+// ⚠️ 但**余额只是常见原因之一**（裁决 R48，2026-11-15 订正）：20005 另有
+// 「试用未激活／父账户被停／ToS 审核」，30002 另有「AUP 违规／欺诈流量」。
+// 故中文提示降级为「常见原因：…」，不把余额说成定论。分类仍判 permanent
+// （两码都要人工充值或申诉）。未列入的码一律 transient，且原样保留进
+// SendError.Code（排查唯一线索，不得吞成「发送失败」）。平台消息为空时回落
+// 这里的中文提示。
 // ⚠️ 新增码必须同步 twilio_test.go 的 twilioPermanentCases（go/ast 双向穷举护栏）。
 var twilioPermanentCodes = map[string]string{
 	// 鉴权失败（Permission Denied）
@@ -45,9 +50,9 @@ var twilioPermanentCodes = map[string]string{
 	"21606": "发件号码非法（不是本账户可发消息的 Twilio 号码）",
 	// 收件人已退订
 	"21610": "收件人已退订（回复过 STOP）",
-	// 余额不足／欠费停服
-	"20005": "账户未激活（余额降到 $0 或以下被停）",
-	"30002": "账户被暂停（余额为负或欠费，已入队但未投递）",
+	// 账户未激活／被暂停（常见原因：余额问题）
+	"20005": "账户未激活（常见原因：余额降到 $0 或以下）",
+	"30002": "账户被暂停（常见原因：余额为负或欠费；已入队但未投递）",
 }
 
 // twilioMessage 是 2xx 的 Message 资源。error_code 是 integer|null、
@@ -121,7 +126,8 @@ func (s *twilioSender) Send(ctx context.Context, p Profile, req SendRequest) (Se
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, p.Endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
-		return SendResult{}, &SendError{Class: ClassTransient, Code: "BuildRequest", Message: err.Error()}
+		// 剥掉 URL（networkErrorMessage）：Twilio 的 URL 路径里带 AccountSid。
+		return SendResult{}, &SendError{Class: ClassTransient, Code: "BuildRequest", Message: networkErrorMessage(err)}
 	}
 	httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	// Basic 凭据对二选一，API Key 优先；半对不算配齐，回落 AuthToken。
@@ -134,7 +140,8 @@ func (s *twilioSender) Send(ctx context.Context, p Profile, req SendRequest) (Se
 
 	resp, err := s.client.Do(httpReq)
 	if err != nil {
-		return SendResult{}, &SendError{Class: ClassTransient, Code: "NetworkError", Message: err.Error()}
+		// 剥掉 URL（networkErrorMessage）：*url.Error 的文本含整条 URL（路径里有 AccountSid）。
+		return SendResult{}, &SendError{Class: ClassTransient, Code: "NetworkError", Message: networkErrorMessage(err)}
 	}
 	defer resp.Body.Close()
 	body, err := readSMSResponseBody(resp.Body)

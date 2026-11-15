@@ -82,7 +82,9 @@ func (s *aliyunSender) Send(ctx context.Context, p Profile, req SendRequest) (Se
 	endpoint := "https://" + p.Endpoint + "/?" + query.Encode()
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
 	if err != nil {
-		return SendResult{}, &SendError{Class: ClassTransient, Code: "BuildRequest", Message: err.Error()}
+		// BuildRequest 的错误文本里带整条 URL（query 里带 TemplateParam=验证码），
+		// 必须剥掉（networkErrorMessage）。
+		return SendResult{}, &SendError{Class: ClassTransient, Code: "BuildRequest", Message: networkErrorMessage(err)}
 	}
 	httpReq.Header.Set("accept", "application/json")
 	var nonceBuf [16]byte
@@ -95,7 +97,9 @@ func (s *aliyunSender) Send(ctx context.Context, p Profile, req SendRequest) (Se
 
 	resp, err := s.client.Do(httpReq)
 	if err != nil {
-		return SendResult{}, &SendError{Class: ClassTransient, Code: "NetworkError", Message: err.Error()}
+		// ⚠️ 绝不能直接用 err.Error()：*url.Error 的文本含整条 URL，
+		// 而阿里云的验证码就在 query 的 TemplateParam 里 → 会随 err_msg 落库。
+		return SendResult{}, &SendError{Class: ClassTransient, Code: "NetworkError", Message: networkErrorMessage(err)}
 	}
 	defer resp.Body.Close()
 	body, err := readSMSResponseBody(resp.Body)

@@ -1344,7 +1344,13 @@ func (w *Website) restoreSingleData(name string, reader io.ReadCloser) {
 				if err == nil {
 					v.Value = string(buf)
 				}
-			} else if v.Key == StorageSettingKey || v.Key == ImportApiSettingKey || v.Key == AnqiSettingKey {
+			} else if v.Key == StorageSettingKey || v.Key == ImportApiSettingKey || v.Key == AnqiSettingKey ||
+				// ⚠️ 短信配置必须跳过（裁决 R25）：导出侧 design.go:1771 已把
+				// SmsSettingKey 排除在模板包之外，但**导入侧**没堵 —— 第三方模板包
+				// 若携带 sms 行，这里会以 OnConflict{UpdateAll:true} 覆盖本站的
+				// AK/SK/签名/场景模板，把 OTP 引到攻击者自己的 Twilio 账号。
+				// 合法导出的包不含该键，故跳过不会丢数据。
+				v.Key == SmsSettingKey {
 				continue
 			}
 			w.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)

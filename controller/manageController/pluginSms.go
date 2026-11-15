@@ -183,6 +183,12 @@ func PluginSmsSettingForm(ctx iris.Context) {
 	}
 	// 12 个凭据逐个哨兵回写保护（值为 ******** 则取内存真值，空串真的清空）。
 	restoreSmsSecretSentinels(&req, currentSite.PluginSms)
+	// 阿里云 endpoint 入站归一化（裁决 R36）：站长最常见的填法是带 scheme 的
+	// 「https://dysmsapi.aliyuncs.com」，而适配器裸拼 "https://"+endpoint+"/?" →
+	// 拼出 https://https//… 的畸形 URL，要到发请求才炸。保存时归一化，
+	// 库里既有值另有 ApplyDefaults 的防御性归一化兜底。
+	req.Aliyun.Domestic.Endpoint = sms.NormalizeEndpointHost(req.Aliyun.Domestic.Endpoint)
+	req.Aliyun.International.Endpoint = sms.NormalizeEndpointHost(req.Aliyun.International.Endpoint)
 	// 保持指针身份：其它代码（provider/smsSend.go 等发码流程）持有该指针，
 	// 不能写成 currentSite.PluginSms = &req。
 	*currentSite.PluginSms = req

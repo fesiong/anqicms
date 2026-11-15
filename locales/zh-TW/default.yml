@@ -873,6 +873,7 @@
 "SmsCredentialMissing": "簡訊服務未配置完整"
 "SmsSignMissing": "簡訊簽名未配置"
 "SmsTemplateMissing": "該場景的簡訊模板未配置"
+"SmsTemplateInvalid": "該場景的簡訊模板缺少驗證碼佔位符"
 "SmsIpLimited": "請求過於頻繁，請稍後再試"
 "SmsPhoneLimited": "該號碼今日發送次數已達上限"
 "SmsResendTooSoon": "請 %d 秒後再試"

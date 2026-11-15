@@ -3,6 +3,7 @@ package manageController
 import (
 	"encoding/json"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -38,8 +39,13 @@ func TestWebsiteDetailNoPasswordField(t *testing.T) {
 	}
 	// 结构体里可以有 Password 字段（用于输出掩码），但绝不能复用
 	// config.MysqlConfig——那个带真值。断言 Mysql 用的是脱敏类型。
-	if !strings.Contains(seg, "Mysql     WebsiteMysqlSafe") &&
-		!strings.Contains(seg, "Mysql WebsiteMysqlSafe") {
+	//
+	// ⚠️ 断言必须**忽略对齐空格**：gofmt 的对齐宽度随最长字段名变化，
+	// 早期版本把 "Mysql     WebsiteMysqlSafe"（5 空格）写死，后来
+	// request/website.go 里出现了更长的字段名，对齐变成 7 空格，
+	// 断言就误报「实际用的不是脱敏类型」——测试自身脆弱，
+	// 与产品无关（该类型本来就正确）。改用 \s+ 匹配（2026-11-15，裁决 R108）。
+	if !regexp.MustCompile(`Mysql\s+WebsiteMysqlSafe`).MatchString(seg) {
 		t.Errorf("Mysql 字段必须用脱敏类型 WebsiteMysqlSafe，实际：\n%s", seg)
 	}
 	if strings.Contains(seg, "config.MysqlConfig") {

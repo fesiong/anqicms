@@ -107,7 +107,8 @@ func (s *tencentSender) Send(ctx context.Context, p Profile, req SendRequest) (S
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://"+p.Endpoint+"/", bytes.NewReader(payload))
 	if err != nil {
-		return SendResult{}, &SendError{Class: ClassTransient, Code: "BuildRequest", Message: err.Error()}
+		// 剥掉 URL（networkErrorMessage）：构造请求失败的文本里带整条 URL。
+		return SendResult{}, &SendError{Class: ClassTransient, Code: "BuildRequest", Message: networkErrorMessage(err)}
 	}
 	if err := SignTencent(httpReq, p, payload, time.Now()); err != nil {
 		return SendResult{}, &SendError{Class: ClassTransient, Code: "Sign", Message: err.Error()}
@@ -115,7 +116,8 @@ func (s *tencentSender) Send(ctx context.Context, p Profile, req SendRequest) (S
 
 	resp, err := s.client.Do(httpReq)
 	if err != nil {
-		return SendResult{}, &SendError{Class: ClassTransient, Code: "NetworkError", Message: err.Error()}
+		// 剥掉 URL（networkErrorMessage）：*url.Error 的文本含整条 URL。
+		return SendResult{}, &SendError{Class: ClassTransient, Code: "NetworkError", Message: networkErrorMessage(err)}
 	}
 	defer resp.Body.Close()
 	body, err := readSMSResponseBody(resp.Body)

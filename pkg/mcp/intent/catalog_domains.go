@@ -802,7 +802,7 @@ var domainIntentCatalog = append([]*IntentSpec{
 			"page":       {Type: "integer", Default: 1},
 			"page_size":  {Type: "integer", Default: 20},
 			"scene":      {Type: "string", Desc: "logs 筛选：场景码"},
-			"provider":   {Type: "string", Desc: "logs 筛选：厂商"},
+			"provider":   {Type: "string", Desc: "logs 筛选：厂商（仅 logs 用；setting_save 要切换生效厂商请传 values.provider）"},
 			"status":     {Type: "integer", Desc: "logs 筛选：0 待发 1 成功 -1 失败"},
 			"phone":      {Type: "string", Desc: "logs 筛选：号码"},
 			"start_time": {Type: "integer", Desc: "logs 筛选：起始时间戳，必须 > 0（传 0 视为非法）"},
