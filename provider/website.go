@@ -459,6 +459,12 @@ func InitWebsite(mw *model.Website) {
 		if err != nil {
 			w.ErrorMsg = "：" + err.Error()
 		}
+		// 这是「站点列表莫名 500」的唯一线索：库连不上的站点会以 System == nil
+		// 的状态留在注册表里，后台只能看到 status:0，看不出原因。
+		// 2026-11-15 的线上事故就是这类站点让 /website/list 的某一页反复 500，
+		// 而日志里只有 recover 栈、没有任何「哪个站点坏了」的记录。
+		slog.Error("站点数据库连接失败，该站点将以未初始化状态运行",
+			"siteId", mw.Id, "name", mw.Name, "reason", w.ErrorMsg)
 	}
 	// 先判断目录是否存在。对于迁移的站点，这个地方可能是会出错的
 	_, err = os.Stat(mw.RootPath)
@@ -890,6 +896,12 @@ func (w *Website) GetTemplateDir() string {
 	if w == nil {
 		return config.ExecPath + "template" + string(filepath.Separator) + "default"
 	}
+	// System 为 nil 表示站点半初始化（库连不上 → InitSetting 未执行）。
+	// 这里不能取 TemplateName：裸解引用会 panic，而调用方（备份、模板读写、
+	// 缓存清理）大多拿不到 recover 兜底，崩的是整个请求甚至进程。
+	if w.System == nil {
+		return w.RootPath + "template" + string(filepath.Separator) + "default"
+	}
 	if len(w.System.TemplateName) == 0 {
 		w.System.TemplateName = "default"
 	}
@@ -913,23 +925,46 @@ func GetDBWebsites(name, baseUrl string, page, pageSize int) ([]*model.Website, 
 		tx = tx.Where("id in (?)", ids)
 	}
 	tx.Count(&total).Limit(pageSize).Offset(offset).Find(&sites)
-	if len(sites) > 0 {
-		sites[0].Mysql = config.Server.Mysql
-		for i := range sites {
-			currentSite := GetWebsite(sites[i].Id)
-			if currentSite != nil {
-				sites[i].Language = currentSite.System.Language
-				sites[i].BaseUrl = currentSite.System.BaseUrl
-				if !currentSite.Initialed {
-					sites[i].Status = 0
-				}
-			} else {
-				sites[i].Status = 0
-			}
-		}
+	// 逐行用运行时注册表补全 Language / BaseUrl。
+	//
+	// ⚠️ 这里曾写成 `sites[0].Mysql = config.Server.Mysql`，是**位置判断**而不是
+	// 身份判断：它命中每一页的第一行。翻到第 2 页时，第 21 号站点会被改写成
+	// 「用的是默认库 anqicms / use_default=false」，而它真实配置是 aitool（实测）。
+	// 站点 1 的库信息由 handler 按 `site.Id == 1` 补，不需要在这里做。
+	for i := range sites {
+		applySiteRuntimeInfo(sites[i], GetWebsite(sites[i].Id))
 	}
 
 	return sites, total
+}
+
+// applySiteRuntimeInfo 用运行时注册表里的站点补全数据库行的展示字段。
+//
+// 为什么必须容错：websites 注册表里可能存在**半初始化**的站点。
+// InitWebsite 先 `websites.Set(&w)`，之后才 `w.InitSetting()`，而
+// InitSetting 在 `w.DB == nil` 时直接 return —— 于是「库连不上」的站点
+// 会以 `System == nil` 的状态长期留在注册表里。
+//
+// 直接 `currentSite.System.Language` 取字段就是空指针 panic，被 recover
+// 兜成 500「服务器内部错误」。因为 panic 只发生在包含该行的分页上，
+// 表现是「第 1 页正常、翻到某一页必 500」——极难从现象反推到数据。
+// 这里的语义：拿不到运行时配置就退化成数据库里的原始值（Status 归 0 表示不可用）。
+func applySiteRuntimeInfo(site *model.Website, currentSite *Website) {
+	if site == nil {
+		return
+	}
+	if currentSite == nil {
+		// 未注册（如直接写库造出来的行）：保留库里读到的字段，只标记不可用。
+		site.Status = 0
+		return
+	}
+	if currentSite.System != nil {
+		site.Language = currentSite.System.Language
+		site.BaseUrl = currentSite.System.BaseUrl
+	}
+	if !currentSite.Initialed {
+		site.Status = 0
+	}
 }
 
 func GetDBWebsiteInfo(id uint) (*model.Website, error) {
@@ -942,16 +977,9 @@ func GetDBWebsiteInfo(id uint) (*model.Website, error) {
 	if err != nil {
 		return nil, err
 	}
-	currentSite := GetWebsite(website.Id)
-	if currentSite != nil {
-		website.Language = currentSite.System.Language
-		website.BaseUrl = currentSite.System.BaseUrl
-		if !currentSite.Initialed {
-			website.Status = 0
-		}
-	} else {
-		website.Status = 0
-	}
+	// 与列表走同一套降级逻辑：`System` 可能为 nil（半初始化站点），
+	// 裸取 currentSite.System.Language 会让详情接口同样 500。
+	applySiteRuntimeInfo(&website, GetWebsite(website.Id))
 
 	return &website, nil
 }
