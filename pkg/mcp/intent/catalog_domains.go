@@ -787,6 +787,37 @@ var domainIntentCatalog = append([]*IntentSpec{
 		}),
 	},
 	{
+		Name: "channel_sms", Title: "短信服务", Domain: DomainChannel, Risk: RiskWrite,
+		Desc: "短信渠道配置、测试发送与发送记录。action: setting_get/setting_save/test/logs。" +
+			"返回统一为标准信封 {code,msg,ok,status,data}。" +
+			"⚠️ setting_save 的顶层字段是部分更新，但 aliyun/tencent/twilio 三个对象是**整体替换**：" +
+			"传它们时必须带完整子树，只传改动的叶子字段会清掉其余配置。" +
+			"⚠️ setting_get 返回的凭据是掩码 ********，表示「未改动」；原样写回即可保持不变。" +
+			"⚠️ 同一时刻只有一家厂商生效；Twilio 只支持国际号码，+86 会被拒发。",
+		DefaultOff: true,
+		Params: map[string]ParamSpec{
+			"action": {Type: "string", Required: true, Enum: []string{
+				"setting_get", "setting_save", "test", "logs"}},
+			"values":     {Type: "object", Desc: "setting_save 传完整配置；test 传 {phone_country, phone}"},
+			"page":       {Type: "integer", Default: 1},
+			"page_size":  {Type: "integer", Default: 20},
+			"scene":      {Type: "string", Desc: "logs 筛选：场景码"},
+			"provider":   {Type: "string", Desc: "logs 筛选：厂商"},
+			"status":     {Type: "integer", Desc: "logs 筛选：0 待发 1 成功 -1 失败"},
+			"phone":      {Type: "string", Desc: "logs 筛选：号码"},
+			"start_time": {Type: "integer", Desc: "logs 筛选：起始时间戳"},
+			"end_time":   {Type: "integer", Desc: "logs 筛选：结束时间戳"},
+		},
+		Required: []string{"action"},
+		Caps:     []string{"api_invoke"},
+		Compose: invokeRoutes("channel_sms", map[string]string{
+			"setting_get":  "GET /plugin/sms/setting",
+			"setting_save": "POST /plugin/sms/setting",
+			"test":         "POST /plugin/sms/test",
+			"logs":         "GET /plugin/sms/logs",
+		}),
+	},
+	{
 		Name: "channel_subscriber", Title: "订阅用户管理", Domain: DomainChannel, Risk: RiskWrite,
 		Desc: "订阅用户与其分组的管理、群发。action: list/detail/save/delete/category_list/category_save/category_delete/send/send_status。" +
 			"⚠️ send 是**异步长任务**（SMTP 单封耗时数秒，收件人多时同步会超时），只返回 job_id；" +
@@ -1086,6 +1117,7 @@ var gatedDomainIntents = map[string]string{
 	"seo_merchant":         "Google 商品同步：配置含 client_secret/refresh_token，且会向外推送商品数据", "channel_wechat": "公众号菜单与消息回复会同步到微信侧，对外可见",
 	"channel_thirdparty": "读写公众号/小程序/Google 授权配置（AppID、Secret）",
 	"channel_sendmail":   "SMTP 配置与测试发信，会真实投递邮件给收件人",
+	"channel_sms":        "短信配置含三家厂商凭据，且 test 会真实付费发短信给任意号码",
 	"channel_subscriber": "订阅用户群发（send），对外触达真实邮箱",
 	"system_security":    "访问限制/封禁/Akismet 等风控配置，误设可把站点或管理员挡在门外",
 	"system_multilang":   "多语言子站的保存、删除与同步，影响其他站点",

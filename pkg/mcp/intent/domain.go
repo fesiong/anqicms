@@ -60,6 +60,7 @@ var domainByPlugin = map[string]Domain{
 	"wechat":     DomainChannel,
 	"weapp":      DomainChannel,
 	"sendmail":   DomainChannel,
+	"sms":        DomainChannel,
 	"subscriber": DomainChannel,
 	// 推广与 SEO
 	"anchor":   DomainSeo,

@@ -526,6 +526,7 @@ func TestDomainIntentDefaultExposure(t *testing.T) {
 		"channel_wechat":       "对外同步到微信侧",
 		"channel_thirdparty":   "授权 AppID/Secret",
 		"channel_sendmail":     "真实投递邮件",
+		"channel_sms":          "短信配置含厂商凭据，test 会真实付费发短信",
 		"channel_subscriber":   "订阅用户群发",
 		"system_security":      "风控配置可锁站",
 		"system_multilang":     "跨站点同步与删除",

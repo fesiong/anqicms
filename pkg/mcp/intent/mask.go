@@ -17,26 +17,32 @@ const MaskedSecret = "********"
 // 误掩码会把 token_expire / token_type 这类普通字段也打成 ********，
 // 反而让调用方误判配置状态。新增资源时按实际字段名补进来。
 var secretFieldNames = map[string]bool{
-	"password":           true,
-	"passwd":             true,
-	"pwd":                true,
-	"secret":             true,
-	"app_secret":         true,
-	"client_secret":      true,
-	"secret_id":          true,
-	"secret_key":         true,
-	"access_key":         true,
-	"access_key_id":      true,
-	"access_key_secret":  true,
-	"private_key":        true,
-	"api_key":            true,
-	"apikey":             true,
-	"token":              true,
-	"token_secret":       true,
-	"encoding_aes_key":   true,
-	"verify_key":         true,
-	"license":            true,
-	"mcp_token":          true,
+	"password":          true,
+	"passwd":            true,
+	"pwd":               true,
+	"secret":            true,
+	"app_secret":        true,
+	"client_secret":     true,
+	"secret_id":         true,
+	"secret_key":        true,
+	"access_key":        true,
+	"access_key_id":     true,
+	"access_key_secret": true,
+	"private_key":       true,
+	"api_key":           true,
+	"apikey":            true,
+	"token":             true,
+	"token_secret":      true,
+	// 短信（Twilio）：account_sid / api_key_sid 是 Basic auth 的用户名侧，
+	// 与密码侧成对构成完整凭据；仓库已把 access_key_id / secret_id 当凭据处理，
+	// 口径一致。auth_token 是账号令牌，后缀形式见 _auth_token。
+	"auth_token":               true,
+	"account_sid":              true,
+	"api_key_sid":              true,
+	"encoding_aes_key":         true,
+	"verify_key":               true,
+	"license":                  true,
+	"mcp_token":                true,
 	"aliyun_access_key_id":     true,
 	"aliyun_access_key_secret": true,
 	"tencent_secret_id":        true,
@@ -54,9 +60,11 @@ func IsSecretField(name string) bool {
 	if secretFieldNames[n] {
 		return true
 	}
-	// 资源前缀形式：mysql_password / smtp_password / auth_secret …
+	// 资源前缀形式：mysql_password / smtp_password / auth_secret …；twilio_auth_token 同理。
+	// 刻意不加宽泛的 _token：token_expire / token_type 是普通字段，掩码会让调用方误判配置状态。
 	return strings.HasSuffix(n, "_password") || strings.HasSuffix(n, "_secret") ||
-		strings.HasSuffix(n, "_access_key") || strings.HasSuffix(n, "_api_key")
+		strings.HasSuffix(n, "_access_key") || strings.HasSuffix(n, "_api_key") ||
+		strings.HasSuffix(n, "_auth_token")
 }
 
 // MaskSecrets 递归把凭据字段的值替换成掩码，返回新对象（不修改入参）。
