@@ -144,9 +144,12 @@ func PluginSmsSettingForm(ctx iris.Context) {
 	// 类型生成字段级 params，换成 map 或第二次 ReadJSON 会让 params 归零（R103/R105）。
 	var req config.PluginSmsConfig
 	if err := ctx.ReadJSON(&req); err != nil {
+		// R146③：请求体不合法是「参数错误」而不是「保存失败」，回 SmsParamInvalid；
+		// R114/R144：解析器原文只进服务端日志（只记 error 对象，绝不记请求体）。
+		log.Println("后台短信配置保存失败：", err)
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  err.Error(),
+			"msg":  currentSite.Tr("SmsParamInvalid"),
 		})
 		return
 	}
@@ -154,24 +157,27 @@ func PluginSmsSettingForm(ctx iris.Context) {
 	req = *currentSite.PluginSms
 	body, err := ctx.GetBody()
 	if err != nil {
+		log.Println("后台短信配置保存失败：", err)
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  err.Error(),
+			"msg":  currentSite.Tr("SmsParamInvalid"),
 		})
 		return
 	}
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(body, &payload); err != nil {
+		log.Println("后台短信配置保存失败：", err)
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  err.Error(),
+			"msg":  currentSite.Tr("SmsParamInvalid"),
 		})
 		return
 	}
 	if err := library.MergeJSONPayload(payload, &req); err != nil {
+		log.Println("后台短信配置保存失败：", err)
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  err.Error(),
+			"msg":  currentSite.Tr("SmsParamInvalid"),
 		})
 		return
 	}
@@ -182,9 +188,11 @@ func PluginSmsSettingForm(ctx iris.Context) {
 	*currentSite.PluginSms = req
 
 	if err := currentSite.SaveSettingValue(provider.SmsSettingKey, currentSite.PluginSms); err != nil {
+		// DB 失败不是「参数格式不正确」，语义上是保存失败；原文只进服务端日志。
+		log.Println("后台短信配置保存失败：", err)
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  err.Error(),
+			"msg":  currentSite.Tr("SaveFailed"),
 		})
 		return
 	}

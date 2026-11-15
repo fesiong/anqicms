@@ -752,3 +752,93 @@ func TestPluginSmsOpsErrorKeepsBusinessKeys(t *testing.T) {
 		t.Fatalf("恢复绿失败：%v", err)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// 任务 16B-fix1：配置保存端点的失败分支不得回显解析器原文（R114/R144/R146③）
+// ---------------------------------------------------------------------------
+
+// s13CheckSettingFormErrorExit：PluginSmsSettingForm 的 5 个失败分支一律不把
+// Go/JSON 解析器原文写进响应 —— 4 个解析分支回 SmsParamInvalid，保存失败回
+// SaveFailed（DB 失败不是「参数格式不正确」，回「保存失败」才是对的语义），
+// 原始错误只进服务端日志。同时禁止套用 respondSmsOpsError：那是发送链路出口，
+// 会把保存失败说成「短信发送失败」，比原文更误导。
+func s13CheckSettingFormErrorExit(src string) error {
+	if err := s13Require(src,
+		`ctx\.ReadJSON\(&req\)`,                // 具名且恰好一次（apicatalog 字段级 params）
+		`currentSite\.Tr\("SmsParamInvalid"\)`, // 解析失败语义
+		`currentSite\.Tr\("SaveFailed"\)`,      // 落库失败语义
+		`log\.Println\(`,                       // 原始错误只进服务端日志
+	); err != nil {
+		return err
+	}
+	// 反面①：任何形式的解析器原文回显（含 msg 字段）都判违规。
+	if strings.Contains(src, "err.Error()") {
+		return errors.New("PluginSmsSettingForm 仍把 err.Error() 写进响应（原始错误只进服务端日志）")
+	}
+	// 反面②：不得套发送链路出口，否则保存失败会被回成「短信发送失败」。
+	if strings.Contains(src, "respondSmsOpsError") {
+		return errors.New("PluginSmsSettingForm 套用了 respondSmsOpsError（发送链路出口，会把保存失败误报成发送失败）")
+	}
+	// 5 个失败分支各自都要留日志：少于 5 处说明有分支静默吞掉了原始错误，
+	// 线上出问题时服务端将完全没有线索。
+	if n := strings.Count(src, "log.Println("); n < 5 {
+		return fmt.Errorf("失败分支的服务端日志只有 %d 处，少于 5 个失败分支", n)
+	}
+	return nil
+}
+
+// TestPluginSmsSettingFormErrorExit 三段式：真实源码绿 / 换回 err.Error() 红 /
+// 套用 respondSmsOpsError 红 / 删掉服务端日志红 / 恢复绿。
+//
+// 本包测试不加载 config.json、拿不到 DB，行为级验证在本包不可行（构造 iris ctx
+// 真跑 handler 会一路撞到 provider.CurrentSubSite），故只钉源码结构。
+func TestPluginSmsSettingFormErrorExit(t *testing.T) {
+	real := smsFuncSource(t, s13PluginSmsFile, "PluginSmsSettingForm")
+	if err := s13CheckSettingFormErrorExit(real); err != nil {
+		t.Fatalf("真实源码护栏失败：%v", err)
+	}
+	t.Log("真实源码：4 个解析分支回 SmsParamInvalid、保存失败回 SaveFailed，原始错误只进日志 → 判合规（绿）")
+
+	t.Run("反向对照_换回err.Error必红", func(t *testing.T) {
+		bad := strings.Replace(real, `currentSite.Tr("SmsParamInvalid")`, "err.Error()", 1)
+		if bad == real {
+			t.Fatal("反向对照锚点失效：源码里没找到 currentSite.Tr(\"SmsParamInvalid\")")
+		}
+		err := s13CheckSettingFormErrorExit(bad)
+		if err == nil {
+			t.Fatal("反向对照失败：把一处 SmsParamInvalid 换回 err.Error() 后仍判绿")
+		}
+		t.Logf("反向对照：一处解析分支换回 err.Error() → 判违规（红：%v）", err)
+	})
+
+	t.Run("反向对照_套用respondSmsOpsError必红", func(t *testing.T) {
+		bad := strings.Replace(real, `currentSite.Tr("SmsParamInvalid")`,
+			"respondSmsOpsError(ctx, currentSite, err)", 1)
+		if bad == real {
+			t.Fatal("反向对照锚点失效：源码里没找到 currentSite.Tr(\"SmsParamInvalid\")")
+		}
+		err := s13CheckSettingFormErrorExit(bad)
+		if err == nil {
+			t.Fatal("反向对照失败：套用发送链路出口的源码仍判绿")
+		}
+		t.Logf("反向对照：一处解析分支换成 respondSmsOpsError → 判违规（红：%v）", err)
+	})
+
+	t.Run("反向对照_删掉服务端日志必红", func(t *testing.T) {
+		// 只删 4 处、留 1 处：确保锚点仍在，让「少于 5 处」的计数断言真正生效
+		// （全部删光会先被锚点拦住，测不到计数规则）。
+		bad := strings.Replace(real, `log.Println("后台短信配置保存失败：", err)`, "", 4)
+		if bad == real {
+			t.Fatal("反向对照锚点失效：源码里没找到 log.Println(\"后台短信配置保存失败：\", err)")
+		}
+		err := s13CheckSettingFormErrorExit(bad)
+		if err == nil {
+			t.Fatal("反向对照失败：只剩 1 处服务端日志（5 个失败分支）仍判绿")
+		}
+		t.Logf("反向对照：5 处服务端日志只留 1 处 → 判违规（红：%v）", err)
+	})
+
+	if err := s13CheckSettingFormErrorExit(real); err != nil {
+		t.Fatalf("恢复绿失败：%v", err)
+	}
+}
