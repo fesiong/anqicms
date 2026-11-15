@@ -935,7 +935,7 @@ Twilio tab 顶部固定提示：**仅支持国际号码，`+86` 号码将被拒�
 | **`account_sid`** | **漏网** | 补精确名 `account_sid` |
 | **`api_key_sid`** | **漏网** | 补精确名 `api_key_sid` |
 
-⚠️ **不要**加宽泛的 `_token` 后缀——那会把 `token_expire`／`token_type` 这类普通字段也打成掩码，反而让调用方误判配置状态。只补确凿是凭据的名字。
+⚠️ **不要**加宽泛的 `_token` 后缀。真正的受害者不是 `token_expire`／`token_type`（它们以 `_expire`／`_type` 结尾，`_token` 后缀**命中不了**，拿它们当反向对照是恒绿的——2026-11-15 实测纠正），而是 `url_token`（`request/api.go`、`request/category.go`、`request/archive.go`、`model/module.go`）与 `link_token`（`config/plugin.go`）这类**非凭据**的 URL 别名：一旦被掩码，读回再写回会把 `********` 写进配置、直接毁链接。只补确凿是凭据的名字。
 
 `account_sid` 与 `api_key_sid` 纳入掩码的理由：它们是 Basic auth 的用户名侧，与密码侧成对构成完整凭据。仓库已把 `access_key_id`／`secret_id` 当凭据处理，口径一致。
 

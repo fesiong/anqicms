@@ -986,34 +986,34 @@ git commit -m "feat(短信): 后台短信服务配置页与菜单路由"
 
 **Interfaces：** 意图 `channel_sms`，action `setting_get|setting_save|test|logs`，映射到任务 12／13 的四个端点。
 
-- [ ] **步骤 1：编写失败的测试**
+- [x] **步骤 1：编写失败的测试**
 
 - `TestSmsIntentStaysGated`：断言 `channel_sms` 存在、`DefaultOff == true`、`Domain == DomainChannel`、`Risk == RiskWrite`，且在 `gatedDomainIntents` 里有非空理由。**反向对照**：把 `channel_sms` 挪进 `provider/api_intent_routes_test.go` 的 `dailyOpen`（或从 `gatedDomainIntents` 移除）后重跑，必须变红 —— 四处名单缺一处即红。
 - `TestSmsIntentParamsMatchEndpoints`：断言意图 `Params` 的每个键都能被对应端点的请求结构体 json tag 认识（复用仓库既有的 `TestIntentParamsRecognizedByEndpoints` 范式）。**类型必须与 json tag 严格一致**——漏了不报错，只是值被静默清空。
 - `TestSmsSecretFieldNamesCovered`：表驱动断言 `IsSecretField` 对 `auth_token`／`account_sid`／`api_key_sid`／`api_key_secret`／`access_key_id`／`access_key_secret`／`secret_id`／`secret_key` 全部返回 true；**`token_expire`／`token_type`／`sign_name`／`templates`／`from`／`messaging_service_sid`／`sms_sdk_app_id` 全部返回 false**。反向对照：加宽泛 `_token` 后缀会让 `token_expire` 变 true，必须被这条测试抓住。
 - `TestSmsDomainMapping`：断言 `domainByPlugin["sms"] == DomainChannel`。
 
-- [ ] **步骤 2：运行测试验证失败**
+- [x] **步骤 2：运行测试验证失败**
 
 运行：`go test ./pkg/mcp/intent/ -run 'TestSms' -v`
 预期：FAIL（意图不存在）。
 
-- [ ] **步骤 3：加意图与四处名单**
+- [x] **步骤 3：加意图与四处名单**
 
 意图定义逐字照抄规格 §9.1（含 Desc 里的三条 ⚠️：厂商对象整体替换、掩码语义、Twilio 只支持国际）。`Compose` 用 `invokeRoutes("channel_sms", map[string]string{...})` 映射四个端点。
 **四处平行名单同步**（漏一处就红）：① `intent.gatedDomainIntents` **加入**并写理由；② 测试内 `intent.defaultOpenDomainIntents` **不得包含**；③ `RecommendedExposed()` **不得包含**；④ `provider/api_intent_routes_test.go` 的 `mustStayGated` **加入**、`dailyOpen` **不得包含**。
 `domain.go` 的 `domainByPlugin` 补 `"sms": DomainChannel`（紧邻 `"sendmail"`）；`catalog_domains.go:1088` 附近的风险描述映射补一条。
 
-- [ ] **步骤 4：补掩码名单**
+- [x] **步骤 4：补掩码名单**
 
 `mask.go` 的 `IsSecretField` 补精确名 `auth_token`／`account_sid`／`api_key_sid` 与后缀 `_auth_token`。**绝不加宽泛的 `_token` 后缀**（会把 `token_expire`／`token_type` 打成掩码，让调用方误判配置状态）。
 
-- [ ] **步骤 5：运行测试验证通过**
+- [x] **步骤 5：运行测试验证通过**
 
 运行：`go test ./pkg/mcp/intent/ -v && go test ./provider/ -run 'TestApiIntentRoutes|TestIntent' -v && go build ./... && go run ./cmd/apicatalog -check`
 预期：intent 整包 PASS（该包可整跑），provider 侧门禁名单 PASS。意图总数 53 → 54，**默认工具面常驻 token 成本不变**（新意图 DefaultOff）。
 
-- [ ] **步骤 6：Commit**
+- [x] **步骤 6：Commit**
 
 ```bash
 gofmt -w pkg/mcp/intent/catalog_sms_test.go
