@@ -2417,6 +2417,16 @@ export default {
   'plugin.sms.hourly_limit_per_ip': 'Hourly Limit Per IP',
   'plugin.sms.daily_limit_per_ip': 'Daily Limit Per IP',
   'plugin.sms.log_retention_days': 'Log Retention Days',
+  'plugin.sms.trusted_proxies.card': 'Reverse Proxy / CDN',
+  'plugin.sms.trusted_proxies': 'Trusted Proxy Ranges',
+  'plugin.sms.trusted_proxies.placeholder':
+    'Type an IP or CIDR and press Enter; multi-line paste works',
+  'plugin.sms.trusted_proxies.hint':
+    'Only needed when the site sits behind a CDN or reverse proxy: enter the CDN origin ranges (IP or CIDR, e.g. 203.0.113.0/24, 2408:4001::/32). Leave empty to trust no proxy — IP limits then use the TCP peer address, which is what direct public hosting needs. A wrong value either disables IP limiting or makes every visitor share one quota.',
+  'plugin.sms.trusted_proxies.invalid':
+    'Invalid format: must be an IP (e.g. 203.0.113.9) or a CIDR (e.g. 203.0.113.0/24)',
+  'plugin.sms.trusted_proxies.too_broad':
+    '/0 trusts every source and makes IP limits useless — enter the actual origin ranges',
   'plugin.sms.not_active': 'Currently inactive (switch the active provider under Basic)',
   'plugin.sms.twilio.intl_only': 'International numbers only; +86 numbers will be rejected',
   'plugin.sms.template.empty.hint': 'An empty scene template/text means that scene is unavailable; sending will fail explicitly instead of falling back to another scene',

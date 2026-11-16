@@ -2295,6 +2295,15 @@ export default {
   'plugin.sms.hourly_limit_per_ip': '单 IP 每小时上限',
   'plugin.sms.daily_limit_per_ip': '单 IP 每日上限',
   'plugin.sms.log_retention_days': '日志保留天数',
+  'plugin.sms.trusted_proxies.card': '反向代理 / CDN',
+  'plugin.sms.trusted_proxies': '可信代理网段',
+  'plugin.sms.trusted_proxies.placeholder': '输入 IP 或 CIDR 后回车，可粘贴多行',
+  'plugin.sms.trusted_proxies.hint':
+    '只在站点前面挂了 CDN 或反向代理时填写：填 CDN 的回源网段（IP 或 CIDR，如 203.0.113.0/24、2408:4001::/32）。留空表示不信任任何代理，IP 限额按 TCP 对端计——直连公网时请保持留空。填错的后果是 IP 限额失效，或全站用户被算成同一个 IP。',
+  'plugin.sms.trusted_proxies.invalid':
+    '格式不正确，必须是合法 IP（如 203.0.113.9）或 CIDR（如 203.0.113.0/24）',
+  'plugin.sms.trusted_proxies.too_broad':
+    '/0 等于信任所有来源，会让 IP 限额形同虚设，请填具体的回源网段',
   'plugin.sms.not_active': '当前未生效（可在「基础设置」切换生效厂商）',
   'plugin.sms.twilio.intl_only': '仅支持国际号码，+86 号码将被拒发',
   'plugin.sms.template.empty.hint': '场景模板 / 文案留空表示该场景不可用，发码时会明确报错，不会套用其它场景的模板',

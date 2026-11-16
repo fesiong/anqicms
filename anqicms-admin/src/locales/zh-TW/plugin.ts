@@ -2260,6 +2260,15 @@ export default {
   'plugin.sms.hourly_limit_per_ip': '單 IP 每小時上限',
   'plugin.sms.daily_limit_per_ip': '單 IP 每日上限',
   'plugin.sms.log_retention_days': '日誌保留天數',
+  'plugin.sms.trusted_proxies.card': '反向代理 / CDN',
+  'plugin.sms.trusted_proxies': '可信代理網段',
+  'plugin.sms.trusted_proxies.placeholder': '輸入 IP 或 CIDR 後按 Enter，可貼上多行',
+  'plugin.sms.trusted_proxies.hint':
+    '只在站點前面掛了 CDN 或反向代理時填寫：填 CDN 的回源網段（IP 或 CIDR，如 203.0.113.0/24、2408:4001::/32）。留空表示不信任任何代理，IP 限額按 TCP 對端計——直連公網時請保持留空。填錯的後果是 IP 限額失效，或全站使用者被算成同一個 IP。',
+  'plugin.sms.trusted_proxies.invalid':
+    '格式不正確，必須是合法 IP（如 203.0.113.9）或 CIDR（如 203.0.113.0/24）',
+  'plugin.sms.trusted_proxies.too_broad':
+    '/0 等於信任所有來源，會讓 IP 限額形同虛設，請填具體的回源網段',
   'plugin.sms.not_active': '當前未生效（可在「基礎設定」切換生效廠商）',
   'plugin.sms.twilio.intl_only': '僅支援國際號碼，+86 號碼將被拒發',
   'plugin.sms.template.empty.hint': '場景範本 / 文案留空表示該場景不可用，發碼時會明確報錯，不會套用其它場景的範本',

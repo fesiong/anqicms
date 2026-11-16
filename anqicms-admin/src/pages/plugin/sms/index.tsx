@@ -12,6 +12,7 @@ import {
   ProFormDigit,
   ProFormInstance,
   ProFormRadio,
+  ProFormSelect,
   ProFormText,
   ProFormTextArea,
   ProTable,
@@ -29,7 +30,11 @@ import {
 } from 'antd';
 import dayjs from 'dayjs';
 import React, { useEffect, useRef, useState } from 'react';
-import { buildSmsPayload } from './payload';
+import {
+  buildSmsPayload,
+  findInvalidProxyEntry,
+  findOverBroadProxyEntry,
+} from './payload';
 
 // 五个业务场景：test 场景复用 login 模板（规格 §7.2），不单独配模板。
 const FORM_SCENES = ['login', 'register', 'reset', 'bind_old', 'bind_new'];
@@ -140,6 +145,20 @@ const PluginSms: React.FC = () => {
   const templatePlaceholder = t('plugin.sms.template.placeholder');
   const templateHint = t('plugin.sms.template.empty.hint');
 
+  // trusted_proxies 的校验必须在前端做：后端 smsParseTrustedProxies 对非法项是
+  // 静默跳过（不报错、不落日志），站长只会看到「IP 限额好像没生效」。
+  // 校验内核在 ./payload，纯函数、可单测；这里只负责把结果翻成文案。
+  const validateTrustedProxies = async (_rule: any, value: any) => {
+    const invalid = findInvalidProxyEntry(value);
+    if (invalid !== null) {
+      throw new Error(`${t('plugin.sms.trusted_proxies.invalid')}: ${invalid}`);
+    }
+    const broad = findOverBroadProxyEntry(value);
+    if (broad !== null) {
+      throw new Error(`${t('plugin.sms.trusted_proxies.too_broad')}: ${broad}`);
+    }
+  };
+
   const notActiveAlert = (provider: string) =>
     setting.provider !== provider ? (
       <Alert
@@ -217,6 +236,27 @@ const PluginSms: React.FC = () => {
         }))}
       />
       {renderDigits()}
+      <Card
+        type="inner"
+        size="small"
+        title={t('plugin.sms.trusted_proxies.card')}
+        style={{ marginTop: 8 }}
+      >
+        <ProFormSelect
+          name="trusted_proxies"
+          label={t('plugin.sms.trusted_proxies')}
+          placeholder={t('plugin.sms.trusted_proxies.placeholder')}
+          extra={t('plugin.sms.trusted_proxies.hint')}
+          // tags 模式的值天然是 string[]，与后端的 []string 同型，不需要来回转换；
+          // tokenSeparators 让「粘贴多行 CDN 回源段」能一次拆成多个标签。
+          fieldProps={{
+            mode: 'tags',
+            tokenSeparators: [',', '，', ' ', '\n', '\r', '\t'],
+            notFoundContent: null,
+          }}
+          rules={[{ validator: validateTrustedProxies }]}
+        />
+      </Card>
     </>
   );
 
