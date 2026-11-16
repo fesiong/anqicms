@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"net"
 	"net/netip"
 	"strings"
@@ -117,31 +118,191 @@ func SmsBusinessMessage(site *Website, err error) (string, bool) {
 
 // SmsClientIP 取短信 IP 限额使用的客户端地址。
 //
-// 不能无条件信任 ctx.RemoteAddr()：bootstrap.go 启用了
-// iris.WithRemoteAddrHeader("X-Real-IP", "X-Forwarded-For", "CF-Connecting-IP")，
-// 而本项目默认是「站点直连公网」。直连时客户端可以自己带一个 X-Real-IP，
-// 每发一次换一个「IP」，IP 双窗口限额直接失效，只剩号码日限——而短信是付费的。
+// ⚠️ 这里有一条容易写错的边界：**站点挂 CDN 后，TCP 对端只能是 CDN 回源节点**。
+// HTTP 是 CDN 与源站之间的第二条连接，真实客户端地址不可能从 TCP 层拿到，
+// 只能靠 CDN 附加的 X-Forwarded-For 传递。所以「用对端地址」在 CDN 下不是
+// 「更安全」，而是「把全站用户算成同一个 IP」——限额会被少数人吃光，全站发不出码。
 //
-// 也不能无条件用 TCP 对端：本机/内网反代后面，对端永远是 127.0.0.1 或 10.x，
-// 所有用户会被算成同一个 IP，限额变成全站共享。
+// 反过来「无条件信头」也不行：本项目默认直连公网，客户端自带一个 X-Real-IP
+// 就能每发一次换一个「IP」，IP 双窗口限额直接失效，而短信是付费的。
 //
-// 判据：对端是公网地址 → 直连场景，忽略一切代理头；对端是环回/私有地址 →
-// 说明前面有本机或内网反代，才采信 iris 已按代理头解析出的地址。
-func SmsClientIP(ctx iris.Context) string {
+// 这两个诉求无法从报文本身区分，所以判据只能来自配置：
+//   - 对端落在 trusted_proxies 里（或对端是环回/私有地址 = 本机反代）→ 可信转发，
+//     从 X-Forwarded-For **最右往左**剥离，取第一个既不在 trusted 也不是私有的地址
+//     （最右是最后加的一跳，客户端往左边追加的伪造值影响不到它）；
+//   - 对端是公网且不在 trusted → 直连，忽略一切代理头，直接用对端地址。
+//
+// 第二支在 CDN 未配置时会退化成「全站共用一个桶」，所以额外返回一个 suspicious
+// 标记，由调用方打一条限频告警，让站长能发现「忘了配 trusted_proxies」。
+//
+// 站点由调用方传入而不是这里自己取：CurrentSite 在站点注册表为空时会走
+// createDefaultWebsite → ctx.GetLocale()，i18n 未就绪就 panic。取个限额用的 IP
+// 不该把发码链路绑到站点/i18n 的初始化顺序上。
+//
+// 不支持 PROXY protocol：iris 的 listener 不解析它，要用它得在前面再套一层。
+func SmsClientIP(ctx iris.Context, site *Website) string {
 	if ctx == nil || ctx.Request() == nil {
 		return ""
 	}
-	peer := smsHostOnly(ctx.Request().RemoteAddr)
-	if addr, err := netip.ParseAddr(peer); err == nil {
+	var trusted []netip.Prefix
+	if site != nil && site.PluginSms != nil {
+		trusted = smsParseTrustedProxies(site.PluginSms.TrustedProxies)
+	}
+	ip, suspicious := smsResolveClientIP(
+		ctx.Request().RemoteAddr,
+		ctx.GetHeader("X-Forwarded-For"),
+		ctx.GetHeader("X-Real-IP"),
+		ctx.GetHeader("CF-Connecting-IP"),
+		trusted,
+	)
+	if suspicious {
+		var siteId uint
+		if site != nil {
+			siteId = site.Id
+		}
+		smsWarnUntrustedProxy(siteId, ip)
+	}
+	return ip
+}
+
+// smsResolveClientIP 是 SmsClientIP 的纯函数内核：不读全局、不打日志，便于表驱动测试。
+// suspicious 为 true 表示「连接的对端是未知的公网地址，但请求带了指向别处的转发头」——
+// 这正是「挂了 CDN/反代但没配 trusted_proxies」的指纹。
+func smsResolveClientIP(peerRaw, xff, xRealIP, cfIP string, trusted []netip.Prefix) (string, bool) {
+	peer := smsHostOnly(peerRaw)
+	peerAddr, peerErr := netip.ParseAddr(peer)
+	if peerErr == nil {
+		peerAddr = peerAddr.Unmap()
+	}
+	peerTrusted := peerErr == nil &&
+		(peerAddr.IsLoopback() || peerAddr.IsPrivate() || smsInPrefixes(peerAddr, trusted))
+
+	if !peerTrusted {
+		// 公网直连（或我们并不知道的 CDN 回源）：任何转发头都不可采信。
+		return peer, smsHasForeignForwardHeader(peer, xff, xRealIP, cfIP)
+	}
+	if ip := smsFirstUntrustedXFF(xff, trusted); ip != "" {
+		return ip, false
+	}
+	// 自建反代常见做法是只设单值头；nginx 的 proxy_set_header X-Real-IP $remote_addr
+	// 会覆盖客户端自带值，所以在「对端已可信」的前提下可以采信。
+	if ip := smsPublicHeaderAddr(xRealIP); ip != "" {
+		return ip, false
+	}
+	if ip := smsPublicHeaderAddr(cfIP); ip != "" {
+		return ip, false
+	}
+	return peer, false
+}
+
+// smsFirstUntrustedXFF 从 X-Forwarded-For 的最右往左剥离，返回第一个「可信链条之外」的
+// 公网地址。跳过私有/环回/trusted 三类（它们都是中间的转发者）。
+// 全部跳完仍没有结果时返回空串，交给调用方回落单值头。
+//
+// ⚠️ 依赖 CDN **追加**真实地址（主流 CDN 都这么做）。若某个 CDN 只透传客户端的值、
+// 自己不追加，最右就成了客户端写的值——这种部署下 IP 限额不可能做对，只能靠号码维度。
+func smsFirstUntrustedXFF(xff string, trusted []netip.Prefix) string {
+	if strings.TrimSpace(xff) == "" {
+		return ""
+	}
+	parts := strings.Split(xff, ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		addr, err := netip.ParseAddr(strings.Trim(strings.TrimSpace(parts[i]), `"`))
+		if err != nil {
+			continue
+		}
 		addr = addr.Unmap()
-		if !addr.IsLoopback() && !addr.IsPrivate() {
-			return addr.String()
+		if addr.IsLoopback() || addr.IsPrivate() || smsInPrefixes(addr, trusted) {
+			continue
+		}
+		return addr.String()
+	}
+	return ""
+}
+
+// smsPublicHeaderAddr 取单值头里的公网地址（多值时取第一个可解析的公网项）。
+func smsPublicHeaderAddr(v string) string {
+	for _, part := range strings.Split(v, ",") {
+		addr, err := netip.ParseAddr(strings.Trim(strings.TrimSpace(part), `"`))
+		if err != nil {
+			continue
+		}
+		addr = addr.Unmap()
+		if addr.IsLoopback() || addr.IsPrivate() {
+			continue
+		}
+		return addr.String()
+	}
+	return ""
+}
+
+// smsHasForeignForwardHeader 判断转发头里是否出现了与对端不同的公网地址。
+// 只用于诊断（是否该提示站长配 trusted_proxies），不参与限额取值。
+func smsHasForeignForwardHeader(peer, xff, xRealIP, cfIP string) bool {
+	for _, ip := range []string{
+		smsFirstUntrustedXFF(xff, nil),
+		smsPublicHeaderAddr(xRealIP),
+		smsPublicHeaderAddr(cfIP),
+	} {
+		if ip != "" && ip != peer {
+			return true
 		}
 	}
-	if resolved := smsHostOnly(ctx.RemoteAddr()); resolved != "" {
-		return resolved
+	return false
+}
+
+// smsParseTrustedProxies 把配置里的 IP / CIDR 解析成前缀列表，非法项静默跳过
+// （保存路径已做校验；运行期不能因为一条脏配置就把发码打挂）。
+func smsParseTrustedProxies(items []string) []netip.Prefix {
+	if len(items) == 0 {
+		return nil
 	}
-	return peer
+	out := make([]netip.Prefix, 0, len(items))
+	for _, raw := range items {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		if strings.Contains(raw, "/") {
+			if p, err := netip.ParsePrefix(raw); err == nil {
+				out = append(out, p.Masked())
+			}
+			continue
+		}
+		if addr, err := netip.ParseAddr(raw); err == nil {
+			out = append(out, netip.PrefixFrom(addr.Unmap(), addr.Unmap().BitLen()))
+		}
+	}
+	return out
+}
+
+func smsInPrefixes(addr netip.Addr, prefixes []netip.Prefix) bool {
+	for _, p := range prefixes {
+		if p.Contains(addr) {
+			return true
+		}
+	}
+	return false
+}
+
+var (
+	smsProxyWarnMu   sync.Mutex
+	smsProxyWarnLast = map[uint]time.Time{}
+)
+
+// smsWarnUntrustedProxy 每小时每站点最多一条：CDN 未配置 trusted_proxies 时，
+// IP 限额会被算成「回源节点维度的共享桶」，站长只会在「莫名被限流」时才发现。
+func smsWarnUntrustedProxy(siteId uint, peer string) {
+	smsProxyWarnMu.Lock()
+	if last, ok := smsProxyWarnLast[siteId]; ok && time.Since(last) < time.Hour {
+		smsProxyWarnMu.Unlock()
+		return
+	}
+	smsProxyWarnLast[siteId] = time.Now()
+	smsProxyWarnMu.Unlock()
+	log.Printf("短信 IP 限额：站点 %d 的连接来自公网地址 %s，但请求带了转发头。"+
+		"若该地址是 CDN/反代回源节点，IP 限额会把全站用户算成同一个 IP（额度被少数人吃光后全站发不出码）。"+
+		"请在短信设置 trusted_proxies 中填入回源网段。", siteId, peer)
 }
 
 // smsHostOnly 去掉地址里的端口并统一 IPv6 表示。

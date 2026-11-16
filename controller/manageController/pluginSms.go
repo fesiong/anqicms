@@ -298,7 +298,7 @@ func PluginSmsTest(ctx iris.Context) {
 		PhoneCountry: req.PhoneCountry,
 		Phone:        req.Phone,
 		Scene:        sms.SceneTest,
-		Ip:           provider.SmsClientIP(ctx),
+		Ip:           provider.SmsClientIP(ctx, currentSite),
 		UserId:       0,
 	})
 	if err != nil {

@@ -96,13 +96,13 @@ func ApiSmsSend(ctx iris.Context) {
 			return
 		}
 	}
-	// 发码：Ip 取 SmsClientIP（公网直连忽略伪造代理头，私有对端才采信 iris 解析），
-	// 详见 provider.SmsClientIP 的注释。
+	// 发码：Ip 取 SmsClientIP（对端在 trusted_proxies 内或为私有/环回才采信转发头，
+	// 否则一律用 TCP 对端——详见 provider.SmsClientIP 的注释）。
 	result, err := currentSite.SendSmsCode(provider.SmsSendInput{
 		PhoneCountry: req.PhoneCountry,
 		Phone:        req.Phone,
 		Scene:        req.Scene,
-		Ip:           provider.SmsClientIP(ctx),
+		Ip:           provider.SmsClientIP(ctx, currentSite),
 		UserId:       ctx.Values().GetUintDefault("userId", 0),
 	})
 	if err != nil {

@@ -27,6 +27,16 @@ type PluginSmsConfig struct {
 	LogRetentionDays   int `json:"log_retention_days"`    // 默认 90
 
 	Scenes []string `json:"scenes"` // 启用的场景码，空 = 全部关闭
+
+	// TrustedProxies 是可信反向代理 / CDN 回源网段（IP 或 CIDR，如 "1.2.3.4"、
+	// "2408:4001::/32"）。只有**连接的对端落在这些网段里**时，才采信
+	// X-Forwarded-For 里的客户端地址；空（默认）= 不信任任何代理。
+	//
+	// 为什么必须有这一项：站点挂 CDN 后，TCP 对端永远是 CDN 回源节点，真实客户端
+	// 地址只能靠 HTTP 头传递；而不配这一项时我们无法区分「CDN 在转发」与
+	// 「客户端自己塞了个头」（两者报文完全一样），只能按「不信任」处理。
+	// 详见 provider.SmsClientIP 的注释与 CHANGELOG 的升级须知。
+	TrustedProxies []string `json:"trusted_proxies"`
 }
 
 type SmsAliyunConfig struct {

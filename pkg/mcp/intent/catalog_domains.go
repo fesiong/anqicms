@@ -794,7 +794,11 @@ var domainIntentCatalog = append([]*IntentSpec{
 			"未出现的键保留原值；但数组 / 映射类型的字段（如 templates / texts）一旦出现就整段替换，" +
 			"`null` 会清空对应的 map。因此改一个叶子字段只需传该叶子，不必回传整棵子树。" +
 			"⚠️ setting_get 返回的凭据是掩码 ********，表示「未改动」；原样写回即可保持不变。" +
-			"⚠️ 同一时刻只有一家厂商生效；Twilio 只支持国际号码，+86 会被拒发。",
+			"⚠️ 同一时刻只有一家厂商生效；Twilio 只支持国际号码，+86 会被拒发。" +
+			"⚠️ `values.trusted_proxies` 是可信反代/CDN 回源网段数组（IP 或 CIDR，如 [\"203.0.113.0/24\"]，" +
+			"Cloudflare 可填官方回源段）。对端不在其中时，IP 限额一律按 TCP 对端计、忽略 X-Forwarded-For——" +
+			"站点挂 CDN 时必须填，否则全站用户会被算成同一个 IP（限额被少数人吃光后全站发不出码）；" +
+			"直连公网则留空（默认），填了反而会采信可伪造的请求头。保存后立即生效。",
 		DefaultOff: true,
 		Params: map[string]ParamSpec{
 			"action": {Type: "string", Required: true, Enum: []string{

@@ -89,7 +89,7 @@ func s13CheckTestUsesSendSmsCode(src string) error {
 	if err := s13Require(src,
 		`currentSite\.SendSmsCode\(`,
 		`Scene:\s*sms\.SceneTest`,
-		`Ip:\s*provider\.SmsClientIP\(ctx\)`,
+		`Ip:\s*provider\.SmsClientIP\(ctx[^)]*\)`,
 		`UserId:\s*0`,
 	); err != nil {
 		return err
@@ -353,7 +353,7 @@ func TestPluginSmsTestBypassesSceneWhitelistOnly(t *testing.T) {
 		t.Log("反向对照：旁路 SendSmsCode 生产入口喂同一检查器 → 判违规（红）")
 	})
 	t.Run("反向对照_去掉Ip限额入参必红", func(t *testing.T) {
-		re := regexp.MustCompile(`Ip:\s*provider\.SmsClientIP\(ctx\),`)
+		re := regexp.MustCompile(`Ip:\s*provider\.SmsClientIP\(ctx[^)]*\),`)
 		bad := re.ReplaceAllString(real, "")
 		if bad == real {
 			t.Fatal("反向对照锚点失效：源码里没找到 Ip 入参")
