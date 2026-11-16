@@ -148,27 +148,48 @@ func SmsClientIP(ctx iris.Context, site *Website) string {
 	if site != nil && site.PluginSms != nil {
 		trusted = smsParseTrustedProxies(site.PluginSms.TrustedProxies)
 	}
-	ip, suspicious := smsResolveClientIP(
+	ip, warn := smsResolveClientIP(
 		ctx.Request().RemoteAddr,
 		ctx.GetHeader("X-Forwarded-For"),
 		ctx.GetHeader("X-Real-IP"),
 		ctx.GetHeader("CF-Connecting-IP"),
 		trusted,
 	)
-	if suspicious {
+	if warn != smsIPWarnNone {
 		var siteId uint
 		if site != nil {
 			siteId = site.Id
 		}
-		smsWarnUntrustedProxy(siteId, ip)
+		switch warn {
+		case smsIPWarnUntrustedPeer:
+			smsWarnProxyMisconfig(siteId, fmt.Sprintf(
+				"连接来自公网地址 %s，但请求带了转发头。若该地址是 CDN/反代回源节点，"+
+					"IP 限额会把全站用户算成同一个 IP（额度被少数人吃光后全站发不出码）；"+
+					"请在短信设置 trusted_proxies 中填入回源网段。", ip))
+		case smsIPWarnMultiHop:
+			smsWarnProxyMisconfig(siteId, fmt.Sprintf(
+				"X-Forwarded-For 里有多跳未登记的代理，当前按最右一跳 %s 计限额。"+
+					"若最右一跳是 CDN 节点（典型：CDN → 本机 nginx → 源站，而 nginx 未做 realip 归一化），"+
+					"请在 nginx 配 set_real_ip_from + real_ip_header 后重写 X-Forwarded-For，"+
+					"或把 CDN 回源段填进短信设置 trusted_proxies。", ip))
+		}
 	}
 	return ip
 }
 
+// smsIPWarn* 是 smsResolveClientIP 的诊断码：非空表示取值可能不准，调用方据此打日志。
+//
+// multi-hop 有两种成因，报文层面无法区分：① 链条里有未登记的代理（典型是
+// 「CDN → 本机 nginx → 源站」而 nginx 没做 realip 归一化，最右那跳其实是 CDN 节点）；
+// ② 客户端自己往 X-Forwarded-For 里塞了假地址。两者都值得让站长看一眼，故共用一条告警。
+const (
+	smsIPWarnNone          = ""
+	smsIPWarnUntrustedPeer = "untrusted-peer" // 对端公网且未登记，却带了指向别处的转发头
+	smsIPWarnMultiHop      = "multi-hop"      // XFF 里被取到的那跳左边还有公网地址
+)
+
 // smsResolveClientIP 是 SmsClientIP 的纯函数内核：不读全局、不打日志，便于表驱动测试。
-// suspicious 为 true 表示「连接的对端是未知的公网地址，但请求带了指向别处的转发头」——
-// 这正是「挂了 CDN/反代但没配 trusted_proxies」的指纹。
-func smsResolveClientIP(peerRaw, xff, xRealIP, cfIP string, trusted []netip.Prefix) (string, bool) {
+func smsResolveClientIP(peerRaw, xff, xRealIP, cfIP string, trusted []netip.Prefix) (string, string) {
 	peer := smsHostOnly(peerRaw)
 	peerAddr, peerErr := netip.ParseAddr(peer)
 	if peerErr == nil {
@@ -179,32 +200,43 @@ func smsResolveClientIP(peerRaw, xff, xRealIP, cfIP string, trusted []netip.Pref
 
 	if !peerTrusted {
 		// 公网直连（或我们并不知道的 CDN 回源）：任何转发头都不可采信。
-		return peer, smsHasForeignForwardHeader(peer, xff, xRealIP, cfIP)
+		if smsHasForeignForwardHeader(peer, xff, xRealIP, cfIP) {
+			return peer, smsIPWarnUntrustedPeer
+		}
+		return peer, smsIPWarnNone
 	}
-	if ip := smsFirstUntrustedXFF(xff, trusted); ip != "" {
-		return ip, false
+	if ip, hasEarlier := smsFirstUntrustedXFF(xff, trusted); ip != "" {
+		// 取到的那一跳左边还有别的公网地址：说明链条里至少有一个我们没登记的代理。
+		// 典型形态是「CDN → 本机 nginx → 源站」而 nginx 没做 realip 归一化 ——
+		// 此时最右那一跳是 CDN 回源节点，取它等于按节点计限额。
+		if hasEarlier {
+			return ip, smsIPWarnMultiHop
+		}
+		return ip, smsIPWarnNone
 	}
 	// 自建反代常见做法是只设单值头；nginx 的 proxy_set_header X-Real-IP $remote_addr
 	// 会覆盖客户端自带值，所以在「对端已可信」的前提下可以采信。
 	if ip := smsPublicHeaderAddr(xRealIP); ip != "" {
-		return ip, false
+		return ip, smsIPWarnNone
 	}
 	if ip := smsPublicHeaderAddr(cfIP); ip != "" {
-		return ip, false
+		return ip, smsIPWarnNone
 	}
-	return peer, false
+	return peer, smsIPWarnNone
 }
 
 // smsFirstUntrustedXFF 从 X-Forwarded-For 的最右往左剥离，返回第一个「可信链条之外」的
-// 公网地址。跳过私有/环回/trusted 三类（它们都是中间的转发者）。
+// 公网地址；hasEarlier 表示这一跳的左边**还有**别的公网地址（= 链条里有未登记的代理）。
+// 跳过私有/环回/trusted 三类（它们都是中间的转发者）。
 // 全部跳完仍没有结果时返回空串，交给调用方回落单值头。
 //
 // ⚠️ 依赖 CDN **追加**真实地址（主流 CDN 都这么做）。若某个 CDN 只透传客户端的值、
 // 自己不追加，最右就成了客户端写的值——这种部署下 IP 限额不可能做对，只能靠号码维度。
-func smsFirstUntrustedXFF(xff string, trusted []netip.Prefix) string {
+func smsFirstUntrustedXFF(xff string, trusted []netip.Prefix) (string, bool) {
 	if strings.TrimSpace(xff) == "" {
-		return ""
+		return "", false
 	}
+	picked := ""
 	parts := strings.Split(xff, ",")
 	for i := len(parts) - 1; i >= 0; i-- {
 		addr, err := netip.ParseAddr(strings.Trim(strings.TrimSpace(parts[i]), `"`))
@@ -215,9 +247,13 @@ func smsFirstUntrustedXFF(xff string, trusted []netip.Prefix) string {
 		if addr.IsLoopback() || addr.IsPrivate() || smsInPrefixes(addr, trusted) {
 			continue
 		}
-		return addr.String()
+		if picked == "" {
+			picked = addr.String()
+			continue
+		}
+		return picked, true
 	}
-	return ""
+	return picked, false
 }
 
 // smsPublicHeaderAddr 取单值头里的公网地址（多值时取第一个可解析的公网项）。
@@ -239,8 +275,9 @@ func smsPublicHeaderAddr(v string) string {
 // smsHasForeignForwardHeader 判断转发头里是否出现了与对端不同的公网地址。
 // 只用于诊断（是否该提示站长配 trusted_proxies），不参与限额取值。
 func smsHasForeignForwardHeader(peer, xff, xRealIP, cfIP string) bool {
+	x, _ := smsFirstUntrustedXFF(xff, nil)
 	for _, ip := range []string{
-		smsFirstUntrustedXFF(xff, nil),
+		x,
 		smsPublicHeaderAddr(xRealIP),
 		smsPublicHeaderAddr(cfIP),
 	} {
@@ -290,9 +327,12 @@ var (
 	smsProxyWarnLast = map[uint]time.Time{}
 )
 
-// smsWarnUntrustedProxy 每小时每站点最多一条：CDN 未配置 trusted_proxies 时，
-// IP 限额会被算成「回源节点维度的共享桶」，站长只会在「莫名被限流」时才发现。
-func smsWarnUntrustedProxy(siteId uint, peer string) {
+// smsWarnProxyMisconfig 每小时每站点最多一条。
+// 两种形态都会走到这里：① 对端是公网但没登记 trusted_proxies（直连还是 CDN 分不清，
+// 一律按直连处理）；② 对端可信但 XFF 里还有未登记的中间代理（典型是
+// 「CDN → 本机 nginx → 源站」而 nginx 没做 realip 归一化）。两者都会让 IP 限额
+// 算错桶，但站长只会在「莫名被限流」时才发现，所以必须主动提示。
+func smsWarnProxyMisconfig(siteId uint, msg string) {
 	smsProxyWarnMu.Lock()
 	if last, ok := smsProxyWarnLast[siteId]; ok && time.Since(last) < time.Hour {
 		smsProxyWarnMu.Unlock()
@@ -300,9 +340,7 @@ func smsWarnUntrustedProxy(siteId uint, peer string) {
 	}
 	smsProxyWarnLast[siteId] = time.Now()
 	smsProxyWarnMu.Unlock()
-	log.Printf("短信 IP 限额：站点 %d 的连接来自公网地址 %s，但请求带了转发头。"+
-		"若该地址是 CDN/反代回源节点，IP 限额会把全站用户算成同一个 IP（额度被少数人吃光后全站发不出码）。"+
-		"请在短信设置 trusted_proxies 中填入回源网段。", siteId, peer)
+	log.Printf("短信 IP 限额：站点 %d %s", siteId, msg)
 }
 
 // smsHostOnly 去掉地址里的端口并统一 IPv6 表示。

@@ -9,6 +9,23 @@
 ### ⚠️ 升级与使用须知
 
 - **站点挂了 CDN / 反向代理的，必须配置 `trusted_proxies`（否则 IP 限额形同全站共享）**：短信设置新增 `trusted_proxies`（可信回源网段数组，IP 或 CIDR）。CDN 回源时源站看到的 TCP 对端只能是 CDN 节点，真实客户端地址只能靠 `X-Forwarded-For` 传递；不登记回源网段时系统一律按 TCP 对端计限额，于是**全站用户共用一个 IP 桶**——每小时 10 次 / 每天 30 次的额度被少数人用完后，全站都发不出验证码。请填入 CDN 的官方回源段（Cloudflare 用其公布的 IPv4/IPv6 回源列表，阿里云/腾讯云 CDN 用控制台给出的回源 IP 段），直连公网的站点留空即可（留空 = 不信任任何代理，这是默认也是最安全的一档）。配置方式：目前通过 MCP `channel_sms` 的 `setting_save` 传 `values.trusted_proxies`，或直接写 `settings` 表里 `sms` 键的 JSON（前端设置页暂未提供输入框，见「已知限制」）。保存后立即生效，无需重启。
+- **`CDN → 本机 nginx → 源站` 这种两层架构要额外处理（否则仍会按 CDN 节点计限额）**：此时应用看到的 TCP 对端是 `127.0.0.1`（天然可信），但 nginx 默认的 `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for` 追加的是它自己看到的 `$remote_addr`——也就是 **CDN 回源节点**，于是系统取到的仍是 CDN 节点。两条修正路径，任选一条：
+  1. **（推荐）让 nginx 先归一化**：用 `ngx_http_realip_module` 把 `$remote_addr` 改写成真实客户端，之后 `$proxy_add_x_forwarded_for` 的最右一项就是真实地址，应用层不需要配 `trusted_proxies`：
+     ```nginx
+     # 段请换成 CDN 官方回源列表；Cloudflare 用 CF-Connecting-IP，阿里云/腾讯云 CDN 用 X-Forwarded-For
+     set_real_ip_from 173.245.48.0/20;
+     set_real_ip_from 103.21.244.0/22;
+     real_ip_header CF-Connecting-IP;
+     real_ip_recursive on;
+
+     location / {
+         proxy_set_header X-Real-IP $remote_addr;
+         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+         proxy_pass http://127.0.0.1:8001;
+     }
+     ```
+  2. **不改 nginx，把 CDN 回源段填进 `trusted_proxies`**：应用层从右往左剥离时会跳过 CDN 节点，落到真实客户端。
+  **安全前提**：源站必须只允许 CDN 回源段访问（安全组 / 防火墙白名单）。若客户端能绕过 CDN 直连 nginx，它就能自己伪造 `X-Forwarded-For`，第 1 条会失效。判断当前属于哪种情况：看服务端告警日志里有没有「X-Forwarded-For 里有多跳未登记的代理」。
 - **短信登录自动创建的账号，用户名是随机串，不能用用户名登录**：手机号首次验证码登录会在 `RegisterUser` 里自动建号，`user_name` 用 `crypto/rand` 生成 12 位随机字母数字（不取手机号，避免号码在部分模板里被当作昵称公开显示），密码是 32 位随机串、用户不可知。这类账号只能用「手机号 + 验证码」登录；需要常规用户名时，到前台资料页补全即可。
 - **`DefaultMenuGroups` 只在首次安装／重建菜单时写库，已运行站点需触发菜单重新同步**：后台菜单结构由代码常量给出，但管理员分组的权限集合（`admin_groups.setting.permissions`）是建站时写进库的，升级不会自动追加新路径 `/plugin/channel/sms`。而短信四个端点挂在严格鉴权 `AdminPermissionRequired` 上——URI 映射不到菜单时一律拒绝。**未重新同步的站点上，只有 `id=1` 的超级管理员能进短信配置页**，其余分组会直接 403（表现为「新页面进不去」）。到「管理员 → 分组」重新勾选一次并保存即可。
 - **手机号查重依赖 REPEATABLE READ**：同一号码并发注册靠「事务内先按 `(区号, 号码)` 查重、查不到才插入」保证唯一（`createUserWithPhoneGuard`），该保证只在 REPEATABLE READ 下成立。**上线前必须核对生产库 `SELECT @@transaction_isolation`**：若返回 READ COMMITTED，两个并发请求都可能查不到对方未提交的行，最终落下两条同号用户记录，本版本不提供该场景的兜底。开发库实测为 `REPEATABLE-READ`（MariaDB 11.7.2），**生产库的隔离级别未验证**。

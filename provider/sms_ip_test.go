@@ -20,29 +20,31 @@ func smsTestPrefixes(t *testing.T, items ...string) []netip.Prefix {
 // ①「直连公网」—— 对端公网且不在 trusted：必须忽略一切转发头（否则换个头就能无限发付费短信）。
 // ②「本机/内网反代」—— 对端私有或环回：采信转发头，且从 XFF 最右往左剥离。
 // ③「CDN」—— 对端是 CDN 回源节点，但必须先在 trusted_proxies 里登记才会被采信；
-// 不登记就只能按回源节点算（suspicious 标记用于提示站长）。
+// 不登记就只能按回源节点算（warn 码用于提示站长）。
+// ⑤「CDN → 本机 nginx → 源站」—— 对端是 127.0.0.1（天然可信），但 nginx append 的是
+// CDN 节点而不是真实客户端；只有配了 CDN 回源段、或 nginx 用 realip 模块归一化后才对。
 //
-// 反向对照（人工）：把 smsResolveClientIP 里 `if !peerTrusted { return peer, ... }`
-// 这一支改成「无条件取 XFF」，用例① 必红（会返回 1.2.3.4）。
+// 反向对照（人工）：把 smsResolveClientIP 里 `if !peerTrusted { ... }` 这一支改成
+// 「无条件取 XFF」，用例① 必红（会返回 1.2.3.4）。
 func TestSmsResolveClientIP(t *testing.T) {
 	cases := []struct {
-		name       string
-		peer       string
-		xff        string
-		xRealIP    string
-		cfIP       string
-		trusted    []string
-		want       string
-		suspicious bool
+		name    string
+		peer    string
+		xff     string
+		xRealIP string
+		cfIP    string
+		trusted []string
+		want    string
+		warn    string
 	}{
 		{
 			// ① 直连：客户端自己塞 X-Real-IP，不能被采信。
 			name: "① 公网对端+伪造X-Real-IP取对端", peer: "203.0.113.9:12345",
-			xRealIP: "1.2.3.4", want: "203.0.113.9", suspicious: true,
+			xRealIP: "1.2.3.4", want: "203.0.113.9", warn: smsIPWarnUntrustedPeer,
 		},
 		{
 			name: "① 公网对端+伪造XFF取对端", peer: "203.0.113.9:12345",
-			xff: "1.2.3.4, 5.6.7.8", want: "203.0.113.9", suspicious: true,
+			xff: "1.2.3.4, 5.6.7.8", want: "203.0.113.9", warn: smsIPWarnUntrustedPeer,
 		},
 		{
 			name: "① 公网对端无头取对端", peer: "203.0.113.9:12345", want: "203.0.113.9",
@@ -54,16 +56,17 @@ func TestSmsResolveClientIP(t *testing.T) {
 		},
 		{
 			name: "② 私有对端+XFF取最右公网", peer: "10.0.0.5:12345",
-			xff: "1.2.3.4, 198.51.100.7", want: "198.51.100.7",
+			xff: "1.2.3.4, 198.51.100.7", want: "198.51.100.7", warn: smsIPWarnMultiHop,
 		},
 		{
 			name: "② 环回对端无头取对端", peer: "127.0.0.1:12345", want: "127.0.0.1",
 		},
 		{
 			// ③ CDN 已登记：客户端在左边追加伪造值，最右才是 CDN 追加的真实地址。
+			// 取值必须落在最右；左侧残留的伪造公网地址会触发 multi-hop 诊断（见下条注释）。
 			name: "③ CDN已配置+左侧伪造值不影响结果", peer: "203.0.113.9:12345",
 			xff: "1.1.1.1, 2.2.2.2, 198.51.100.7", trusted: []string{"203.0.113.0/24"},
-			want: "198.51.100.7",
+			want: "198.51.100.7", warn: smsIPWarnMultiHop,
 		},
 		{
 			name: "③ CDN已配置+单跳XFF", peer: "203.0.113.9:12345",
@@ -96,10 +99,34 @@ func TestSmsResolveClientIP(t *testing.T) {
 		},
 		{
 			// 关键回归：对端是公网但不在 trusted（= 站长忘了登记 CDN 网段）→
-			// 仍然取对端，并置 suspicious 让上层告警。绝不能因为「像 CDN」就采信头。
+			// 仍然取对端，并置 warn 让上层告警。绝不能因为「像 CDN」就采信头。
 			name: "③ CDN未登记仍取对端并告警", peer: "203.0.113.9:12345",
 			xff: "198.51.100.7", trusted: []string{"192.0.2.0/24"},
-			want: "203.0.113.9", suspicious: true,
+			want: "203.0.113.9", warn: smsIPWarnUntrustedPeer,
+		},
+		{
+			// ⑤ 两层且 nginx 未归一化、也没配 CDN 段：最右一跳是 CDN 节点，
+			// 取它是错的（按节点计限额），warn 提示去配 trusted_proxies 或 nginx realip。
+			name: "⑤ CDN+本机nginx未归一化+未配CDN段", peer: "127.0.0.1:12345",
+			xff: "198.51.100.7, 203.0.113.9", want: "203.0.113.9", warn: smsIPWarnMultiHop,
+		},
+		{
+			// ⑤ 同一链路，但把 CDN 回源段登记进 trusted_proxies → 正确取到真实客户端。
+			name: "⑤ CDN+本机nginx未归一化+已配CDN段", peer: "127.0.0.1:12345",
+			xff: "198.51.100.7, 203.0.113.9", trusted: []string{"203.0.113.0/24"},
+			want: "198.51.100.7",
+		},
+		{
+			// ⑤ nginx 配了 realip 模块（$remote_addr 已是真实客户端）→ XFF 单值即真实地址，
+			// 不需要 trusted_proxies 也能取对。这是推荐部署。
+			name: "⑤ CDN+nginx已realip归一化", peer: "127.0.0.1:12345",
+			xff: "198.51.100.7", want: "198.51.100.7",
+		},
+		{
+			// ⑤ nginx realip + $proxy_add_x_forwarded_for：左侧保留客户端伪造值，
+			// 最右是真实地址；左边还有公网跳所以仍会告警（这时是「有人在塞头」）。
+			name: "⑤ CDN+nginx realip+客户端伪造左侧", peer: "127.0.0.1:12345",
+			xff: "6.6.6.6, 198.51.100.7", want: "198.51.100.7", warn: smsIPWarnMultiHop,
 		},
 		{
 			name: "④ XFF含非法串不panic", peer: "10.0.0.5:12345",
@@ -115,13 +142,13 @@ func TestSmsResolveClientIP(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, suspicious := smsResolveClientIP(
+			got, warn := smsResolveClientIP(
 				tc.peer, tc.xff, tc.xRealIP, tc.cfIP, smsTestPrefixes(t, tc.trusted...))
 			if got != tc.want {
 				t.Fatalf("clientIP = %q，期望 %q", got, tc.want)
 			}
-			if suspicious != tc.suspicious {
-				t.Fatalf("suspicious = %v，期望 %v", suspicious, tc.suspicious)
+			if warn != tc.warn {
+				t.Fatalf("warn = %q，期望 %q", warn, tc.warn)
 			}
 		})
 	}
