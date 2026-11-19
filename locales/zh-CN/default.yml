@@ -890,3 +890,6 @@
 "SmsSendFailed": "短信发送失败，请稍后重试"
 "SmsParamInvalid": "请求参数格式不正确"
 "UserNotActive": "账号未激活或已被禁用，请联系管理员"
+"CustomFieldTextsTypeUnsupported": "自定义字段「%s」的条目类型「%s」不受支持"
+"CustomFieldTextsValueInvalid": "自定义字段「%s」的值「%s」与类型 %s 不匹配"
+"CustomFieldTextsValueNotInOptions": "自定义字段「%s」的值「%s」不在可选项中"

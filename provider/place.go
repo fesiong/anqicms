@@ -166,8 +166,11 @@ func (w *Website) SavePlace(req *request.PlaceRequest) (place *model.Place, err 
 						place.Extra[field.FieldName] = val
 					}
 				} else if field.Type == config.CustomFieldTypeTexts && place.Extra[field.FieldName] != nil {
-					buf, _ := json.Marshal(place.Extra[field.FieldName])
-					place.Extra[field.FieldName] = string(buf)
+					// 条目可能带自己的 type：先校验，再规整后存 JSON。
+					if err := w.ValidateCustomFieldTexts(place.Extra[field.FieldName], &field); err != nil {
+						return nil, err
+					}
+					place.Extra[field.FieldName] = w.StringifyCustomFieldTexts(place.Extra[field.FieldName])
 				} else if field.Type == config.CustomFieldTypeTimeline {
 					// 存 json
 					buf, _ := json.Marshal(place.Extra[field.FieldName])

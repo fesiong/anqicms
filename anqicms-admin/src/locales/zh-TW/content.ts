@@ -242,6 +242,11 @@ export default {
   'content.param.extra-fields': '自訂參數',
   'content.param.other': '其他參數',
   'content.param.add-line': '新增一行',
+  'content.param.item-type': '類型',
+  'content.param.item-value': '值',
+  'content.param.add-value': '新增值',
+  'content.param.no-options': '請先在欄位設定裡設定可選項',
+  'content.param.delete-item': '確定要刪除這一列嗎？',
   'content.origin-url.name': '原文網址',
   'content.field.default': '預設不用填寫',
   'content.origin-url.description': '文章的原文網址，預設不用理會',
@@ -456,7 +461,7 @@ export default {
   'content.module.field.isfilter.description':
     '只有欄位類型是單選、多選、下拉類型並且不是跟隨文件閱讀等級的時候，才有效',
   'content.module.field.default.description':
-    '如果是：單選、多選、下拉的多個值，一行一個。',
+    '如果是：單選、多選、下拉的多個值，一行一個。文字列表內的單選/多選/下拉條目同樣使用這裡的可選項。',
   'content.module.delete.confirm': '確定要刪除選取的模型嗎？',
   'content.module.delete.content':
     '該模型下的分類、文件也會一併被刪除，請謹慎操作。',

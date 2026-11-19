@@ -268,7 +268,13 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) (*model.User, error) {
 					} else if v.Type == config.CustomFieldTypeNumber || v.Type == config.CustomFieldTypeCategory {
 						//只有这个类型的数据是数字，转成数字
 						extraFields[v.FieldName], _ = strconv.ParseInt(fmt.Sprint(extraValue["value"]), 10, 64)
-					} else if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeTexts || v.Type == config.CustomFieldTypeArchive {
+					} else if v.Type == config.CustomFieldTypeTexts {
+						// 条目可能带自己的 type：先校验，再规整后存 JSON。
+						if err := w.ValidateCustomFieldTexts(extraValue["value"], v); err != nil {
+							return nil, err
+						}
+						extraFields[v.FieldName] = w.StringifyCustomFieldTexts(extraValue["value"])
+					} else if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeArchive {
 						// 存 json
 						if val, ok := extraValue["value"].([]interface{}); ok {
 							for j, v2 := range val {
@@ -699,7 +705,13 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 					} else if v.Type == config.CustomFieldTypeNumber || v.Type == config.CustomFieldTypeCategory {
 						//只有这个类型的数据是数字，转成数字
 						extraFields[v.FieldName], _ = strconv.ParseInt(fmt.Sprint(extraValue), 10, 64)
-					} else if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeTexts || v.Type == config.CustomFieldTypeArchive {
+					} else if v.Type == config.CustomFieldTypeTexts {
+						// 条目可能带自己的 type：先校验，再规整后存 JSON。
+						if err := w.ValidateCustomFieldTexts(extraValue, v); err != nil {
+							return nil, err
+						}
+						extraFields[v.FieldName] = w.StringifyCustomFieldTexts(extraValue)
+					} else if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeArchive {
 						// 存 json
 						if val, ok := extraValue.([]interface{}); ok {
 							for j, v2 := range val {
@@ -1280,11 +1292,8 @@ func (w *Website) GetUserExtra(id uint) map[string]*config.CustomField {
 						result[v.FieldName] = images
 					}
 				} else if v.Type == config.CustomFieldTypeTexts {
-					var texts []config.CustomFieldTexts
-					err := json.Unmarshal([]byte(value), &texts)
-					if err == nil {
-						result[v.FieldName] = texts
-					}
+					// 条目可能带自己的 type，解析与规整统一走 FormatCustomFieldTexts
+					result[v.FieldName] = w.FormatCustomFieldTexts(value, true)
 				} else if v.Type == config.CustomFieldTypeTimeline {
 					var val config.TimelineField
 					_ = json.Unmarshal([]byte(value), &val)
@@ -1304,6 +1313,8 @@ func (w *Website) GetUserExtra(id uint) map[string]*config.CustomField {
 				Value:       result[v.FieldName],
 				Default:     v.Content,
 				FollowLevel: v.FollowLevel,
+				Type:        v.Type,
+				FieldName:   v.FieldName,
 			}
 		}
 	}

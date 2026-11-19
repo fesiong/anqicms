@@ -78,11 +78,8 @@ func ProcessExtra(extraData model.ExtraData, fields []config.CustomField, curren
 				}
 			}
 		} else if field.Type == config.CustomFieldTypeTexts && extra[field.FieldName] != nil {
-			var texts []config.CustomFieldTexts
-			err := json.Unmarshal([]byte(fmt.Sprint(extra[field.FieldName])), &texts)
-			if err == nil {
-				extra[field.FieldName] = texts
-			}
+			// 条目可能带自己的 type，解析与规整统一走 FormatCustomFieldTexts
+			extra[field.FieldName] = currentSite.FormatCustomFieldTexts(extra[field.FieldName], true)
 		} else if field.Type == config.CustomFieldTypeTimeline && extra[field.FieldName] != nil {
 			var val config.TimelineField
 			err := json.Unmarshal([]byte(fmt.Sprint(extra[field.FieldName])), &val)

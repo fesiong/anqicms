@@ -39,7 +39,7 @@ func OrderIndexPage(ctx iris.Context) {
 
 	ctx.ViewData("currentRoute", route)
 
-	err := ctx.View(GetViewPath(ctx, tpl))
+	err := renderView(ctx, GetViewPath(ctx, tpl))
 	if err != nil {
 		ctx.StatusCode(404)
 		ctx.Values().Set("message", err.Error())

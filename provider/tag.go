@@ -344,8 +344,11 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 							req.Extra[field.FieldName] = val
 						}
 					} else if field.Type == config.CustomFieldTypeTexts && req.Extra[field.FieldName] != nil {
-						buf, _ := json.Marshal(req.Extra[field.FieldName])
-						req.Extra[field.FieldName] = string(buf)
+						// 条目可能带自己的 type：先校验，再规整后存 JSON。
+						if err := w.ValidateCustomFieldTexts(req.Extra[field.FieldName], &field); err != nil {
+							return nil, err
+						}
+						req.Extra[field.FieldName] = w.StringifyCustomFieldTexts(req.Extra[field.FieldName])
 					} else if field.Type == config.CustomFieldTypeTimeline {
 						// 存 json
 						buf, _ := json.Marshal(req.Extra[field.FieldName])

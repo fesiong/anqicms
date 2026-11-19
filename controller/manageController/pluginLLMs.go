@@ -90,7 +90,11 @@ func PluginSaveLLMsSetting(ctx iris.Context) {
 	})
 }
 
-// PluginLLMsBuild 触发生成站点的 llms.txt 文件，需先开启 llms.txt 插件。
+// PluginLLMsBuild 触发站点的 llms.txt 生成（异步），需先开启 llms.txt 插件。
+//
+// 为什么是异步：一次构建要遍历全站分类与文章，同步跑会把 HTTP 请求挂住几十秒，
+// 前端那条"进度"轮询在响应返回时构建早已结束，等于永远看不到进度。
+// 这里同步占位（status=1）后立刻返回，前端每秒轮询 /plugin/llms/status 取真实进度。
 func PluginLLMsBuild(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.PluginLLMs
@@ -103,14 +107,9 @@ func PluginLLMsBuild(ctx iris.Context) {
 		return
 	}
 
-	err := currentSite.LLMsBuild()
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
+	// 已在构建中时不重复启动（也避免把进行中的进度重置掉），仍回"构建中"。
+	currentSite.StartLLMsBuild()
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("LLMsBuildProgressing"),

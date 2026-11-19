@@ -1501,9 +1501,7 @@ func (w *Website) ApiGetCategory(req *request.ApiCategoryRequest) (*model.Catego
 						categoryExtra[field.FieldName] = val
 					}
 				} else if field.Type == config.CustomFieldTypeTexts && categoryExtra[field.FieldName] != nil {
-					var texts []config.CustomFieldTexts
-					_ = json.Unmarshal([]byte(fmt.Sprint(categoryExtra[field.FieldName])), &texts)
-					categoryExtra[field.FieldName] = texts
+					categoryExtra[field.FieldName] = w.FormatCustomFieldTexts(categoryExtra[field.FieldName], true)
 				} else if field.Type == config.CustomFieldTypeTimeline && categoryExtra[field.FieldName] != nil {
 					var val config.TimelineField
 					_ = json.Unmarshal([]byte(fmt.Sprint(categoryExtra[field.FieldName])), &val)
@@ -1628,9 +1626,7 @@ func (w *Website) ApiGetTag(req *request.ApiTagRequest) (*model.Tag, error) {
 							tagDetail.Extra[field.FieldName] = val
 						}
 					} else if field.Type == config.CustomFieldTypeTexts && tagDetail.Extra[field.FieldName] != nil {
-						var texts []config.CustomFieldTexts
-						_ = json.Unmarshal([]byte(fmt.Sprint(tagDetail.Extra[field.FieldName])), &texts)
-						tagDetail.Extra[field.FieldName] = texts
+						tagDetail.Extra[field.FieldName] = w.FormatCustomFieldTexts(tagDetail.Extra[field.FieldName], true)
 					} else if field.Type == config.CustomFieldTypeTimeline && tagDetail.Extra[field.FieldName] != nil {
 						var val config.TimelineField
 						_ = json.Unmarshal([]byte(fmt.Sprint(tagDetail.Extra[field.FieldName])), &val)
@@ -1911,9 +1907,7 @@ func (w *Website) ApiGetDiyFields(render bool) []config.CustomField {
 				field.Value = val
 			}
 		} else if field.Type == config.CustomFieldTypeTexts && field.Value != nil {
-			var texts []config.CustomFieldTexts
-			_ = json.Unmarshal([]byte(fmt.Sprint(field.Value)), &texts)
-			field.Value = texts
+			field.Value = w.FormatCustomFieldTexts(field.Value, true)
 		} else if field.Type == config.CustomFieldTypeTimeline && field.Value != nil {
 			var val config.TimelineField
 			_ = json.Unmarshal([]byte(fmt.Sprint(field.Value)), &val)

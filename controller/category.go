@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/kataras/iris/v12"
-	"github.com/kataras/iris/v12/context"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -17,8 +16,7 @@ func CategoryPage(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
 	if ok {
-		ctx.ContentType(context.ContentHTMLHeaderValue)
-		ctx.Write(cacheFile)
+		writeCachedHTML(ctx, cacheFile)
 		return
 	}
 	currentPage := ctx.Values().GetIntDefault("page", 1)
@@ -117,7 +115,7 @@ func CategoryPage(ctx iris.Context) {
 		return
 	}
 	recorder := ctx.Recorder()
-	err = ctx.View(GetViewPath(ctx, tplName))
+	err = renderView(ctx, GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
 	} else {
@@ -132,8 +130,7 @@ func SearchPage(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
 	if ok {
-		ctx.ContentType(context.ContentHTMLHeaderValue)
-		ctx.Write(cacheFile)
+		writeCachedHTML(ctx, cacheFile)
 		return
 	}
 	currentPage := ctx.Values().GetIntDefault("page", 1)
@@ -198,7 +195,7 @@ func SearchPage(ctx iris.Context) {
 		return
 	}
 	recorder := ctx.Recorder()
-	err := ctx.View(GetViewPath(ctx, tplName))
+	err := renderView(ctx, GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
 	} else {

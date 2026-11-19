@@ -214,8 +214,11 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 						category.Extra[field.FieldName] = val
 					}
 				} else if field.Type == config.CustomFieldTypeTexts && category.Extra[field.FieldName] != nil {
-					buf, _ := json.Marshal(category.Extra[field.FieldName])
-					category.Extra[field.FieldName] = string(buf)
+					// 条目可能带自己的 type：先校验，再规整后存 JSON。
+					if err := w.ValidateCustomFieldTexts(category.Extra[field.FieldName], &field); err != nil {
+						return nil, err
+					}
+					category.Extra[field.FieldName] = w.StringifyCustomFieldTexts(category.Extra[field.FieldName])
 				} else if field.Type == config.CustomFieldTypeTimeline {
 					// 存 json
 					buf, _ := json.Marshal(category.Extra[field.FieldName])

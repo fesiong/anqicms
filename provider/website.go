@@ -71,7 +71,6 @@ type Website struct {
 	AkismetClient           *AkismetClient
 	googleAuthConfig        *oauth2.Config
 	googleMerchantConfig    *oauth2.Config
-	llmsBuildStatus         *LLMsBuildStatus
 
 	System   *config.SystemConfig
 	Content  *config.ContentConfig

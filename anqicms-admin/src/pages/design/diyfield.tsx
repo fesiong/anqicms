@@ -1,6 +1,7 @@
 import NewContainer from '@/components/NewContainer';
 import ArchivePicker from '@/components/archiveSearch/ArchivePicker';
 import AttachmentSelect from '@/components/attachment';
+import CustomFieldTextsEditor from '@/components/customFieldTexts';
 import {
   getArchives,
   getCategories,
@@ -10,11 +11,9 @@ import {
 } from '@/services';
 import {
   DeleteOutlined,
-  DownOutlined,
   LeftOutlined,
   PlusOutlined,
   RightOutlined,
-  UpOutlined,
 } from '@ant-design/icons';
 import {
   ActionType,
@@ -268,68 +267,12 @@ const SettingDiyFieldFrom: React.FC<any> = () => {
     });
   };
 
-  const onAddExtraTextsField = (index: number) => {
-    if (!setting[index].value) {
-      setting[index].value = [];
-    }
-    setting[index].value.push({
-      key: '',
-      value: '',
-    });
-    formRef?.current?.setFieldsValue(setting);
-    setSetting([].concat(...setting));
-  };
-
-  const onChangeExtraTextsField = (
-    index: number,
-    idx: number,
-    keyName: any,
-    value: any,
-  ) => {
-    setting[index].value[idx][keyName] = value;
-    setSetting([].concat(...setting));
-  };
-
-  const onMoveUpExtraTextsField = (index: number, idx: number) => {
-    // 移动
-    if (idx > 0) {
-      const tmp = setting[index].value[idx];
-      setting[index].value[idx] = setting[index].value[idx - 1];
-      setting[index].value[idx - 1] = tmp;
-      formRef?.current?.setFieldsValue(setting);
-      setSetting([].concat(...setting));
-    }
-  };
-
-  const onMoveDownExtraTextsField = (index: number, idx: number) => {
-    // 移动
-    if (idx < setting[index].value.length - 1) {
-      const tmp = setting[index].value[idx];
-      setting[index].value[idx] = setting[index].value[idx + 1];
-      setting[index].value[idx + 1] = tmp;
-      formRef?.current?.setFieldsValue(setting);
-      setSetting([].concat(...setting));
-    }
-  };
-
-  const onRemoveExtraTextsField = (index: number, idx: number) => {
-    Modal.confirm({
-      title: intl.formatMessage({
-        id: 'content.module.field.delete.confirm',
-      }),
-      content: intl.formatMessage({
-        id: 'content.module.field.delete.content',
-      }),
-      onOk: () => {
-        if (setting[index].value.length === 1) {
-          setting[index].value = [];
-        } else {
-          setting[index].value.splice(idx, 1);
-        }
-        formRef?.current?.setFieldsValue(setting);
-        setSetting([].concat(...setting));
-      },
-    });
+  // texts 字段的统一入口：子组件回传序列化后的条目数组，写回当前 DIY 字段
+  const onChangeExtraTexts = (index: number, list: any[]) => {
+    const next = [...setting];
+    next[index] = { ...next[index], value: list };
+    formRef?.current?.setFieldsValue(next);
+    setSetting(next);
   };
 
   const onSearchArchives = (e: any) => {
@@ -836,100 +779,18 @@ const SettingDiyFieldFrom: React.FC<any> = () => {
                         )}
                       </ProFormText>
                     ) : item.type === 'texts' ? (
-                      <ProFormText
+                      <CustomFieldTextsEditor
+                        field={item}
                         label={
                           <span>
                             {item.remark} (
-                            {intl.formatMessage({
-                              id: 'setting.system.param-name',
-                            })}
+                            {intl.formatMessage({ id: 'setting.system.param-name' })}
                             :{item.name})
                           </span>
                         }
-                      >
-                        <div className="text-groups">
-                          <div className="text-group">
-                            <div className="text-key">Key</div>
-                            <div className="text-value">Value</div>
-                            <div className="text-action"></div>
-                          </div>
-                          {item.value?.length
-                            ? item.value.map((inner: any, idx: number) => (
-                                <div className="text-group" key={idx}>
-                                  <div className="text-key">
-                                    <ProFormText
-                                      name={[index, 'value', idx, 'key']}
-                                      fieldProps={{
-                                        value: inner.key,
-                                        onChange: (e: any) => {
-                                          onChangeExtraTextsField(
-                                            index,
-                                            idx,
-                                            'key',
-                                            e.target.value,
-                                          );
-                                        },
-                                      }}
-                                    />
-                                  </div>
-                                  <div className="text-value">
-                                    <ProFormText
-                                      name={[index, 'value', idx, 'value']}
-                                      fieldProps={{
-                                        value: inner.value,
-                                        onChange: (e: any) => {
-                                          onChangeExtraTextsField(
-                                            index,
-                                            idx,
-                                            'value',
-                                            e.target.value,
-                                          );
-                                        },
-                                      }}
-                                    />
-                                  </div>
-                                  <div className="text-action">
-                                    <Tag
-                                      onClick={() =>
-                                        onMoveUpExtraTextsField(index, idx)
-                                      }
-                                    >
-                                      <UpOutlined />
-                                    </Tag>
-                                    <Tag
-                                      onClick={() =>
-                                        onMoveDownExtraTextsField(index, idx)
-                                      }
-                                    >
-                                      <DownOutlined />
-                                    </Tag>
-                                    <Tag
-                                      color="red"
-                                      onClick={() =>
-                                        onRemoveExtraTextsField(index, idx)
-                                      }
-                                    >
-                                      <DeleteOutlined />
-                                    </Tag>
-                                  </div>
-                                </div>
-                              ))
-                            : null}
-                          <div className="text-group">
-                            <div className="text-key">
-                              <Tag
-                                color="blue"
-                                className="add-line"
-                                onClick={() => onAddExtraTextsField(index)}
-                              >
-                                {intl.formatMessage({
-                                  id: 'content.param.add-line',
-                                })}
-                              </Tag>
-                            </div>
-                          </div>
-                        </div>
-                      </ProFormText>
+                        value={item.value || []}
+                        onChange={(list: any[]) => onChangeExtraTexts(index, list)}
+                      />
                     ) : item.type === 'archive' ? (
                       <ProForm.Item
                         name={[index, 'value']}

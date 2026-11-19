@@ -194,7 +194,7 @@ func CommentList(ctx iris.Context) {
 		NotFound(ctx)
 		return
 	}
-	err = ctx.View(GetViewPath(ctx, tplName))
+	err = renderView(ctx, GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
 	}

@@ -884,3 +884,6 @@
 "SmsSendFailed": "Failed to send SMS, please try again later"
 "SmsParamInvalid": "Invalid request parameter"
 "UserNotActive": "Account is inactive or disabled. Please contact the administrator."
+"CustomFieldTextsTypeUnsupported": "Custom field \"%s\" has an unsupported item type \"%s\""
+"CustomFieldTextsValueInvalid": "Custom field \"%s\" value \"%s\" does not match type %s"
+"CustomFieldTextsValueNotInOptions": "Custom field \"%s\" value \"%s\" is not one of the options"

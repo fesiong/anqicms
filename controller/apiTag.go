@@ -803,9 +803,7 @@ func ApiTagDetail(ctx iris.Context) {
 								tagDetail.Extra[field.FieldName] = val
 							}
 						} else if field.Type == config.CustomFieldTypeTexts && tagDetail.Extra[field.FieldName] != nil {
-							var texts []config.CustomFieldTexts
-							_ = json.Unmarshal([]byte(fmt.Sprint(tagDetail.Extra[field.FieldName])), &texts)
-							tagDetail.Extra[field.FieldName] = texts
+							tagDetail.Extra[field.FieldName] = currentSite.FormatCustomFieldTexts(tagDetail.Extra[field.FieldName], true)
 						} else if field.Type == config.CustomFieldTypeTimeline && tagDetail.Extra[field.FieldName] != nil {
 							var val config.TimelineField
 							_ = json.Unmarshal([]byte(fmt.Sprint(tagDetail.Extra[field.FieldName])), &val)

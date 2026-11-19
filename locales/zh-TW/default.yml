@@ -884,3 +884,6 @@
 "SmsSendFailed": "簡訊發送失敗，請稍後重試"
 "SmsParamInvalid": "請求參數格式不正確"
 "UserNotActive": "賬號未啟用或已被停用，請聯繫管理員"
+"CustomFieldTextsTypeUnsupported": "自訂欄位「%s」的條目類型「%s」不受支援"
+"CustomFieldTextsValueInvalid": "自訂欄位「%s」的值「%s」與類型 %s 不符"
+"CustomFieldTextsValueNotInOptions": "自訂欄位「%s」的值「%s」不在可選項中"

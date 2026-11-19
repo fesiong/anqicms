@@ -1,3 +1,4 @@
+import CustomFieldTextsView from '@/components/customFieldTexts/render';
 import {
   pluginGetOrderInfo,
   pluginOrderApplyRefund,
@@ -483,18 +484,9 @@ const OrderForm: React.FC<OrderFormProps> = (props) => {
                       {item.order_fields?.map((field: any, index: number) => (
                         <ProFormText key={index} label={field.name} readonly>
                           {field.type === 'texts' ? (
-                            <div className="text-groups">
-                              {item.order_extra?.[field.field_name].map(
-                                (text: any, index: number) => (
-                                  <div className="text-group" key={index}>
-                                    <div className="text-key">{text.key}: </div>
-                                    <div className="text-value">
-                                      {text.value}
-                                    </div>
-                                  </div>
-                                ),
-                              )}
-                            </div>
+                            <CustomFieldTextsView
+                              value={item.order_extra?.[field.field_name]}
+                            />
                           ) : field.type === 'image' ? (
                             <Image
                               height={100}

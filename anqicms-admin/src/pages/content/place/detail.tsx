@@ -3,6 +3,7 @@ import ArchivePicker from '@/components/archiveSearch/ArchivePicker';
 import AiGenerate from '@/components/aiGenerate';
 import AiGetTdk from '@/components/aitdk';
 import AttachmentSelect from '@/components/attachment';
+import CustomFieldTextsEditor from '@/components/customFieldTexts';
 import CollapseItem from '@/components/collaspeItem';
 import {
   anqiExtractDescription,
@@ -14,11 +15,9 @@ import {
 import { getPlaceInfo, getPlaceSetting, savePlace } from '@/services/place';
 import {
   DeleteOutlined,
-  DownOutlined,
   LeftOutlined,
   PlusOutlined,
   RightOutlined,
-  UpOutlined,
 } from '@ant-design/icons';
 import {
   ProForm,
@@ -291,107 +290,13 @@ const PlaceDetail: React.FC = () => {
     }));
   };
 
-  const onAddExtraTextsField = (field: string) => {
-    if (!place.extra[field]) {
-      place.extra[field] = [];
-    }
-    place.extra[field].push({
-      key: '',
-      value: '',
-    });
-    setPlace((prev: any) => ({
-      ...prev,
-      extra: {
-        ...place.extra,
-      },
-    }));
+  // texts 字段的统一入口：子组件回传序列化后的条目数组，state 与表单同步更新
+  const onChangeExtraTexts = (field: string, list: any[]) => {
+    const nextExtra = { ...(place.extra || {}), [field]: list };
+    setPlace((prev: any) => ({ ...prev, extra: nextExtra }));
     const extra: any = {};
-    extra[field] = place.extra[field];
+    extra[field] = list;
     formRef?.current?.setFieldsValue({ extra });
-  };
-
-  const onChangeExtraTextsField = (
-    field: string,
-    idx: number,
-    keyName: any,
-    value: any,
-  ) => {
-    if (!place.extra[field][idx]) {
-      place.extra[field][idx] = {};
-    }
-    place.extra[field][idx][keyName] = value;
-    const extra: any = {};
-    extra[field] = { idx: { keyName: value } };
-    formRef?.current?.setFieldsValue({ extra });
-    setPlace((prev: any) => ({
-      ...prev,
-      extra: {
-        ...place.extra,
-      },
-    }));
-  };
-
-  const onMoveUpExtraTextsField = (field: string, idx: number) => {
-    // 移动
-    if (idx > 0) {
-      const tmp = place.extra[field][idx];
-      place.extra[field][idx] = place.extra[field][idx - 1];
-      place.extra[field][idx - 1] = tmp;
-      const extra: any = {};
-      extra[field] = place.extra[field];
-      formRef?.current?.setFieldsValue({ extra });
-      setPlace((prev: any) => ({
-        ...prev,
-        extra: {
-          ...place.extra,
-        },
-      }));
-    }
-  };
-
-  const onMoveDownExtraTextsField = (field: string, idx: number) => {
-    // 移动
-    if (idx < place.extra[field].length - 1) {
-      const tmp = place.extra[field][idx];
-      place.extra[field][idx] = place.extra[field][idx + 1];
-      place.extra[field][idx + 1] = tmp;
-      const extra: any = {};
-      extra[field] = place.extra[field];
-      formRef?.current?.setFieldsValue({ extra });
-      setPlace((prev: any) => ({
-        ...prev,
-        extra: {
-          ...place.extra,
-        },
-      }));
-    }
-  };
-
-  const onRemoveExtraTextsField = (field: string, idx: number) => {
-    Modal.confirm({
-      title: intl.formatMessage({
-        id: 'content.module.field.delete.confirm',
-      }),
-      content: intl.formatMessage({
-        id: 'content.module.field.delete.content',
-      }),
-      onOk: () => {
-        if (place.extra[field].length === 1) {
-          place.extra[field] = [];
-        } else {
-          place.extra[field].splice(idx, 1);
-        }
-        const extra: any = {};
-        extra[field] = place.extra[field];
-        formRef?.current?.setFieldsValue({ extra });
-        setPlace((prev: any) => ({
-          ...prev,
-          extra: {
-            ...place.extra,
-          },
-        }));
-      },
-    });
   };
 
   const onSearchArchives = (e: any) => {
@@ -809,116 +714,13 @@ const PlaceDetail: React.FC = () => {
                                   )}
                                 </ProFormText>
                               ) : item.type === 'texts' ? (
-                                <ProFormText label={item.name}>
-                                  <div className="text-groups">
-                                    <div className="text-group">
-                                      <div className="text-key">Key</div>
-                                      <div className="text-value">Value</div>
-                                      <div className="text-action"></div>
-                                    </div>
-                                    {place.extra?.[item.field_name]?.length
-                                      ? place.extra[item.field_name].map(
-                                          (inner: any, idx: number) => (
-                                            <div
-                                              className="text-group"
-                                              key={idx}
-                                            >
-                                              <div className="text-key">
-                                                <ProFormText
-                                                  name={[
-                                                    'extra',
-                                                    item.field_name,
-                                                    idx,
-                                                    'key',
-                                                  ]}
-                                                  fieldProps={{
-                                                    onChange: (e: any) => {
-                                                      onChangeExtraTextsField(
-                                                        item.field_name,
-                                                        idx,
-                                                        'key',
-                                                        e.target.value,
-                                                      );
-                                                    },
-                                                  }}
-                                                />
-                                              </div>
-                                              <div className="text-value">
-                                                <ProFormText
-                                                  name={[
-                                                    'extra',
-                                                    item.field_name,
-                                                    idx,
-                                                    'value',
-                                                  ]}
-                                                  fieldProps={{
-                                                    onChange: (e: any) => {
-                                                      onChangeExtraTextsField(
-                                                        item.field_name,
-                                                        idx,
-                                                        'value',
-                                                        e.target.value,
-                                                      );
-                                                    },
-                                                  }}
-                                                />
-                                              </div>
-                                              <div className="text-action">
-                                                <Tag
-                                                  onClick={() =>
-                                                    onMoveUpExtraTextsField(
-                                                      item.field_name,
-                                                      idx,
-                                                    )
-                                                  }
-                                                >
-                                                  <UpOutlined />
-                                                </Tag>
-                                                <Tag
-                                                  onClick={() =>
-                                                    onMoveDownExtraTextsField(
-                                                      item.field_name,
-                                                      idx,
-                                                    )
-                                                  }
-                                                >
-                                                  <DownOutlined />
-                                                </Tag>
-                                                <Tag
-                                                  color="red"
-                                                  onClick={() =>
-                                                    onRemoveExtraTextsField(
-                                                      item.field_name,
-                                                      idx,
-                                                    )
-                                                  }
-                                                >
-                                                  <DeleteOutlined />
-                                                </Tag>
-                                              </div>
-                                            </div>
-                                          ),
-                                        )
-                                      : null}
-                                    <div className="text-group">
-                                      <div className="text-key">
-                                        <Tag
-                                          color="blue"
-                                          className="add-line"
-                                          onClick={() =>
-                                            onAddExtraTextsField(
-                                              item.field_name,
-                                            )
-                                          }
-                                        >
-                                          {intl.formatMessage({
-                                            id: 'content.param.add-line',
-                                          })}
-                                        </Tag>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </ProFormText>
+                                <CustomFieldTextsEditor
+                                  field={item}
+                                  value={place.extra?.[item.field_name] || []}
+                                  onChange={(list: any[]) =>
+                                    onChangeExtraTexts(item.field_name, list)
+                                  }
+                                />
                               ) : item.type === 'archive' ? (
                                 <ProForm.Item
                                   label={item.name}

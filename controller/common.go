@@ -46,7 +46,7 @@ func NotFound(ctx iris.Context) {
 
 	tplName := "errors/404.html"
 	ctx.StatusCode(404)
-	err := ctx.View(GetViewPath(ctx, tplName))
+	err := renderView(ctx, GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.StatusCode(404)
 		ShowMessage(ctx, "404 Not Found", nil)
@@ -80,7 +80,7 @@ func CommonPage(ctx iris.Context) {
 		return
 	}
 
-	err := ctx.View(GetViewPath(ctx, tplName))
+	err := renderView(ctx, GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.StatusCode(404)
 		ShowMessage(ctx, "common/index.html Not Found", nil)
@@ -138,7 +138,7 @@ func InternalServerError(ctx iris.Context) {
 	ctx.ViewData("errMessage", errMessage)
 	tplName := "errors/500.html"
 	ctx.StatusCode(500)
-	err = ctx.View(GetViewPath(ctx, tplName))
+	err = renderView(ctx, GetViewPath(ctx, tplName))
 	if err != nil {
 		ShowMessage(ctx, errMessage, nil)
 	}
@@ -169,7 +169,7 @@ func CheckCloseSite(ctx iris.Context) bool {
 			}
 
 			ctx.StatusCode(403)
-			err := ctx.View(GetViewPath(ctx, tplName))
+			err := renderView(ctx, GetViewPath(ctx, tplName))
 			if err != nil {
 				ShowMessage(ctx, closeTips, nil)
 			}

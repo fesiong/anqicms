@@ -36,13 +36,18 @@ func TestPlacePagesCheckTemplateBeforeView(t *testing.T) {
 		}
 
 		checkAt := strings.Index(src, "TemplateExist(")
-		viewAt := strings.Index(src, "ctx.View(")
+		// 渲染入口已统一为 renderView（见 htmlResponse.go：它要录制 body 才能回填
+		// Content-Length）；仍保留对裸 ctx.View 的兼容，避免断言因入口改名而空转。
+		viewAt := strings.Index(src, "renderView(")
 		if viewAt < 0 {
-			t.Errorf("%s 里找不到 ctx.View，断言失效", c.fn)
+			viewAt = strings.Index(src, "ctx.View(")
+		}
+		if viewAt < 0 {
+			t.Errorf("%s 里找不到渲染调用（renderView/ctx.View），断言失效", c.fn)
 			continue
 		}
 		if checkAt > viewAt {
-			t.Errorf("%s 的模板存在性检查必须放在 ctx.View 之前（当前在第 %d 字符，View 在第 %d 字符）",
+			t.Errorf("%s 的模板存在性检查必须放在渲染之前（当前在第 %d 字符，渲染在第 %d 字符）",
 				c.fn, checkAt, viewAt)
 		}
 	}
@@ -56,7 +61,13 @@ func TestBuildSinglePlaceCacheSkipsMissingTemplate(t *testing.T) {
 	if !strings.Contains(src, "TemplateExist(") {
 		t.Fatal("BuildSinglePlaceCache 未检查模板是否存在：模板缺失时会把 404 页写进 HTML 缓存")
 	}
-	viewAt := strings.Index(src, "Application().View(")
+	// 渲染出口在重构后收敛到了 w.renderCacheTemplate（它内部才调
+	// ctx.Application().View），原先锚定的 `Application().View(` 在
+	// BuildSinglePlaceCache 函数体内已不存在 → 断言空转变红。锚点改为实际调用。
+	viewAt := strings.Index(src, "renderCacheTemplate(")
+	if viewAt < 0 {
+		viewAt = strings.Index(src, "Application().View(")
+	}
 	if viewAt < 0 {
 		t.Fatal("BuildSinglePlaceCache 里找不到渲染调用，断言失效")
 	}

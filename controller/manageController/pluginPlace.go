@@ -175,9 +175,7 @@ func PlaceDetail(ctx iris.Context) {
 						place.Extra[field.FieldName] = val
 					}
 				} else if field.Type == config.CustomFieldTypeTexts && place.Extra[field.FieldName] != nil {
-					var texts []config.CustomFieldTexts
-					_ = json.Unmarshal([]byte(fmt.Sprint(place.Extra[field.FieldName])), &texts)
-					place.Extra[field.FieldName] = texts
+					place.Extra[field.FieldName] = currentSite.FormatCustomFieldTexts(place.Extra[field.FieldName], true)
 				} else if field.Type == config.CustomFieldTypeTimeline && place.Extra[field.FieldName] != nil {
 					var val config.TimelineField
 					_ = json.Unmarshal([]byte(fmt.Sprint(place.Extra[field.FieldName])), &val)
