@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
@@ -1762,8 +1763,38 @@ var (
 	// 排序子句只接受列名（可带表前缀、可带反引号）与 asc/desc。
 	// 引号、括号、注释、|| 只要放行任意一项，ORDER BY 就成了注入面。
 	orderColumnRegex = regexp.MustCompile("^`?[a-zA-Z0-9_]+`?(?:\\.`?[a-zA-Z0-9_]+`?)?$")
-	orderDirRegex    = regexp.MustCompile("^(?i)(asc|desc)$")
+
+	// 列名校验结果缓存。模板里 order 是写死的常量（如 "id desc"），每次渲染都
+	// 重新跑一遍正则是纯浪费；ParseOrderBy 在详情页里占 1% 以上的 CPU。
+	// 键是调用方传入的列名原文，集合很小；给个上限防止异常请求把内存顶起来。
+	orderColumnCacheMu sync.RWMutex
+	orderColumnCache   = make(map[string]bool, 64)
 )
+
+const orderColumnCacheLimit = 1024
+
+// isValidOrderColumn 是 orderColumnRegex 的带缓存版本，判定结果与正则完全一致。
+func isValidOrderColumn(column string) bool {
+	orderColumnCacheMu.RLock()
+	ok, hit := orderColumnCache[column]
+	orderColumnCacheMu.RUnlock()
+	if hit {
+		return ok
+	}
+	ok = orderColumnRegex.MatchString(column)
+	orderColumnCacheMu.Lock()
+	if len(orderColumnCache) < orderColumnCacheLimit {
+		orderColumnCache[column] = ok
+	}
+	orderColumnCacheMu.Unlock()
+	return ok
+}
+
+// isValidOrderDir 只放行 asc/desc（大小写不敏感），与 orderDirRegex 等价。
+// 这里直接比字符串：两种情况穷举即可，没必要为正则付编译机开销。
+func isValidOrderDir(dir string) bool {
+	return strings.EqualFold(dir, "asc") || strings.EqualFold(dir, "desc")
+}
 
 func ParseOrderBy(order string, prefix string) string {
 	if order == "" {
@@ -1794,13 +1825,13 @@ func ParseOrderBy(order string, prefix string) string {
 			}
 			continue
 		}
-		if !orderColumnRegex.MatchString(column) {
+		if !isValidOrderColumn(column) {
 			continue
 		}
 
 		dir := ""
 		if len(fields) == 2 {
-			if !orderDirRegex.MatchString(fields[1]) {
+			if !isValidOrderDir(fields[1]) {
 				continue
 			}
 			dir = " " + fields[1]

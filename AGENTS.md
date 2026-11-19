@@ -217,3 +217,109 @@ curl -s localhost:9200 | head -c 60           # 判活
 本仓自己的实现位置用 `xerj search --prefix anqicms` 找，比逐目录 grep 快。
 
 > 已设 `XERJ_DISABLE_FEEDBACK=true`：不要向 xerj 提交 field report（它会在公开仓库开 PR）。
+
+## 9. 站点库表迁移（多站点）
+
+> 2026-11-16 客户 106 站点事故后立的规矩。事故现象：升级 3.8.4 后「前十几个站点正常、
+> 后面全部初始化失败」，日志里 **0 条报错**、6489 条慢 SQL，启动 2.5 分钟只走到第 75 站。
+
+- ⚠️ **迁移禁止 `go` 出去**：`InitWebsite` 的顺序固定为
+  **迁移 → InitSetting → InitModelData → 注册**。106 个站点并发迁移会把 MySQL 的
+  DDL 打满（实测平均 33 倍、峰值 75 倍并行），而迁移与 `initArchiveSchema` 抢同一张
+  `archives` 表；站点先注册则请求会读到半迁移的表结构。
+- 统一入口 `provider.MigrateSiteSchema`（并发闸门默认 2，`ANQI_MIGRATE_CONCURRENCY`
+  可调；错误必进 slog；有进度日志）。新增调用点不要绕过它。
+- ⚠️ 并发初始化让**注册顺序不再等于 id 顺序**（先迁完的先注册）。`OrderedWebsites.Values()`
+  因此改为按 id 排序 —— 域名匹配是"第一个命中就返回"，同域名下主站 + 二级目录站点时，
+  先注册的那个会赢；排回 id 升序才恢复串行时代的确定性（护栏 `TestWebsitesValuesSortedById`）。
+- 启动期**站点初始化本身也按同一容量并行**（`initSitesConcurrently`，站点 1 先串行跑完，
+  父子站点等父站点完成后再派发）。三条不能退：① 站点 1 先跑（默认库/后台/主站）；
+  ② 子站点等父站点；③ worker 里的 panic 记栈后重新抛，交给 `InitWebsitesAsync` 标 failed ——
+  就地吞掉会让阶段被误标为 ready。护栏 `siteInitRunner_test.go`。
+- ⚠️ **空转 ALTER 是真凶之一**：全仓 752 列写成 `gorm:"type:varchar(32) not null"`，
+  非空被塞进类型字符串 → gorm `field.NotNull == false` 但 DDL 仍输出 NOT NULL →
+  每轮迁移都发一批"改完不变"的 `MODIFY COLUMN`（实测 660 条 / 193 秒，且不收敛）。
+  迁移入口用 `normalizeModelFieldNullability` 兜住（768 字段，DDL 一字不差）。
+  根治是把 tag 改成 `type:varchar(32);not null` —— 改完记得删 shim，
+  `TestInlineNotNullDebtIsTracked` 会变红提醒。
+- 离线迁移（把迁移从启动里剥离，可分批/可预演）：
+  ```bash
+  ./anqicms -migrate-only -migrate-dry-run          # 只看哪些站点要迁，不发 DDL
+  ./anqicms -migrate-only -migrate-sites 1,3,9-20   # 分批
+  ./anqicms -migrate-only -migrate-concurrency 1    # 库扛不住时降并发
+  ```
+  该分支**不走** ScanPort / checkProcesses（迁移不占端口，客户常在服务开着时分批跑）。
+- ⚠️ 具名返回值才能让 `defer` 改到返回值；`res := X{}; defer func(){res.Y=...}(); return res`
+  改的是副本（离线迁移汇总耗时一度恒为 0s）。
+
+### 9.1 ⚠️ 启动顺序：端口先开，迁移在后台
+
+> 2026-11-16 事故的第二幕：把迁移改成同步（9 的改动）之后，它卡在
+> `go bootstrap.Start()` 之前 —— 106 个站点升级期间「进程活着、日志不动、
+> 端口几十分钟不开」，运维无法区分"在跑"和"卡死"，客户反复重启。
+
+**顺序固定为**（`bootstrap.Serve`）：
+
+```
+bootstrap.Init()          // 路由 + i18n + 模板引擎，毫秒级
+provider.PrepareStartupGate()   // 有默认库时先关闸门（必须在监听之前）
+go bootstrap.Listen()     // 端口立刻监听
+provider.InitWebsitesAsync()    // 后台跑站点初始化（含迁移），闸门限流
+crond.Crond()
+```
+
+- ⚠️ **不允许**在 `Serve` 里直接调 `provider.InitWebsites()`（同步）。
+  护栏 `TestServeListensBeforeSiteInit` 会变红。
+- ⚠️ **放行粒度是站点，不是进程**。106 个站点同时只有 2 个在迁移/初始化，**迁完的那个立刻能服务**，
+  不该陪着跑完最后一个（否则升级窗口 = 所有站点耗时之和）。判定在
+  `provider/siteAccess.go`：该请求归属的站点**已注册 + `Initialed` + 打过可服务标记** → 放行，
+  否则 503 + `Retry-After: 10`（HTML 页自动刷新；`Accept: application/json` 或 `/api/*` 返回 JSON 进度）。
+  闸门必须是 `loadGlobalMiddleware` 里**第一个**中间件。
+- ⚠️ **"注册"不等于"可服务"**：`InitWebsite` 先 `websites.Set`（`GetRewritePattern` 要回写注册表里同一个
+  对象），之后才建 limiter/cache。可服务标记（`markSiteServable`）打在函数末尾，`RemoveWebsite` /
+  重新初始化时清掉。别把两者合成一个 —— 合成就会出现"Cache 还是 nil 就被放给线上流量"。
+- 后台请求带 `Site-Id` / `X-Site-Id` / `Sub-Site-Id` 时，**声明的站点优先于域名**：
+  否则会拿站点 1 的就绪状态放行一个要操作未迁移站点的请求，那条请求会落回站点 1，写错库。
+- `GET /__startup` 是唯一无条件放行的端点，同时当**就绪探针**（全部站点处理完才 503→200，
+  响应体是进度 JSON）。别改成"永远 200 + ready 字段"——负载均衡只看状态码。
+- 日志必须有心跳：初始化期间每 15 秒一条
+  `站点初始化进行中：已处理 x/y（迁移 a、跳过 b、失败 c），当前 #id「名称」、#id「名称」，已耗时 …`
+  （并发的站点会按 id 升序一起列出来，`SetStartupCurrent`/`ClearStartupCurrent` 成对使用）。
+  没有它，单站点回填几分钟的静默和"卡死"又是一回事。
+- 闸门有四态必须分清：`idle`（无默认库/全新安装，**放行**）、
+  `running`（**按站点放行**）、`ready`（放行）、`failed`（初始化 panic，**全站保持关闭**直到重启 ——
+  那时注册表可能是"部分就绪、部分半初始化"，按站点放行等于赌某个站点没被 panic 影响）。
+- ⚠️ 站点注册表的不变式没变：**迁移成功才注册**。所以闸门不能为了"让后台能看进度"
+  提前注册半初始化站点 —— 那正是 2026-11-15 那次 500 的成因。
+- ⚠️ 还没轮到的站点**做不到"照常访问"**：新代码读 3.6.6 的旧表（`archives` 缺列、
+  `archive_products` 不存在）会 500。它们只能是 503，页面上显示"排队中/正在升级"。
+
+## 10. 进程级共享资源（sego 词典是第一个）
+
+> 2026-11-17：词典从「每站点/每次一份」改成「全进程一份」。实测官方词典
+> （5.3MB / 350 700 词条）：单份加载 0.7s、堆常驻 +124MB；10 份各自加载 =
+> 7.0s、1236MB。106 个站点名义上 ≈ 13GB —— 这就是启动期被吃满的一端。
+
+- 唯一入口 `provider/segmenter.Shared()`（`sync.Once`，返回 `*sego.Segmenter`，
+  **可能为 nil**，调用方必须处理）。`provider.WordSplit` 与悟空引擎都走它；
+  `InitWebsites` 在遍历站点前先调一次，把加载耗时归到启动期。
+- ⚠️ 不许出现第二处 `LoadDictionary`。护栏 `TestOnlyOneDictionaryLoaderInRepo`
+  全仓扫描（跳过 `vendor/`、`node_modules/`）。
+- ⚠️ 悟空引擎必须传 `EngineInitOptions.Segmenter`，不能再传 `SegmenterDictionaries`
+  —— 后者让每个站点的引擎各读一遍词典。护栏 `TestWukongUsesSharedSegmenter`。
+  传外部分词器还有个好处：`engine.Close()` 只关自己加载的那个
+  （`usingExternalSegmenter == false` 才 Close），站点重载全文搜索不会关掉共享词典。
+- ⚠️ **运行期谁都不能 Close 词典**：`sego.Close()` 把 `dict.trie` 置 nil，
+  下一次分词就是 nil 解引用 —— 而且是"别的站点"的请求在 panic。
+  历史上 `Website.DeleteCache`（后台「清缓存」）里有 `DictClose()`，多站点下
+  等于给全站埋雷，已删。护栏 `TestNoOneClosesTheSharedDictionary`。
+- 词典缺失 / 0 字节 / 格式坏时的口径是 **记 ERROR + 降级，不 os.Exit**：
+  `sego.LoadDictionary` 对打不开的文件是 `log.Fatalf`（recover 拦不住），
+  所以加载前必须 `Stat` 确认存在；悟空引擎拿不到词典时返回 error，
+  由 `InitFulltext` 把状态置 -1 给用户看，而不是让进程起不来。
+- 路径顺序：`config.ExecPath/dictionary.txt` → 工作目录/dictionary.txt。
+  发布包把词典和主程序放一起；服务多由 systemd / 计划任务拉起，cwd 不固定。
+- ⚠️ wukong 自身有个数据竞争（与本改造无关，别顺手改 vendor）：
+  `Close() → FlushIndex()` 非原子读 `Init` 起 worker 正在原子写的计数器
+  （engine.go:439 vs :170），`-race` 下「Init 后立刻 Close」必报。
+  写测试时不要在 Init 之后马上 Close。

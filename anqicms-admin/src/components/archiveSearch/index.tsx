@@ -54,23 +54,45 @@ const ArchiveSearch: React.FC<ArchiveSearchProps> = (props) => {
       valueType: 'select',
       order: 2,
       params: { module_id: moduleId },
-      request: async (params) => {
-        const res = await getCategories({
-          type: 1,
-          show_type: 1,
-          module_id: params.module_id,
-        });
-        return (res.data || []).map((cat: any) => ({
-          label: [
-            ...(cat.parents || []).map((parent: any) => parent.title),
-            cat.title,
-          ].join(' > '),
-          value: cat.id,
-        }));
+      request: async () => {
+        let res = await getCategories({ type: 1 });
+        const categories = [
+          {
+            parents: [],
+            title: intl.formatMessage({ id: 'content.category.all' }),
+            id: 0,
+            status: 1,
+          },
+        ]
+          .concat(res.data || [])
+          .map((cat: any) => ({
+            title: cat.title,
+            label: (
+              <div title={cat.title}>
+                {cat.parents?.length > 0 ? (
+                  <span className="text-muted">
+                    {cat.parents
+                      ?.map((parent: any) => parent.title)
+                      .join(' > ')}
+                    {' > '}
+                  </span>
+                ) : (
+                  ''
+                )}
+                {cat.title}
+              </div>
+            ),
+            value: cat.id,
+            disabled: cat.status !== 1,
+          }));
+        return categories;
       },
       fieldProps: {
         showSearch: true,
-        optionFilterProp: 'label',
+        filterOption: (input: string, option: any) =>
+          (option?.title ?? option?.label)
+            .toLowerCase()
+            .includes(input.toLowerCase()),
       },
       render: (_, entity) => entity.category_titles?.join(' / '),
     },

@@ -51,6 +51,7 @@ export default {
   'menu.plugin.system.watermark': 'Image watermark',
   'menu.plugin.system.translate': 'Translation config',
   'menu.plugin.channel.sendmail': 'Email notifications',
+  'menu.plugin.channel.sms': 'SMS service',
   'menu.plugin.channel.subscription': 'Email subscription',
   'menu.plugin.channel.wechat': 'WeChat Official Account',
   'menu.plugin.channel.weapp': 'WeChat Mini Program',

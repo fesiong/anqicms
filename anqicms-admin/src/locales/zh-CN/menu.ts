@@ -51,6 +51,7 @@ export default {
   'menu.plugin.system.watermark': '图片添加水印',
   'menu.plugin.system.translate': '翻译配置',
   'menu.plugin.channel.sendmail': '邮件提醒',
+  'menu.plugin.channel.sms': '短信服务',
   'menu.plugin.channel.subscription': '邮件订阅',
   'menu.plugin.channel.wechat': '微信公众号',
   'menu.plugin.channel.weapp': '微信小程序',

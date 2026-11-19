@@ -44,6 +44,21 @@ func GetDefaultDB() *gorm.DB {
 	return defaultDB
 }
 
+// mysqlDSN 拼 DSN。database 传空串表示"只连服务不选库"（建库前用）。
+//
+// ⚠️ timeout=10s 是**拨号**超时，必须有。过去没有它时，某个站点的库所在主机
+// 不可达（防火墙丢包、容器网络不通）会按内核 TCP 重传节奏耗到 2 分钟才报错，
+// 而初始化是逐个站点串行遍历的 —— N 个坏站点就能把"端口迟迟不开"拖成 2N 分钟，
+// 日志里还只有一句连不上，完全看不出是超时等待。
+//
+// readTimeout / writeTimeout 故意**不设**：3.8.0 的商品属性回填是一条
+// `INSERT INTO archive_products ... SELECT ... FROM archives`，
+// 万行库上本来就要跑几分钟，加读超时会把正常升级直接打断。
+func mysqlDSN(cfg *config.MysqlConfig, database string) string {
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local&timeout=10s",
+		cfg.User, cfg.Password, cfg.Host, cfg.Port, database)
+}
+
 func InitDB(cfg *config.MysqlConfig) (*gorm.DB, error) {
 	var db *gorm.DB
 	var err error
@@ -54,13 +69,11 @@ func InitDB(cfg *config.MysqlConfig) (*gorm.DB, error) {
 		PrepareStmtTTL:                           15 * time.Minute,
 		Logger:                                   defaultLogger,
 	}
-	cfgUrl := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
+	cfgUrl := mysqlDSN(cfg, cfg.Database)
 	db, err = gorm.Open(mysql.Open(cfgUrl), gormCfg)
 	if err != nil {
 		if strings.Contains(err.Error(), "1049") {
-			url2 := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4&parseTime=True&loc=Local",
-				cfg.User, cfg.Password, cfg.Host, cfg.Port)
+			url2 := mysqlDSN(cfg, "")
 			db, err = gorm.Open(mysql.Open(url2), gormCfg)
 			if err != nil {
 				return nil, err
@@ -130,7 +143,7 @@ func AutoMigrateDB(db *gorm.DB, force bool) error {
 		// 强制转换archive表的title字段
 		forceChangeArchiveTitle(db)
 
-		//自动迁移数据库
+		// 自动迁移数据库
 		var models = []interface{}{
 			&model.Admin{},
 			&model.AdminGroup{},
@@ -242,6 +255,13 @@ func AutoMigrateDB(db *gorm.DB, force bool) error {
 			// 短信验证码状态机与发送流水
 			&model.SmsCode{},
 			&model.SmsLog{},
+		}
+		// 迁移前先把 `type:varchar(32) not null` 这类写法规范化。全仓 752 列把
+		// 非空写进了类型字符串，gorm 因此认为模型可空、库列非空，每次迁移都会为
+		// 它们发一批"改完不变"的 ALTER（实测单站点一轮 660 条 / 193 秒）。
+		// 详见 normalizeSchemaFieldNullability 的注释。
+		if n := normalizeModelFieldNullability(db, models); n > 0 {
+			log.Printf("迁移前规范化非空标记：%d 个字段（消除空转 ALTER）", n)
 		}
 		//自动迁移数据库
 		err := db.Set("gorm:table_options", "DEFAULT CHARSET=utf8mb4").AutoMigrate(models...)

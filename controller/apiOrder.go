@@ -1429,6 +1429,17 @@ func createStripePayment(ctx iris.Context, payment *model.Payment, order *model.
 
 func createBalancePayment(ctx iris.Context, payment *model.Payment, order *model.Order) {
 	currentSite := provider.CurrentSite(ctx)
+	// ⚠️ 金额闸门：`user.Balance < payment.Amount` 对负数恒 false，
+	// `balance - (-N)` 会把扣款变成给攻击者加钱。数量侧虽已在 CreateOrder 堵死负数量，
+	// 这里作为最后一道防线：任何非正金额的付款单都不允许进入余额扣款流程。
+	// 必须排在余额比较、Begin 事务和任何 UpdateColumn 之前。
+	if payment.Amount <= 0 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("UnableToCreatePaymentOrder"),
+		})
+		return
+	}
 	// 检查用户余额是否足够
 	user, err := currentSite.GetUserInfoById(payment.UserId)
 	if err != nil {

@@ -120,19 +120,14 @@ func (w *Website) GetArchiveByOriginUrl(keyword string) (*model.Archive, error) 
 }
 
 func (w *Website) GetPreviousArchive(categoryId, id int64) (*model.Archive, error) {
-	sql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+	// 一条 SQL 直接取「id 更小的上一篇」：ORDER BY id DESC + LIMIT 1 由 Take 补。
+	// 不要先 SELECT id 再回表——那是同一段索引区间的两次往返，换来的 id 只用来
+	// 立刻回表，详情页每篇要付两次（上一篇 + 下一篇）。
+	archive, err := w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
 		if categoryId > 0 {
 			tx = tx.Where("`category_id` = ?", categoryId)
 		}
-		return tx.Where("`id` < ?", id).Order("`id` DESC").Select("id").Limit(1).Find(&model.Archive{})
-	})
-	var archiveId int64
-	err := w.DB.Raw(sql).Take(&archiveId).Error
-	if archiveId == 0 {
-		return nil, err
-	}
-	archive, err := w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
-		return tx.Where("`id` = ?", archiveId)
+		return tx.Where("`id` < ?", id).Order("`id` DESC")
 	})
 	if err != nil {
 		return nil, err
@@ -145,19 +140,11 @@ func (w *Website) GetPreviousArchive(categoryId, id int64) (*model.Archive, erro
 }
 
 func (w *Website) GetNextArchive(categoryId, id int64) (*model.Archive, error) {
-	sql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+	archive, err := w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
 		if categoryId > 0 {
 			tx = tx.Where("`category_id` = ?", categoryId)
 		}
-		return tx.Where("`id` > ?", id).Order("`id` ASC").Select("id").Limit(1).Find(&model.Archive{})
-	})
-	var archiveId int64
-	err := w.DB.Raw(sql).Take(&archiveId).Error
-	if archiveId == 0 {
-		return nil, err
-	}
-	archive, err := w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
-		return tx.Where("`id` = ?", archiveId)
+		return tx.Where("`id` > ?", id).Order("`id` ASC")
 	})
 	if err != nil {
 		return nil, err
@@ -169,24 +156,33 @@ func (w *Website) GetNextArchive(categoryId, id int64) (*model.Archive, error) {
 	return archive, nil
 }
 
-func (w *Website) GetArchiveByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.Archive, error) {
-	sql := ops(w.DB.WithContext(w.Ctx())).ToSQL(func(tx *gorm.DB) *gorm.DB {
-		return tx.Select("id").Limit(1).Find(&model.Archive{})
-	})
-	var archiveId int64
-	err := w.DB.Raw(sql).Take(&archiveId).Error
-	if archiveId == 0 {
+// selectArchiveByFunc 按条件取一整行，不做缩略图/链接补全。
+//
+// 单独拆出来是为了让「这条路径发几条 SQL」能被测试直接断言：详情页是全站最热的
+// 路径，每页多一次 MySQL 往返就是多一次全表之外的开销。
+//
+// 历史坑：这里曾经用 ToSQL 先拼一条 `SELECT id ... LIMIT 1`、Raw 取回 id、再
+// `WHERE id = ?` 取整行——两次往返换来的「只读 id」毫无收益（紧接着就要读整行），
+// 而详情页要取 正文 + 上一篇 + 下一篇，一次请求白烧三次往返。
+//
+// ⚠️ ops 只能加 Where/Order/Join 这类过滤，不能加 Select：整行是一次性取出来的，
+// 加了列裁剪拿到的就是半条记录（商品属性走 archive_products 的回调补全，别在这里裁）。
+func (w *Website) selectArchiveByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.Archive, error) {
+	var archive model.Archive
+	if err := ops(w.DB.WithContext(w.Ctx())).Take(&archive).Error; err != nil {
 		return nil, err
 	}
+	return &archive, nil
+}
 
-	var archive model.Archive
-	err = w.DB.Model(&model.Archive{}).Where("id = ?", archiveId).Take(&archive).Error
+func (w *Website) GetArchiveByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.Archive, error) {
+	archive, err := w.selectArchiveByFunc(ops)
 	if err != nil {
 		return nil, err
 	}
 	archive.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(archive.Id)))
-	archive.Link = w.GetUrl("archive", &archive, 0)
-	return &archive, nil
+	archive.Link = w.GetUrl("archive", archive, 0)
+	return archive, nil
 }
 
 func (w *Website) GetArchiveDraftById(id int64) (*model.ArchiveDraft, error) {
@@ -656,6 +652,9 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		req.ModuleId = module.Id
 		req.UrlToken = w.VerifyArchiveUrlToken(req.UrlToken, req.Title, draft.Id)
 	}
+	// 写路径自己保证商品属性读到了：读闸门关掉时（内容模式 / 文章模型）上面拿到的
+	// 现值里商品字段全是零值，PATCH 未传的字段会被零值覆盖，侧表行随后被删。
+	w.loadArchiveProducts(&draft.Archive)
 	// createdTime
 	if req.CreatedTime > 0 {
 		draft.CreatedTime = req.CreatedTime

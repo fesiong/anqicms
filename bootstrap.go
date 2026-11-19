@@ -44,6 +44,10 @@ func New(port int, loggerLevel string) *Bootstrap {
 }
 
 func (bootstrap *Bootstrap) loadGlobalMiddleware() {
+	// ⚠️ 第一个必须是启动闸门。站点初始化（含库表迁移）在后台跑，端口先开；
+	// 初始化没完成时注册表是空的/只注册了一部分，任何业务 handler 跑起来
+	// 都会踩到「全新安装语义」或未注册站点的 nil 兜底。详见 provider/startup.go。
+	bootstrap.Application.Use(middleware.StartupGate)
 	bootstrap.Application.Use(middleware.NewRecover())
 	bootstrap.Application.Use(middleware.Cors)
 	bootstrap.Application.Use(middleware.SecurityHeaders)
@@ -67,15 +71,30 @@ func (bootstrap *Bootstrap) Serve() {
 	// 进程入口显式打开，且必须在 InitWebsites 之前。
 	provider.EnableNotifyWorkerOnInit()
 
-	//自动迁移表
+	// 顺序：装路由/i18n/模板 → 开端口 → 后台做站点初始化（含库表迁移）。
+	//
+	// 为什么不能再等初始化完成才监听（2026-11-16 客户 106 站点事故）：
+	// 站点初始化里的库表迁移是同步的，单站点几秒到几分钟，106 个站点就是
+	// 几十分钟到几小时。这段卡在 `go bootstrap.Start()` 之前，表现就是
+	// 「进程起来了、日志不动、端口一直不开」—— 运维无法区分"在跑"和"卡死"，
+	// 客户现场因此反复重启，每次重启都要从被中断的站点重来。
+	//
+	// 现在端口先开，业务请求由 middleware.StartupGate 挡成 503 + Retry-After，
+	// 进度通过 GET /__startup 与每 15 秒一条的心跳日志对外可见；
+	// 站点注册表仍然遵守「迁移成功才注册」的不变式，不会把半迁移结构暴露出去。
+	bootstrap.Init()
+
 	if provider.GetDefaultDB() != nil {
-		provider.InitWebsites()
+		// 闸门要在端口打开**之前**关上：端口就绪到初始化开始之间的几百微秒里，
+		// 注册表还是空的，请求会拿到"全新安装"语义的一堆 404。
+		provider.PrepareStartupGate()
 	}
+	go bootstrap.Listen()
+	provider.InitWebsitesAsync()
 
 	//开始计划任务
 	crond.Crond()
 
-	go bootstrap.Start()
 	go func() {
 		time.Sleep(1 * time.Second)
 		currentSite := provider.CurrentSite(nil)
@@ -115,7 +134,9 @@ func (bootstrap *Bootstrap) Serve() {
 	}
 }
 
-func (bootstrap *Bootstrap) Start() {
+// Init 装配 iris 应用：路由、i18n、模板引擎。不监听端口、不碰站点数据。
+// 必须与 Listen 分开：它很快（毫秒级），而站点初始化可能要跑几小时。
+func (bootstrap *Bootstrap) Init() {
 	bootstrap.Application = iris.New()
 	bootstrap.Application.Logger().SetLevel(bootstrap.LoggerLevel)
 	bootstrap.loadGlobalMiddleware()
@@ -182,10 +203,30 @@ func (bootstrap *Bootstrap) Start() {
 	_ = pugEngine.RegisterTag("jump", tags.TagJumpParser)
 
 	bootstrap.viewEngine = pugEngine
+	// 站点注册完成后重建模板索引。
+	// RegisterView 触发的 Load() 发生在站点注册之前（Init 早于 InitWebsitesAsync），
+	// 那时注册表为空，模板索引会是空的 → 所有动态页 404。这里提供重载入口，
+	// 由 provider.InitWebsites 在“站点已注册、启动闸门未放行”的窗口内调用。
+	provider.SetTemplateReloader(func() {
+		for _, site := range provider.GetWebsites() {
+			if !site.Initialed {
+				continue
+			}
+			if err := pugEngine.LoadTemplates(site.Id, site); err != nil {
+				log.Println("加载模板失败：", site.Id, err)
+			}
+		}
+	})
 	// 模板在最后加载，避免因为模板而导致程序无法运行
 	bootstrap.Application.RegisterView(pugEngine)
+}
 
-	err = bootstrap.Application.Run(
+// Listen 开始监听端口，阻塞到服务退出。
+//
+// 从 Start() 里拆出来是本次修复的关键：监听必须在站点初始化之前开始，
+// 否则 106 个站点做库表迁移时端口几十上百年不开（见 Serve 里的注释）。
+func (bootstrap *Bootstrap) Listen() {
+	err := bootstrap.Application.Run(
 		iris.Addr(":"+strconv.Itoa(bootstrap.Port)),
 		iris.WithRemoteAddrHeader("X-Real-IP", "X-Forwarded-For", "CF-Connecting-IP"),
 		iris.WithHostProxyHeader("X-Host"),
@@ -202,7 +243,11 @@ func (bootstrap *Bootstrap) Start() {
 }
 
 func (bootstrap *Bootstrap) Shutdown() error {
-	bootstrap.Application.Shutdown(stdContext.Background())
+	// 监听没起来就收到重启信号时（例如启动期就被 kill/覆盖安装），
+	// Application 还是 nil；这里不判空就是 nil 解引用。
+	if bootstrap.Application != nil {
+		bootstrap.Application.Shutdown(stdContext.Background())
+	}
 	provider.Shutdown()
 	// 关闭一些应用
 	crond.Stop()

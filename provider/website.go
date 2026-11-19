@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,6 +31,7 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider/fulltext"
+	"kandaoni.com/anqicms/provider/segmenter"
 	"kandaoni.com/anqicms/response"
 )
 
@@ -324,14 +327,32 @@ func (ow *OrderedWebsites) Values() []*Website {
 	ow.mu.RLock()
 	defer ow.mu.RUnlock()
 
-	values := make([]*Website, len(ow.keys))
-	for i, id := range ow.keys {
-		values[i] = ow.data[id]
+	values := make([]*Website, 0, len(ow.keys))
+	for _, id := range ow.keys {
+		if w, ok := ow.data[id]; ok {
+			values = append(values, w)
+		}
 	}
+	// 按 id 排序，不要改成"注册顺序"。
+	//
+	// 启动期现在是 2 个站点并行初始化（siteInitRunner.go），先迁完的先注册 ——
+	// 注册顺序不再等于 id 顺序。而域名匹配（matchByURIAndHost / matchRootAndFallback）
+	// 是"第一个命中就返回"：同一域名下有主站 + 二级目录站点时，先注册的那个会赢。
+	// 排回 id 升序 = 恢复串行时代的确定性，否则主站首页可能被某个二级目录站点接管。
+	sort.Slice(values, func(i, j int) bool { return values[i].Id < values[j].Id })
 	return values
 }
 
 var websites = NewWebsites()
+
+// templateReloadFn 由进程入口注入（provider 不能 import view，否则循环依赖）。
+// 用于在站点注册完成后重建模板索引，见 InitWebsites 末尾的调用。
+var templateReloadFn func()
+
+// SetTemplateReloader 注入模板重载实现。必须在 InitWebsitesAsync 之前调用。
+func SetTemplateReloader(fn func()) {
+	templateReloadFn = fn
+}
 
 func InitWebsites() {
 	// 先需要获得 default db
@@ -339,6 +360,12 @@ func InitWebsites() {
 	if db == nil {
 		return
 	}
+	// 分词词典在进程内只加载一次（实测：5.3MB / 35 万词条 → 0.84s、堆常驻 +124MB）。
+	// 放在遍历站点之前：
+	//  1. 106 个站点的 InitFulltext goroutine 都会用到它，先加载完就没有并发首载；
+	//  2. 加载耗时归属启动期，而不是"第一个请求莫名很慢"。
+	// 词典缺失时这里只记错误、返回 nil，站点照常初始化（分词降级）。
+	segmenter.Shared()
 	// 如果是从旧版升级上来的，需要先创建website表，并注入相关信息
 	if !db.Migrator().HasTable("websites") {
 		db.AutoMigrate(&model.Website{})
@@ -352,8 +379,16 @@ func InitWebsites() {
 	db.Where("`id` = 1").FirstOrCreate(&defaultSite)
 	var sites []*model.Website
 	db.Order("`id` asc").Find(&sites)
-	for _, v := range sites {
-		InitWebsite(v)
+	// 迁移进度的分母：本轮一共要看多少个站点。
+	BeginSiteMigrationRound(len(sites))
+	// 并发度复用迁移闸门（默认 2，`ANQI_MIGRATE_CONCURRENCY` 可调）：每个 worker
+	// 内部仍要抢 MigrateSiteSchema 的令牌，所以 DDL 的实际并发不会超过闸门容量。
+	// 站点 1 会先单独跑完，父子站点按父先子后派发（见 siteInitRunner.go）。
+	initSitesConcurrently(sites, resolveMigrateConcurrency(), InitWebsite)
+	if total := len(sites); total > 0 {
+		// 没有这行日志，客户只能看到"站点一个个变正常"；迁移要几十分钟时，
+		// 「还在跑」和「卡死了」在面板上完全无法区分。
+		log.Printf("站点初始化完成：%s", MigrateRoundSummary())
 	}
 	// 检查多语言站点
 	values := websites.Values()
@@ -395,6 +430,15 @@ func InitWebsites() {
 			}
 		}
 
+	}
+
+	// 模板索引必须在这里补一次：bootstrap.Init()（含 viewEngine.Load()）跑在
+	// InitWebsitesAsync() 之前，那一刻注册表是空的，LoadStart 什么也没加载。
+	// 结果就是站点都"就绪"了，但模板索引为空 —— TemplateExist 恒 false，
+	// 所有动态页 404，只有 FileServe 命中的静态文件还能访问。
+	// 放在这里而不是 FinishStartup 之后：此时闸门还没放行，没有并发请求。
+	if templateReloadFn != nil {
+		templateReloadFn()
 	}
 }
 
@@ -448,11 +492,11 @@ func InitWebsite(mw *model.Website) {
 			mu:        sync.Mutex{},
 		},
 		cachedTodayArticleCount: &response.CacheArticleCount{},
-	}
-	if db != nil && mw.Status == 1 {
-		// 读取真正的 TokenSecret
-
-		w.Initialed = true
+		// 零值占位：本函数是「先 websites.Set(&w)、再 w.InitSetting()」，
+		// 中间那段窗口里别的 goroutine（crond / 请求）能拿到这个站点。
+		// AiGenerateConfig 原本要等 InitSetting → LoadAiGenerateSetting 才有值，
+		// 提前读就是 nil 解引用。给个零值（Open=false）让半初始化站点安全地什么都不做。
+		AiGenerateConfig: &config.AiGenerateConfig{},
 	}
 	if db == nil {
 		w.ErrorMsg = w.Tr("DatabaseConnectionFailed")
@@ -467,35 +511,56 @@ func InitWebsite(mw *model.Website) {
 			"siteId", mw.Id, "name", mw.Name, "reason", w.ErrorMsg)
 	}
 	// 先判断目录是否存在。对于迁移的站点，这个地方可能是会出错的
+	pathOK := true
 	_, err = os.Stat(mw.RootPath)
 	if err != nil {
-		w.Initialed = false
+		pathOK = false
 		w.ErrorMsg = w.Tr("SitePathError:") + err.Error()
 	}
 	if mw.Id == 1 {
 		w.Mysql = &config.Server.Mysql
 	}
-	websites.Set(&w)
+	// 顺序不能动：迁移 → InitSetting → InitModelData → 注册。
+	//
+	// 迁移必须**同步**跑完再往下走，理由有三条（2026-11-16 客户 106 站点事故）：
+	//   1. 过去这里是 `go AutoMigrateDB(db, false)`，106 个站点就有 106 份迁移并发，
+	//      把 MySQL 的 DDL 打满，启动永远跑不完（日志见 provider/siteMigration.go 头注释）；
+	//   2. 迁移与 InitModelData 里的 initArchiveSchema 改的是同一张 archives 表，
+	//      并发跑就是在抢元数据锁；
+	//   3. 站点一旦先注册，请求就能读到半迁移的表结构 —— 那比站点暂时不可用更难查。
+	ready := db != nil && mw.Status == 1 && pathOK
 	if db != nil {
-		var lastVersion string
-		db.Model(&model.Setting{}).Where("`key` = ?", LastRunVersionKey).Pluck("value", &lastVersion)
-		if lastVersion != "" {
-			go AutoMigrateDB(db, false)
+		// 记录"当前正在处理哪个站点"：迁移一个站点可能要几分钟，
+		// 期间除了心跳日志没有任何输出，这条信息让 tail -f 的人和
+		// GET /__startup 都能看到具体卡在哪个站点上。
+		// 启动期是并发的（默认 2 个），所以登记的是一个集合，退出时必须摘掉。
+		SetStartupCurrent(w.Id, w.Name)
+		defer ClearStartupCurrent(w.Id)
+		if migrateErr := MigrateSiteSchema(w.Id, w.Name, db); migrateErr != nil {
+			// 半迁移的站点不能当可用站点：库表可能只改了一半。
+			ready = false
+			w.ErrorMsg = "数据库升级失败：" + migrateErr.Error()
 		} else {
-			_ = AutoMigrateDB(db, false)
-		}
-		w.InitSetting()
-		w.InitModelData()
-		// fix BaseUri
-		parsed, err := url.Parse(w.System.BaseUrl)
-		if err == nil {
-			if parsed.RequestURI() != "/" {
-				w.BaseURI = parsed.RequestURI()
+			w.InitSetting()
+			w.InitModelData()
+			// fix BaseUri
+			parsed, err := url.Parse(w.System.BaseUrl)
+			if err == nil {
+				if parsed.RequestURI() != "/" {
+					w.BaseURI = parsed.RequestURI()
+				}
+				w.Scheme = parsed.Scheme
+				w.Host = parsed.Host
 			}
-			w.Scheme = parsed.Scheme
-			w.Host = parsed.Host
 		}
 	}
+	// 注册要早于 GetRewritePattern：后者把解析结果回写到注册表里的同一个对象
+	// （rewrite.go 的 `w2 := GetWebsite(w.Id)`），没注册就是 nil 解引用。
+	// 但"注册"不等于"能对外服务"，两者分开记：可服务标记在函数末尾才打
+	// （markSiteServable），闸门只认那个（见 provider/siteAccess.go）。
+	unmarkSiteServable(w.Id)
+	w.Initialed = ready
+	websites.Set(&w)
 	if w.Initialed {
 		w.GetRewritePattern(true)
 		// 启动限流器
@@ -534,6 +599,12 @@ func InitWebsite(mw *model.Website) {
 		w.StopChannelManager()
 		w.StopNotifyWorker()
 	}
+	// 到这里 limiter/cache/rewrite 都建好了，才允许对外服务。
+	// 在"逐站点放行"之前，这段窗口被全局闸门挡着看不出来；现在挡不住了，
+	// 提前放行就是把 Cache/Storage 还是 nil 的站点交给线上流量。
+	if w.Initialed {
+		markSiteServable(w.Id)
+	}
 }
 
 func GetWebsites() []*Website {
@@ -561,7 +632,13 @@ func CurrentSite(ctx iris.Context) *Website {
 	}
 
 	// Fallback to default website
-	return cloneWithContext(websites.MustGet(1), ctx)
+	if fallback := websites.MustGet(1); fallback != nil {
+		return cloneWithContext(fallback, ctx)
+	}
+	// 注册表非空但没有站点 1：给一个空站点，不要 cloneWithContext(nil, ctx)。
+	// 后者是 nil 解引用 —— recover 之后只剩一条栈，看不出是"站点 1 不在表里"。
+	// 启动期（站点 1 还在迁移）与站点 1 被停用都会走到这里。
+	return createDefaultWebsite(ctx)
 }
 
 // 创建默认网站配置
@@ -585,9 +662,15 @@ func createDefaultWebsite(ctx iris.Context) *Website {
 			Templates: make(map[string]int64),
 			mu:        sync.Mutex{},
 		},
+		// 同上：尚未初始化的站点也要有非 nil 的 AI 写作配置。
+		AiGenerateConfig: &config.AiGenerateConfig{},
 	}
 	if ctx != nil {
-		site.backLanguage = ctx.GetLocale().Language()
+		// GetLocale 可能返回 nil（i18n 还没加载、或该请求没有匹配的语言）。
+		// 直接 .Language() 是 nil 接口调用 → panic，recover 之后只剩栈。
+		if locale := ctx.GetLocale(); locale != nil {
+			site.backLanguage = locale.Language()
+		}
 	}
 	return site
 }
@@ -630,7 +713,10 @@ func cloneWithContext(w *Website, ctx iris.Context) *Website {
 	cloned := *w
 	cloned.ctx = ctx
 	if ctx != nil {
-		cloned.backLanguage = ctx.GetLocale().Language()
+		// 同 createDefaultWebsite：GetLocale() 可能返回 nil，不能直接解引用。
+		if locale := ctx.GetLocale(); locale != nil {
+			cloned.backLanguage = locale.Language()
+		}
 	}
 	return &cloned
 }
@@ -878,6 +964,7 @@ func RemoveWebsite(siteId uint, removeFile bool) {
 		stopped.StopNotifyWorker()
 	}
 	websites.Delete(siteId)
+	unmarkSiteServable(siteId)
 	site := GetWebsite(siteId)
 	if site != nil {
 		if removeFile {

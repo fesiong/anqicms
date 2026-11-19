@@ -173,7 +173,7 @@ const PluginLLMs: React.FC<any> = () => {
                     >
                       <>
                         <ProFormRadio.Group
-                          name="auto_build"
+                          name="update_frequency"
                           label={intl.formatMessage({
                             id: 'plugin.llms.update-frequency',
                           })}

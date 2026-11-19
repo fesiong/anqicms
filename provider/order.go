@@ -218,6 +218,13 @@ func (w *Website) GetPaymentInfoByOrderId(orderId string) (*model.Payment, error
 }
 
 func (w *Website) GeneratePayment(order *model.Order, req *request.PaymentRequest) (*model.Payment, error) {
+	// ⚠️ 金额闸门：付款单的金额必须为正。数量侧已在 CreateOrder 堵死负数量，
+	// 这里是第二道防线——若订单金额从别的路径变负（历史脏数据、后台改单等），
+	// 余额支付 `user.Balance < payment.Amount` 对负数恒 false，`balance - (-N)` 会给攻击者加钱。
+	// 必须排在「复用已有 payment」之前：负金额订单连旧付款单都不能复用。
+	if order.Amount <= 0 {
+		return nil, fmt.Errorf("%s (amount=%d)", w.Tr("UnableToCreatePaymentOrder"), order.Amount)
+	}
 	payment, err := w.GetPaymentInfoByOrderId(order.OrderId)
 	if err == nil {
 		return payment, nil

@@ -230,10 +230,13 @@ func newSlimSchemaTestSite(t *testing.T) (*Website, string) {
 		t.Fatalf("连接临时库失败：%v", err)
 	}
 
+	// 缓存必须跟库一起换新：侧表读取要按 modules.kind 判断，共用基础站点的
+	// cache 会读到那个库的 module_kinds（临时库里的 2 号模型是 product，基础
+	// 站点里可能不是），商品属性会因此静默不加载。
 	w := &Website{
 		DB:       db,
 		Mysql:    &config.MysqlConfig{Database: tmpDB},
-		Cache:    base.Cache,
+		Cache:    library.InitMemoryCache(),
 		Id:       base.Id,
 		RootPath: base.RootPath,
 	}

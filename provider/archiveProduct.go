@@ -180,16 +180,65 @@ func (w *Website) registerArchiveProductLoader() {
 	if w.DB.Callback().Query().Get(archiveProductLoaderCallback) != nil {
 		return
 	}
-	_ = w.DB.Callback().Query().After("gorm:query").Before("gorm:after_query").Register(archiveProductLoaderCallback, fillArchiveProducts)
+	siteId := w.Id
+	fallback := w
+	_ = w.DB.Callback().Query().After("gorm:query").Before("gorm:after_query").
+		Register(archiveProductLoaderCallback, func(tx *gorm.DB) {
+			// 回调挂在 DB 上，而 DB 可能比 Website 活得久：站点 1 复用 defaultDB，
+			// 重新初始化（改配置 / 修复数据库 / 切换商城模式）换的是新的 Website
+			// 实例，回调不会重注册。这里每次按键取当前实例，别用注册时捕获的那份
+			// ——它手里的 System.ShopMode 是旧值。
+			//
+			// 只在「注册表里的站点用着同一个库」时才切换：临时库/多库场景里
+			// 存在同 id 但不同 DB 的站点对象，认错了会按别的库的模型类型去判断。
+			site := fallback
+			if siteId > 0 {
+				if current := GetWebsite(siteId); current != nil && current.DB == fallback.DB {
+					site = current
+				}
+			}
+			fillArchiveProducts(tx, site)
+		})
+}
+
+// archiveProductScope 返回「这条 archive 要不要读侧表」的判定。
+//
+// 两道闸门：
+//  1. 站点必须处于商城模式。内容站（ShopMode=0）里商品属性永远是默认值，
+//     每个页面白读一条 SQL 换不到任何信息——这条是详情页最常走的那条路径。
+//  2. 行必须挂在产品模型下（modules.kind='product'）。文章行就算 ID 恰好
+//     撞上侧表记录也不该被读出来，否则改过类型的模型会带着旧商品属性渲染。
+//
+// w.System 为空（站点还在初始化）时按「开」处理：那时候读档案的可能是升级/
+// 回填流程，不能因为拿不到配置就静默给零值。
+//
+// 返回 nil 只可能出现在 w 为空时（调用方已经提前返回）；「一条都不读」用
+// 恒假的判定表示，不要用 nil —— nil 在 appendProductTarget 里的语义是
+// 「不做模型过滤」，两者混用会把闸门关成空的。
+func (w *Website) archiveProductScope() func(uint) bool {
+	if w == nil {
+		return nil
+	}
+	if w.System != nil && w.System.ShopMode == 0 {
+		return func(uint) bool { return false }
+	}
+	return w.IsProductModule
 }
 
 // fillArchiveProducts 是 registerArchiveProductLoader 注册的回调本体。
-func fillArchiveProducts(tx *gorm.DB) {
-	if tx.Error != nil || tx.Statement == nil {
+func fillArchiveProducts(tx *gorm.DB, w *Website) {
+	if tx.Error != nil || tx.Statement == nil || w == nil {
 		return
 	}
-	ids, apply := archiveProductTargets(tx.Statement.Dest)
+	ids, apply := archiveProductTargets(tx.Statement.Dest, w.archiveProductScope())
+	if apply == nil {
+		return
+	}
 	if len(ids) == 0 {
+		// 没有一条需要读：非商城模式、全是文章行、或空列表。仍然要走一遍 apply
+		// ——它会打上 productLoaded 标记并补 product_type 默认值，等价于「侧表
+		// 没有行」；不打标记的话 AfterFind 兜底会按行各查一次。
+		apply(nil)
 		return
 	}
 	// NewDB 另起 statement：直接复用 tx 会把正在执行的这条查询的 Dest/Table
@@ -212,16 +261,59 @@ func fillArchiveProducts(tx *gorm.DB) {
 	apply(byID)
 }
 
+// loadArchiveProducts 显式把侧表属性补进一条已经取出来的 Archive。
+//
+// 读闸门（archiveProductScope）关掉时，批量回调不会去读侧表，档案上的商品
+// 字段就是零值。这对纯展示无害，对「读现值 → 合并 → 整体写回」的流程却是
+// 数据丢失：PATCH 只传标题时，未传的商品字段会拿零值当基线写回去，附带的
+// AfterSave 还会因为「属性全默认」把侧表行删掉（实测 TestSaveArchiveProduct-
+// AttributesSurvive 就是这么红的）。
+//
+// 所以写路径必须自己保证读到；闸门开着时回调已经读过，这里直接返回，不重复查。
+func (w *Website) loadArchiveProducts(a *model.Archive) {
+	if a == nil || a.Id == 0 || w.DB == nil {
+		return
+	}
+	if scope := w.archiveProductScope(); scope != nil && scope(a.ModuleId) {
+		return
+	}
+	var p model.ArchiveProduct
+	if err := w.DB.Where("`archive_id` = ?", a.Id).Take(&p).Error; err != nil {
+		// 侧表没有行（或读失败）= 属性全默认，与回调里的处理保持一致。
+		a.ApplyProduct(nil)
+		return
+	}
+	a.ApplyProduct(&p)
+}
+
+// appendProductTarget 只把「属于产品模型」的 id 收进侧表查询。
+//
+// 被过滤掉的行照样会经过 apply（map 里查不到 → ApplyProduct(nil) → 默认值 +
+// 已加载标记），所以「没读」和「侧表没有行」对调用方完全等价。
+func appendProductTarget(ids []int64, id int64, moduleId uint, isProduct func(uint) bool) []int64 {
+	if id <= 0 {
+		return ids
+	}
+	if isProduct != nil && !isProduct(moduleId) {
+		return ids
+	}
+	return append(ids, id)
+}
+
 // archiveProductTargets 从查询目标里取出 archive id，并返回「怎么把查到的
-// 侧表记录填回去」的闭包。目标不是 Archive/ArchiveDraft 时返回 nil。
-func archiveProductTargets(dest interface{}) ([]int64, func(map[int64]*model.ArchiveProduct)) {
+// 侧表记录填回去」的闭包。目标不是 Archive/ArchiveDraft 时返回 nil, nil。
+//
+// isProduct 决定某个模型下的行要不要进 IN 查询；恒假的判定表示「一条都不读」，
+// 此时返回空 ids + apply，由调用方 apply(nil) 收尾。
+func archiveProductTargets(dest interface{}, isProduct func(uint) bool) ([]int64, func(map[int64]*model.ArchiveProduct)) {
 	switch v := dest.(type) {
 	case *model.Archive:
 		if v == nil || v.Id == 0 {
 			return nil, nil
 		}
 		id := v.Id
-		return []int64{id}, func(m map[int64]*model.ArchiveProduct) { v.ApplyProduct(m[id]) }
+		return appendProductTarget(nil, id, v.ModuleId, isProduct),
+			func(m map[int64]*model.ArchiveProduct) { v.ApplyProduct(m[id]) }
 
 	case *[]model.Archive:
 		if v == nil || len(*v) == 0 {
@@ -230,9 +322,7 @@ func archiveProductTargets(dest interface{}) ([]int64, func(map[int64]*model.Arc
 		list := *v
 		ids := make([]int64, 0, len(list))
 		for i := range list {
-			if list[i].Id > 0 {
-				ids = append(ids, list[i].Id)
-			}
+			ids = appendProductTarget(ids, list[i].Id, list[i].ModuleId, isProduct)
 		}
 		return ids, func(m map[int64]*model.ArchiveProduct) {
 			for i := range list {
@@ -247,8 +337,8 @@ func archiveProductTargets(dest interface{}) ([]int64, func(map[int64]*model.Arc
 		list := *v
 		ids := make([]int64, 0, len(list))
 		for _, a := range list {
-			if a != nil && a.Id > 0 {
-				ids = append(ids, a.Id)
+			if a != nil {
+				ids = appendProductTarget(ids, a.Id, a.ModuleId, isProduct)
 			}
 		}
 		return ids, func(m map[int64]*model.ArchiveProduct) {
@@ -264,7 +354,8 @@ func archiveProductTargets(dest interface{}) ([]int64, func(map[int64]*model.Arc
 			return nil, nil
 		}
 		id := v.Id
-		return []int64{id}, func(m map[int64]*model.ArchiveProduct) { v.ApplyProduct(m[id]) }
+		return appendProductTarget(nil, id, v.ModuleId, isProduct),
+			func(m map[int64]*model.ArchiveProduct) { v.ApplyProduct(m[id]) }
 
 	case *[]model.ArchiveDraft:
 		if v == nil || len(*v) == 0 {
@@ -273,9 +364,7 @@ func archiveProductTargets(dest interface{}) ([]int64, func(map[int64]*model.Arc
 		list := *v
 		ids := make([]int64, 0, len(list))
 		for i := range list {
-			if list[i].Id > 0 {
-				ids = append(ids, list[i].Id)
-			}
+			ids = appendProductTarget(ids, list[i].Id, list[i].ModuleId, isProduct)
 		}
 		return ids, func(m map[int64]*model.ArchiveProduct) {
 			for i := range list {
@@ -290,8 +379,8 @@ func archiveProductTargets(dest interface{}) ([]int64, func(map[int64]*model.Arc
 		list := *v
 		ids := make([]int64, 0, len(list))
 		for _, d := range list {
-			if d != nil && d.Id > 0 {
-				ids = append(ids, d.Id)
+			if d != nil {
+				ids = appendProductTarget(ids, d.Id, d.ModuleId, isProduct)
 			}
 		}
 		return ids, func(m map[int64]*model.ArchiveProduct) {

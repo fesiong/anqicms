@@ -15,26 +15,40 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 )
 
 type archiveQuerySQL struct {
 	aiSettingSQL
-	queries []string
-	empty   bool
+	queries  []string
+	empty    bool
+	moduleId int64 // 伪造成 archives.module_id；0 表示默认 2（产品模型）
+}
+
+// moduleColumn 返回伪行里的 module_id。默认产品模型，让侧表读取逻辑生效。
+func (d *archiveQuerySQL) moduleColumn() int64 {
+	if d.moduleId == 0 {
+		return 2
+	}
+	return d.moduleId
 }
 
 func (d *archiveQuerySQL) Connect(context.Context) (driver.Conn, error) { return d, nil }
 func (d *archiveQuerySQL) QueryContext(_ context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
 	d.queries = append(d.queries, query)
 	if strings.Contains(query, "FROM `archive_products`") {
-		return &archiveQueryRows{columns: []string{"archive_id", "brand"}, data: [][]driver.Value{{int64(1), "brand"}}}, nil
+		return &archiveQueryRows{
+			columns: []string{"archive_id", "brand", "product_type"},
+			data:    [][]driver.Value{{int64(1), "brand", int64(config.ProductTypeNormal)}},
+		}, nil
 	}
 	if strings.Contains(query, "FROM `archives`") {
-		rows := &archiveQueryRows{columns: []string{"id"}}
+		// module_id 决定要不要读侧表（见 archiveProductScope）。
+		rows := &archiveQueryRows{columns: []string{"id", "module_id"}}
 		if !d.empty {
-			rows.data = [][]driver.Value{{int64(1)}, {int64(2)}}
+			rows.data = [][]driver.Value{{int64(1), d.moduleColumn()}, {int64(2), d.moduleColumn()}}
 		}
 		return rows, nil
 	}
@@ -65,7 +79,10 @@ func newArchiveQuerySite(t *testing.T, d *archiveQuerySQL, l logger.Interface) *
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := &Website{DB: db, Cache: library.InitMemoryCache()}
+	w := &Website{DB: db, Cache: library.InitMemoryCache(), System: &config.SystemConfig{ShopMode: 1}}
+	// 侧表只对产品模型的行走 SQL（见 archiveProductScope），这里把 2 号模型
+	// 预置成产品，省掉一次 modules 查询干扰计数。
+	_ = w.Cache.Set("module_kinds", map[uint]string{2: model.ModuleKindProduct}, 0)
 	w.registerArchiveProductLoader()
 	return w
 }

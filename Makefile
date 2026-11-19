@@ -132,7 +132,9 @@ build: $(BUILD_DEPS)
 	mkdir -p -v ./release/$(GOOS)/template
 	mkdir -p -v ./release/$(GOOS)/source
 	cp -r ./public/static/default ./release/$(GOOS)/public/static/
+	cp -r ./public/static/shop ./release/$(GOOS)/public/static/
 	cp -r ./template/default ./release/$(GOOS)/template/
+	cp -r ./template/shop ./release/$(GOOS)/template/
 	@$(HOST_ENV) $(GO) run ./cmd/oemgen -oem $(OEM) -brand-dir ./release/$(GOOS)/template
 	cp -r ./locales ./release/$(GOOS)/
 	cp -r ./CHANGELOG.md ./release/$(GOOS)/
