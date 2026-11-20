@@ -29,7 +29,6 @@ import (
 	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
-	"gorm.io/gorm/logger"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
@@ -164,6 +163,7 @@ func (w *Website) GetNextArchive(categoryId, id int64) (*model.Archive, error) {
 // 历史坑：这里曾经用 ToSQL 先拼一条 `SELECT id ... LIMIT 1`、Raw 取回 id、再
 // `WHERE id = ?` 取整行——两次往返换来的「只读 id」毫无收益（紧接着就要读整行），
 // 而详情页要取 正文 + 上一篇 + 下一篇，一次请求白烧三次往返。
+// 现在走参数化链式 Take，天然免疫 issue #93 的反斜杠+引号注入。
 //
 // ⚠️ ops 只能加 Where/Order/Join 这类过滤，不能加 Select：整行是一次性取出来的，
 // 加了列裁剪拿到的就是半条记录（商品属性走 archive_products 的回调补全，别在这里裁）。
@@ -240,6 +240,15 @@ func (w *Website) GetArchiveDataById(id int64) (*model.ArchiveData, error) {
 	return &data, nil
 }
 
+// dryRunSQL 用 DryRun 求出「参数化 SQL + Vars」：stmt.SQL.String() 保留 ?
+// 占位符，stmt.Vars 保留绑定值。绝不使用 ToSQL——它内部调用 Dialector.Explain
+// 把 Vars 内联成字面量，反斜杠 + 引号可击穿字符串字面量造成 SQL 注入（issue #93）。
+// 任何后续要交给 Raw/EXPLAIN 执行的查询，都必须经由这里而不是 ToSQL。
+func (w *Website) dryRunSQL(build func(tx *gorm.DB) *gorm.DB) (string, []interface{}) {
+	tx := build(w.DB.Session(&gorm.Session{DryRun: true, SkipDefaultTransaction: true}))
+	return tx.Statement.SQL.String(), tx.Statement.Vars
+}
+
 func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, currentPage, pageSize int, offsets ...int) ([]*model.Archive, int64, error) {
 	var archives []*model.Archive
 
@@ -260,13 +269,14 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 	// 对于没有分页的list，则缓存
 	var cacheKey = ""
 	if currentPage == 0 && !draft {
-		sql := w.DB.Session(&gorm.Session{Logger: w.DB.Logger.LogMode(logger.Silent)}).WithContext(w.Ctx()).ToSQL(func(tx *gorm.DB) *gorm.DB {
+		sql, vars := w.dryRunSQL(func(tx *gorm.DB) *gorm.DB {
+			tx = tx.WithContext(w.Ctx()).Model(&model.Archive{})
 			if ops != nil {
 				tx = ops(tx)
 			}
 			return tx.Order(order).Limit(pageSize).Offset(offset).Find(&[]*model.Archive{})
 		})
-		cacheKey = "archive-list-" + library.Md5(sql)[8:24]
+		cacheKey = "archive-list-" + library.Md5(fmt.Sprintf("%s|%#v", sql, vars))[8:24]
 		err := w.Cache.Get(cacheKey, &archives)
 		if err == nil {
 			return archives, int64(len(archives)), nil
@@ -291,18 +301,20 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 	}
 
 	if currentPage > 0 {
-		// 缓存count
-		sqlCount := w.DB.Session(&gorm.Session{Logger: w.DB.Logger.LogMode(logger.Silent)}).ToSQL(func(tx *gorm.DB) *gorm.DB {
+		// 缓存 count。缓存 key 参与 Md5、从不执行；真正拿去执行的 EXPLAIN
+		// 用参数化 SQL + Vars，杜绝 ToSQL 内联导致的反斜杠+引号注入（issue #93）。
+		sqlCount, countVars := w.dryRunSQL(func(tx *gorm.DB) *gorm.DB {
+			tx = tx.Model(&model.Archive{})
 			if ops != nil {
 				tx = ops(tx)
 			}
 			return tx.Order(order).Find(&[]*model.Archive{})
 		})
-		cacheKeyCount := "archive-list-count" + library.Md5(sqlCount)[8:24]
+		cacheKeyCount := "archive-list-count" + library.Md5(fmt.Sprintf("%s|%#v", sqlCount, countVars))[8:24]
 		err := w.Cache.Get(cacheKeyCount, &total)
 		if err != nil {
 			// 如果使用explain分析行数大于10万，则不再使用count统计行数
-			total, err = w.getExplainCount(sqlCount)
+			total, err = w.getExplainCountParams(sqlCount, countVars...)
 			if err != nil {
 				return nil, 0, err
 			}
@@ -314,13 +326,9 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 			_ = w.Cache.Set(cacheKeyCount, total, 300)
 		}
 		// 分页提速，先查出ID，再查询结果
-		// 先查询ID
+		// 先查询ID：直接走参数化链式查询，不再 ToSQL 内联后 Raw 执行
 		var archiveIds []int64
-		builder = builder.Limit(pageSize).Offset(offset).Select("archives.id").Order(order)
-		sql := builder.Session(&gorm.Session{Logger: builder.Logger.LogMode(logger.Silent)}).ToSQL(func(tx *gorm.DB) *gorm.DB {
-			return tx.Find(&[]model.Archive{})
-		})
-		if err := w.DB.Raw(sql).Pluck("id", &archiveIds).Error; err != nil {
+		if err := builder.Limit(pageSize).Offset(offset).Select("archives.id").Order(order).Pluck("archives.id", &archiveIds).Error; err != nil {
 			return nil, 0, err
 		}
 		if len(archiveIds) > 0 {
@@ -385,15 +393,11 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 				}
 			}
 		}
-		builder = builder.Limit(pageSize).Offset(offset).Order(order).Select("archives.id")
+		// 直接走参数化 Pluck，不再 ToSQL 内联后 Raw 执行
 		var archiveIds []int64
-		sql := builder.Session(&gorm.Session{Logger: builder.Logger.LogMode(logger.Silent)}).ToSQL(func(tx *gorm.DB) *gorm.DB {
-			return tx.Find(&[]model.Archive{})
-		})
-		if err := w.DB.Raw(sql).Pluck("id", &archiveIds).Error; err != nil {
+		if err := builder.Limit(pageSize).Offset(offset).Order(order).Select("archives.id").Pluck("archives.id", &archiveIds).Error; err != nil {
 			return nil, 0, err
 		}
-		//	builder.Pluck("id", &archiveIds)
 		if len(archiveIds) > 0 {
 			if draft {
 				if err := w.DB.Table("`archive_drafts` as archives").Where("id IN (?)", archiveIds).Order(order).Find(&archives).Error; err != nil {
@@ -427,14 +431,20 @@ func (w *Website) GetExplainCount(sql string) int64 {
 	return count
 }
 
+// getExplainCount 估算固定 SQL（无外部参数）的行数，保留 (值, 错误) 语义供
+// prev/next 等调用点判断 EXPLAIN 是否真的返回了行。SQL 里若含外部输入，
+// 必须改用 getExplainCountParams，绝不拼接字符串（issue #93）。
 func (w *Website) getExplainCount(sql string) (int64, error) {
-	var result ExplainCount
-	// 安全防护：只允许 SELECT 查询
+	return w.getExplainCountParams(sql)
+}
+
+// explainCountSafe 对 EXPLAIN 用的 SQL 做结构校验，挡住明显的多语句/危险操作。
+// 这只是纵深防御，真正的注入防护靠 vars 参数化，绝不把用户输入内联进 sql。
+func explainCountSafe(sql string) bool {
 	trimmed := strings.TrimSpace(sql)
 	if !strings.HasPrefix(strings.ToUpper(trimmed), "SELECT") {
-		return 0, errors.New("estimate requires a SELECT query")
+		return false
 	}
-	// 禁止多语句和危险操作
 	upperSql := strings.ToUpper(trimmed)
 	if strings.Contains(upperSql, "INTO OUTFILE") ||
 		strings.Contains(upperSql, "INTO DUMPFILE") ||
@@ -443,9 +453,29 @@ func (w *Website) getExplainCount(sql string) (int64, error) {
 		strings.Contains(upperSql, "SLEEP") ||
 		strings.Contains(upperSql, "BENCHMARK") ||
 		strings.Contains(upperSql, "LOAD_FILE") {
+		return false
+	}
+	return true
+}
+
+// GetExplainCountParams 与 getExplainCountParams 的参数化便捷版（吞掉错误）。
+func (w *Website) GetExplainCountParams(sql string, vars ...interface{}) int64 {
+	count, _ := w.getExplainCountParams(sql, vars...)
+	return count
+}
+
+// getExplainCountParams 用参数化方式执行 EXPLAIN：sql 须带 ? 占位符，
+// 外部输入一律走 vars 绑定，杜绝「反斜杠 + 引号」击穿字符串字面量（issue #93）。
+// 完整保留 oem 原有的错误检查语义（空结果 / EXPLAIN 失败 / 负数估算）。
+func (w *Website) getExplainCountParams(sql string, vars ...interface{}) (int64, error) {
+	var result ExplainCount
+	if !strings.HasPrefix(strings.ToUpper(strings.TrimSpace(sql)), "SELECT") {
+		return 0, errors.New("estimate requires a SELECT query")
+	}
+	if !explainCountSafe(sql) {
 		return 0, nil
 	}
-	tx := w.DB.Session(&gorm.Session{PrepareStmt: false}).Raw("EXPLAIN " + sql).Scan(&result)
+	tx := w.DB.Session(&gorm.Session{PrepareStmt: false}).Raw("EXPLAIN "+sql, vars...).Scan(&result)
 	if tx.Error != nil {
 		return 0, tx.Error
 	}
