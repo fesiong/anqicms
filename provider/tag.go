@@ -3,6 +3,7 @@ package provider
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -80,10 +81,11 @@ func (w *Website) GetTagList(itemId int64, title string, categoryIds []uint, fir
 	// 分页模式：count 结果缓存 300s；行数超 10 万的表用 EXPLAIN 估算，
 	// 不再真扫全表。与 GetArchiveList 的处理方式保持一致。
 	var total int64
-	sqlCount := w.DB.WithContext(w.Ctx()).ToSQL(func(tx *gorm.DB) *gorm.DB {
-		return apply(tx.Model(&model.Tag{})).Order(order).Find(&[]*model.Tag{})
+	// 用参数化 SQL + Vars 做 EXPLAIN，杜绝 ToSQL 内联带来的反斜杠+引号注入（issue #93）。
+	sqlCount, countVars := w.dryRunSQL(func(tx *gorm.DB) *gorm.DB {
+		return apply(tx.WithContext(w.Ctx()).Model(&model.Tag{})).Order(order).Find(&[]*model.Tag{})
 	})
-	cacheKeyCount := "tag-list-count-" + library.Md5(sqlCount)[8:24]
+	cacheKeyCount := "tag-list-count-" + library.Md5(fmt.Sprintf("%s|%#v", sqlCount, countVars))[8:24]
 	// Cache 可能是 nil（半初始化的站点，见 anchor_test.go 的注释），
 	// 缓存只是优化，缺了不能影响取数。
 	cacheHit := false
@@ -93,7 +95,7 @@ func (w *Website) GetTagList(itemId int64, title string, categoryIds []uint, fir
 		}
 	}
 	if !cacheHit {
-		total = w.GetExplainCount(sqlCount)
+		total = w.GetExplainCountParams(sqlCount, countVars...)
 		if total < 100000 {
 			if countErr := builder.Count(&total).Error; countErr != nil {
 				return nil, 0, countErr
