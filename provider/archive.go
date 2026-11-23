@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -118,15 +119,29 @@ func (w *Website) GetArchiveByOriginUrl(keyword string) (*model.Archive, error) 
 	})
 }
 
+// GetPreviousArchive 取「同一分类里 id 更小的上一篇」。
+//
+// ⚠️ 这里不能写成 `WHERE category_id = ? AND id < ? ORDER BY id DESC LIMIT 1`。
+// MySQL 5.7 没有反向索引扫描，这条 SQL 会退化成「把整个 category 区间扫完再过滤」：
+// 线上 archives 有 21 万行、category 6 占 18.6 万行时，慢日志实测一条要扫 17 万行、
+// 耗时 0.4~25 秒（Rows_sent=1）。详情页每次访问打两次（上一篇 + 下一篇），
+// 几十个并发就能把 2 核 / 1.6G 的机器磁盘打满（100MB/s 读、load 30、
+// systemd-logind 建会话超时），最终实例被硬复位——2026-11-23 线上就是这么反复崩的。
+//
+// 现在改成两步：先用 MAX(id) 触发 MySQL 的 MIN/MAX 优化（EXPLAIN 显示
+// "Select tables optimized away"，只读 1 行、0.1ms），再按主键回表拿整行。
+// 前提是 archives 上有 (category_id, id) 复合索引，见 model.Archive 的 idx_category_id_id。
 func (w *Website) GetPreviousArchive(categoryId, id int64) (*model.Archive, error) {
-	// 一条 SQL 直接取「id 更小的上一篇」：ORDER BY id DESC + LIMIT 1 由 Take 补。
-	// 不要先 SELECT id 再回表——那是同一段索引区间的两次往返，换来的 id 只用来
-	// 立刻回表，详情页每篇要付两次（上一篇 + 下一篇）。
+	prevId, err := w.findNeighborArchiveId(categoryId, id, true)
+	if err != nil {
+		return nil, err
+	}
+	if prevId == 0 {
+		// 没有上一篇：语义与旧的 Take() 一致（取不到行就是 ErrRecordNotFound）。
+		return nil, gorm.ErrRecordNotFound
+	}
 	archive, err := w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
-		if categoryId > 0 {
-			tx = tx.Where("`category_id` = ?", categoryId)
-		}
-		return tx.Where("`id` < ?", id).Order("`id` DESC")
+		return tx.Where("`id` = ?", prevId)
 	})
 	if err != nil {
 		return nil, err
@@ -138,12 +153,17 @@ func (w *Website) GetPreviousArchive(categoryId, id int64) (*model.Archive, erro
 	return archive, nil
 }
 
+// GetNextArchive 取「同一分类里 id 更大的下一篇」。取法见 GetPreviousArchive 的注释。
 func (w *Website) GetNextArchive(categoryId, id int64) (*model.Archive, error) {
+	nextId, err := w.findNeighborArchiveId(categoryId, id, false)
+	if err != nil {
+		return nil, err
+	}
+	if nextId == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
 	archive, err := w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
-		if categoryId > 0 {
-			tx = tx.Where("`category_id` = ?", categoryId)
-		}
-		return tx.Where("`id` > ?", id).Order("`id` ASC")
+		return tx.Where("`id` = ?", nextId)
 	})
 	if err != nil {
 		return nil, err
@@ -153,6 +173,43 @@ func (w *Website) GetNextArchive(categoryId, id int64) (*model.Archive, error) {
 		archive.Password = ""
 	}
 	return archive, nil
+}
+
+// findNeighborArchiveId 用 MAX(id)（上一篇）/ MIN(id)（下一篇）定位相邻文章的主键。
+//
+// 为什么不用 ORDER BY id DESC/ASC + LIMIT 1：MySQL 5.7 不支持反向索引扫描，
+// 那种写法会把整个 category 区间读完再过滤（实测 17 万行 / 0.4~25 秒），
+// 详情页高频调用足以把数据库磁盘打满导致实例崩溃。
+//
+// 为什么 MAX(id)/MIN(id) 就能走索引：MySQL 对「带等值前缀的 MAX/MIN」有专门优化
+// （EXPLAIN 输出 "Select tables optimized away"），直接定位到索引条目，
+// 只读 1 行、亚毫秒级。这个优化**依赖 (category_id, id) 复合索引**——
+// 索引不在时优化器会退回全表扫，不能省这个索引。
+//
+// prev=true 取 id 更小的最大值（上一篇）；prev=false 取 id 更大的最小值（下一篇）。
+// 返回 0 表示没有相邻文章。
+func (w *Website) findNeighborArchiveId(categoryId, id int64, prev bool) (int64, error) {
+	var row struct {
+		Aid sql.NullInt64 `gorm:"column:aid"`
+	}
+	q := w.DB.WithContext(w.Ctx()).Model(&model.Archive{})
+	if categoryId > 0 {
+		q = q.Where("`category_id` = ?", categoryId)
+	}
+	agg := "MIN(`id`)"
+	if prev {
+		agg = "MAX(`id`)"
+		q = q.Where("`id` < ?", id)
+	} else {
+		q = q.Where("`id` > ?", id)
+	}
+	if err := q.Select(agg + " AS aid").Scan(&row).Error; err != nil {
+		return 0, err
+	}
+	if !row.Aid.Valid || row.Aid.Int64 <= 0 {
+		return 0, nil
+	}
+	return row.Aid.Int64, nil
 }
 
 // selectArchiveByFunc 按条件取一整行，不做缩略图/链接补全。

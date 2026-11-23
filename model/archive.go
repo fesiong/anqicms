@@ -13,7 +13,7 @@ import (
 
 type Archive struct {
 	//默认字段
-	Id            int64          `json:"id" gorm:"column:id;type:bigint(20) not null AUTO_INCREMENT;primaryKey"`
+	Id            int64          `json:"id" gorm:"column:id;type:bigint(20) not null AUTO_INCREMENT;primaryKey;index:idx_category_id_id,priority:2"`
 	ParentId      int64          `json:"parent_id" gorm:"column:parent_id;type:bigint(20) not null;default:0;index"`
 	CreatedTime   int64          `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time;index:idx_category_created_time,priority:2;index:idx_module_created_time,priority:2"`
 	UpdatedTime   int64          `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
@@ -23,7 +23,7 @@ type Archive struct {
 	Keywords      string         `json:"keywords" gorm:"column:keywords;type:varchar(250) not null;default:''"`
 	Description   string         `json:"description" gorm:"column:description;type:varchar(1000) not null;default:''"`
 	ModuleId      uint           `json:"module_id" gorm:"column:module_id;type:int(10) unsigned not null;default:1;index:idx_module_created_time,priority:1"`
-	CategoryId    uint           `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_created_time,priority:1"`
+	CategoryId    uint           `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_created_time,priority:1;index:idx_category_id_id,priority:1"`
 	PlaceId       uint           `json:"place_id" gorm:"column:place_id;type:int(10) not null;default:0;index"` // 绑定的地区ID
 	Views         uint           `json:"views" gorm:"column:views;type:int(10) unsigned not null;default:0;index:idx_views"`
 	CommentCount  uint           `json:"comment_count" gorm:"column:comment_count;type:int(10) unsigned not null;default:0"`
