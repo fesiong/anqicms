@@ -1,101 +1,28 @@
 package graphql
 
 import (
+	"log"
+	"net/http"
+
 	"github.com/graphql-go/graphql"
-	"github.com/graphql-go/graphql/language/ast"
-	"github.com/graphql-go/graphql/language/parser"
-	"github.com/graphql-go/graphql/language/source"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
-	"log"
 )
 
 const (
-	maxQueryDepth      = 5  // 最大查询深度
-	maxQueryComplexity = 50 // 最大查询复杂度（并行查询数）
+	// maxGraphQLBodyBytes GraphQL 请求体最大字节数。
+	// 查询语句本身受 maxQueryBytes 限制，这里再兜一层，防止超大 body 打满内存。
+	maxGraphQLBodyBytes = 256 * 1024
 )
-
-// calculateDepth 计算 GraphQL 查询的深度
-func calculateDepth(selectionSet *ast.SelectionSet) int {
-	if selectionSet == nil || len(selectionSet.Selections) == 0 {
-		return 1
-	}
-	maxDepth := 0
-	for _, sel := range selectionSet.Selections {
-		switch s := sel.(type) {
-		case *ast.Field:
-			depth := 1
-			if s.SelectionSet != nil && len(s.SelectionSet.Selections) > 0 {
-				depth = 1 + calculateDepth(s.SelectionSet)
-			}
-			if depth > maxDepth {
-				maxDepth = depth
-			}
-		case *ast.InlineFragment:
-			depth := calculateDepth(s.SelectionSet)
-			if depth > maxDepth {
-				maxDepth = depth
-			}
-		case *ast.FragmentSpread:
-			// 片段引用的深度在完整解析时才能确定，保守估计为1
-			if 1 > maxDepth {
-				maxDepth = 1
-			}
-		}
-	}
-	return maxDepth
-}
-
-// countParallelQueries 计算并行查询数（根级别的字段数）
-func countParallelQueries(selectionSet *ast.SelectionSet) int {
-	if selectionSet == nil {
-		return 0
-	}
-	count := 0
-	for _, sel := range selectionSet.Selections {
-		switch s := sel.(type) {
-		case *ast.Field:
-			count++
-		case *ast.InlineFragment:
-			count += countParallelQueries(s.SelectionSet)
-		case *ast.FragmentSpread:
-			count++
-		}
-	}
-	return count
-}
-
-// validateQuery 验证 GraphQL 查询的安全性
-func validateQuery(query string) (int, int, error) {
-	src := source.NewSource(&source.Source{
-		Body: []byte(query),
-	})
-	doc, err := parser.Parse(parser.ParseParams{
-		Source: src,
-	})
-	if err != nil {
-		return 0, 0, err
-	}
-
-	var depth, complexity int
-	for _, def := range doc.Definitions {
-		switch d := def.(type) {
-		case *ast.OperationDefinition:
-			if d.SelectionSet != nil && len(d.SelectionSet.Selections) > 0 {
-				depth = calculateDepth(d.SelectionSet)
-				complexity = countParallelQueries(d.SelectionSet)
-			}
-		}
-	}
-
-	return depth, complexity, nil
-}
 
 // GraphQLHandler 处理GraphQL请求
 func GraphQLHandler(ctx iris.Context) {
-	// 获取当前站点
-	currentSite := provider.CurrentSite(ctx)
+	// 限制请求体大小，避免超大 body 打满内存
+	if ctx.Request().Body != nil {
+		ctx.Request().Body = http.MaxBytesReader(ctx.ResponseWriter(), ctx.Request().Body, maxGraphQLBodyBytes)
+	}
+
 	// 解析GraphQL请求
 	var params struct {
 		Query         string                 `json:"query"`
@@ -111,28 +38,22 @@ func GraphQLHandler(ctx iris.Context) {
 		return
 	}
 
-	// 验证查询安全性
+	// 验证查询安全性：片段必须展开后再统计，否则 fragments 可以绕过复杂度限制，
+	// 让超大字段集进入 graphql-go 的两两比较规则（O(n²)）打满 CPU。
+	// 这里失败即拒绝，不再往下交给 graphql.Do（否则会二次解析并跳过守卫）。
 	if params.Query != "" {
-		depth, complexity, err := validateQuery(params.Query)
-		if err != nil {
-			log.Printf("GraphQL parse error: %v", err)
-		} else {
-			if depth > maxQueryDepth {
-				ctx.JSON(iris.Map{
-					"code": -1,
-					"msg":  "Query too deep",
-				})
-				return
-			}
-			if complexity > maxQueryComplexity {
-				ctx.JSON(iris.Map{
-					"code": -1,
-					"msg":  "Query too complex",
-				})
-				return
-			}
+		if _, err := analyzeQuery(params.Query); err != nil {
+			log.Printf("GraphQL query rejected: %v", err)
+			ctx.JSON(iris.Map{
+				"code": -1,
+				"msg":  queryErrorMessage(err),
+			})
+			return
 		}
 	}
+
+	// 通过守卫之后再取站点：不合规的请求不该碰到站点状态
+	currentSite := provider.CurrentSite(ctx)
 
 	// 执行GraphQL查询
 	result := graphql.Do(graphql.Params{
