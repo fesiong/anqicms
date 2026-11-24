@@ -179,46 +179,7 @@ go run ./cmd/apilive -wire         # MCP 协议层冒烟
 - 关注 **GEO（生成式引擎优化）**，内容类改动优先考虑 AI 检索/引用场景。
 - 站点现状参考：约 268 篇文章、9 个分类、2 个页面、58 个附件。
 
-## 14. XERJ 参考编码（reference coding）
-
-本机跑着一个本地检索节点（`http://localhost:9200`，单二进制、ES 兼容协议）。
-**写非平凡代码前先查它，不要凭记忆猜上游 API。**
-
-节点不是常驻服务，重启机器后需要重新拉起：
-
-```bash
-xerj --insecure --data-dir ~/xerj-data &      # 起节点
-curl -s localhost:9200 | head -c 60           # 判活
-```
-
-### 已建好的两个语料
-
-| 语料 | 内容 | 检索命令 |
-|---|---|---|
-| `anqicms` | 本仓 905 个源码/文档文件（8419 条记录） | `xerj search --prefix anqicms "<关键词>"` / `xerj def --prefix anqicms <符号>` |
-| `anqicms-refs` | 上游参考仓：modelcontextprotocol/go-sdk、cloudwego/eino、cloudwego/eino-ext | `xerj code anqicms-refs "<要解决的问题>" --lang go` |
-
-用法约定：
-
-- `--prefix` 必须带上，否则查到的是默认空前缀 `ax`（等于查不到）。
-- `xerj code` 命中会给出 `仓库 文件:行号`，**引用时要带上这个坐标**；回答与代码不符就回去读那一行，别继续往下写。
-- **当前节点是 lexical 模式**（默认 feature-hash，索引里没有向量字段）。所有检索都是词法匹配，
-  匹配的是你输入的词，**不是语义理解**。`--mode hybrid` / `--mode semantic` 在 lexical 节点上
-  仍然用 feature hashing，不会变成真语义 —— 别把它当"换个更聪明的模式"用。
-- 词法检索的实际用法：**换关键词再试**，或先 `xerj def <符号>` 定位再读文件。
-  要真正的语义召回得重起节点 `xerj --embed-mode neural`（~90MB 模型，且两个语料都要重建）。
-- 语料超过 30 天会被 `xerj code` 拒绝（防止拿旧上游骗人）。刷新方式：
-  `xerj corpus index anqicms-refs`（重新 clone + 建索引）。
-- 本仓索引是快照，改完代码要重建：
-  `xerj autoindex . --prefix anqicms --state-dir ~/xerj-state/anqicms --plan code-and-docs`
-- 上游用 --depth 1 clone 在 `~/.xerj-code/corpora/anqicms-refs`，**那是只读参考，不要在里面改代码**。
-
-参考编码的判断流程：`xerj code` 看上游怎么写 → 打开命中的文件确认签名与契约 → 再落到本仓的实现。
-本仓自己的实现位置用 `xerj search --prefix anqicms` 找，比逐目录 grep 快。
-
-> 已设 `XERJ_DISABLE_FEEDBACK=true`：不要向 xerj 提交 field report（它会在公开仓库开 PR）。
-
-## 9. 站点库表迁移（多站点）
+## 14. 站点库表迁移（多站点）
 
 > 2026-11-16 客户 106 站点事故后立的规矩。事故现象：升级 3.8.4 后「前十几个站点正常、
 > 后面全部初始化失败」，日志里 **0 条报错**、6489 条慢 SQL，启动 2.5 分钟只走到第 75 站。
@@ -252,9 +213,9 @@ curl -s localhost:9200 | head -c 60           # 判活
 - ⚠️ 具名返回值才能让 `defer` 改到返回值；`res := X{}; defer func(){res.Y=...}(); return res`
   改的是副本（离线迁移汇总耗时一度恒为 0s）。
 
-### 9.1 ⚠️ 启动顺序：端口先开，迁移在后台
+### 14.1 ⚠️ 启动顺序：端口先开，迁移在后台
 
-> 2026-11-16 事故的第二幕：把迁移改成同步（9 的改动）之后，它卡在
+> 2026-11-16 事故的第二幕：把迁移改成同步（14 的改动）之后，它卡在
 > `go bootstrap.Start()` 之前 —— 106 个站点升级期间「进程活着、日志不动、
 > 端口几十分钟不开」，运维无法区分"在跑"和"卡死"，客户反复重启。
 
@@ -294,7 +255,7 @@ crond.Crond()
 - ⚠️ 还没轮到的站点**做不到"照常访问"**：新代码读 3.6.6 的旧表（`archives` 缺列、
   `archive_products` 不存在）会 500。它们只能是 503，页面上显示"排队中/正在升级"。
 
-## 10. 进程级共享资源（sego 词典是第一个）
+## 15. 进程级共享资源（sego 词典是第一个）
 
 > 2026-11-17：词典从「每站点/每次一份」改成「全进程一份」。实测官方词典
 > （5.3MB / 350 700 词条）：单份加载 0.7s、堆常驻 +124MB；10 份各自加载 =
