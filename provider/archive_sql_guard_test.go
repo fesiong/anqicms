@@ -18,10 +18,10 @@ import (
 func TestNoToSQLInUserFacingListQueries(t *testing.T) {
 	const srcFile = "archive.go"
 
-	// filename 经 GetArchiveByFunc → selectArchiveByFunc 取整行。
-	// 这条路径用参数化链式 Take（ops(...).Take），天然无 ToSQL 内联，正向锚点是
-	// selectArchiveByFunc 的参数化 Take；两个函数体内都不得出现 ToSQL。
-	for _, name := range []string{"GetArchiveByFunc", "selectArchiveByFunc"} {
+	// filename 经 GetArchiveByFunc → takeArchive → selectArchiveByFunc 取整行。
+	// 这条路径用参数化链式 Take，天然无 ToSQL 内联，正向锚点是
+	// selectArchiveByFunc 的参数化 Take；三个函数体内都不得出现 ToSQL。
+	for _, name := range []string{"GetArchiveByFunc", "takeArchive", "selectArchiveByFunc"} {
 		fn := mustFindProviderFunc(t, srcFile, name)
 		if callName(fn, "ToSQL") != "" {
 			t.Errorf("%s 不得调用 ToSQL（issue #93）：filename 等外部输入会经此查询", name)

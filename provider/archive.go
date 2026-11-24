@@ -4,7 +4,6 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -128,42 +127,29 @@ func (w *Website) GetArchiveByOriginUrl(keyword string) (*model.Archive, error) 
 // 几十个并发就能把 2 核 / 1.6G 的机器磁盘打满（100MB/s 读、load 30、
 // systemd-logind 建会话超时），最终实例被硬复位——2026-11-23 线上就是这么反复崩的。
 //
-// 现在改成两步：先用 MAX(id) 触发 MySQL 的 MIN/MAX 优化（EXPLAIN 显示
-// "Select tables optimized away"，只读 1 行、0.1ms），再按主键回表拿整行。
-// 前提是 archives 上有 (category_id, id) 复合索引，见 model.Archive 的 idx_category_id_id。
+// 现在的形状是一条 SQL：`WHERE id = (SELECT MAX(id) ... )`。
+// 子查询是标量且不引用外层列，MySQL 会先执行一次（EXPLAIN 显示
+// "Rows fetched before execution" / "Select tables optimized away"），
+// 再按主键点查一行；8.0.45 实测 0.2ms、详情页总共 2 条 SQL。
+//
+// ⚠️ 它依赖 archives 上有 (category_id, id) 复合索引，**而且索引必须在库里真实存在**：
+// 只在 model tag 里登记不够（AutoMigrateDB 仅版本变化时跑，老站永远不建）。
+// 索引缺失时 MAX(id) 会退化成 covering skip scan 扫完整个分类区间——
+// 30 万行的库实测扫 29.99 万行 / 235ms，比正确计划慢 4000 倍。
+// 保障见 ensureArchiveNeighborIndex（InitModelData 每次启动幂等补建）。
 func (w *Website) GetPreviousArchive(categoryId, id int64) (*model.Archive, error) {
-	prevId, err := w.findNeighborArchiveId(categoryId, id, true)
-	if err != nil {
-		return nil, err
-	}
-	if prevId == 0 {
-		// 没有上一篇：语义与旧的 Take() 一致（取不到行就是 ErrRecordNotFound）。
-		return nil, gorm.ErrRecordNotFound
-	}
-	archive, err := w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
-		return tx.Where("`id` = ?", prevId)
-	})
-	if err != nil {
-		return nil, err
-	}
-	if archive.Password != "" {
-		archive.HasPassword = true
-		archive.Password = ""
-	}
-	return archive, nil
+	return w.getNeighborArchive(categoryId, id, true)
 }
 
 // GetNextArchive 取「同一分类里 id 更大的下一篇」。取法见 GetPreviousArchive 的注释。
 func (w *Website) GetNextArchive(categoryId, id int64) (*model.Archive, error) {
-	nextId, err := w.findNeighborArchiveId(categoryId, id, false)
-	if err != nil {
-		return nil, err
-	}
-	if nextId == 0 {
-		return nil, gorm.ErrRecordNotFound
-	}
-	archive, err := w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
-		return tx.Where("`id` = ?", nextId)
+	return w.getNeighborArchive(categoryId, id, false)
+}
+
+// getNeighborArchive 按方向取相邻文章，一条 SQL 完成定位 + 取行。
+func (w *Website) getNeighborArchive(categoryId, id int64, prev bool) (*model.Archive, error) {
+	archive, err := w.takeArchive(func(tx *gorm.DB) *gorm.DB {
+		return neighborArchiveScope(tx, categoryId, id, prev)
 	})
 	if err != nil {
 		return nil, err
@@ -175,41 +161,24 @@ func (w *Website) GetNextArchive(categoryId, id int64) (*model.Archive, error) {
 	return archive, nil
 }
 
-// findNeighborArchiveId 用 MAX(id)（上一篇）/ MIN(id)（下一篇）定位相邻文章的主键。
+// neighborArchiveScope 构造「主键 = (SELECT MAX/MIN(id) ...)」的查询。
 //
-// 为什么不用 ORDER BY id DESC/ASC + LIMIT 1：MySQL 5.7 不支持反向索引扫描，
-// 那种写法会把整个 category 区间读完再过滤（实测 17 万行 / 0.4~25 秒），
-// 详情页高频调用足以把数据库磁盘打满导致实例崩溃。
-//
-// 为什么 MAX(id)/MIN(id) 就能走索引：MySQL 对「带等值前缀的 MAX/MIN」有专门优化
-// （EXPLAIN 输出 "Select tables optimized away"），直接定位到索引条目，
-// 只读 1 行、亚毫秒级。这个优化**依赖 (category_id, id) 复合索引**——
-// 索引不在时优化器会退回全表扫，不能省这个索引。
+// 单独拆成纯函数（不碰 w）是为了让护栏能用 DryRun 直接断言 SQL 形状：
+// 这两个函数是全站最热的路径，形状一错就是扫全表，光靠端到端压测来不及发现。
 //
 // prev=true 取 id 更小的最大值（上一篇）；prev=false 取 id 更大的最小值（下一篇）。
-// 返回 0 表示没有相邻文章。
-func (w *Website) findNeighborArchiveId(categoryId, id int64, prev bool) (int64, error) {
-	var row struct {
-		Aid sql.NullInt64 `gorm:"column:aid"`
-	}
-	q := w.DB.WithContext(w.Ctx()).Model(&model.Archive{})
-	if categoryId > 0 {
-		q = q.Where("`category_id` = ?", categoryId)
-	}
-	agg := "MIN(`id`)"
+// categoryId=0 表示不限分类（此时子查询只带 id 条件，走主键）。
+func neighborArchiveScope(db *gorm.DB, categoryId, id int64, prev bool) *gorm.DB {
+	agg, cmp := "MIN(`id`)", "`id` > ?"
 	if prev {
-		agg = "MAX(`id`)"
-		q = q.Where("`id` < ?", id)
-	} else {
-		q = q.Where("`id` > ?", id)
+		agg, cmp = "MAX(`id`)", "`id` < ?"
 	}
-	if err := q.Select(agg + " AS aid").Scan(&row).Error; err != nil {
-		return 0, err
+	sub := db.Session(&gorm.Session{NewDB: true}).Model(&model.Archive{}).Select(agg)
+	if categoryId > 0 {
+		sub = sub.Where("`category_id` = ?", categoryId)
 	}
-	if !row.Aid.Valid || row.Aid.Int64 <= 0 {
-		return 0, nil
-	}
-	return row.Aid.Int64, nil
+	sub = sub.Where(cmp, id)
+	return db.Where("`id` = (?)", sub)
 }
 
 // selectArchiveByFunc 按条件取一整行，不做缩略图/链接补全。
@@ -233,6 +202,12 @@ func (w *Website) selectArchiveByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.Ar
 }
 
 func (w *Website) GetArchiveByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.Archive, error) {
+	return w.takeArchive(ops)
+}
+
+// takeArchive 在 selectArchiveByFunc 之上补全缩略图与伪静态链接。
+// 上一篇/下一篇共用这段收尾，只是查询构造换成 neighborArchiveScope。
+func (w *Website) takeArchive(ops func(tx *gorm.DB) *gorm.DB) (*model.Archive, error) {
 	archive, err := w.selectArchiveByFunc(ops)
 	if err != nil {
 		return nil, err

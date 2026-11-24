@@ -11,27 +11,24 @@ import (
 	"testing"
 )
 
-// 上一篇 / 下一篇的取法护栏。
+// 上一篇 / 下一篇的调用链护栏（SQL 形状由 archive_prevnext_sql_test.go 用 DryRun 守）。
 //
-// 历史坑（2026-11-23 线上事故）：这两个函数原先是
+// 历史坑（2026-11-23 线上事故）：`WHERE category_id = ? AND id < ? ORDER BY id DESC LIMIT 1`
+// 在 MySQL 5.7 上退化成扫完整个分类区间（17 万行 / 0.4~25 秒），把磁盘打满导致实例反复复位。
 //
-//	WHERE category_id = ? AND id < ? ORDER BY id DESC LIMIT 1
+// 第一版修复改成「先 MAX(id) 再按主键回表」两步，但依赖的 (category_id, id) 索引
+// 只在 model tag 里登记、库里并不存在，实测退化成扫 299,960 行 / 235ms。
 //
-// 一条 SQL 直接取整行。形状看着对，性能上是灾难：MySQL 5.7 没有反向索引扫描，
-// 这条 SQL 会退化成「把整个 category 区间扫完再过滤」。线上 archives 21 万行、
-// category 6 占 18.6 万行，慢日志实测一条扫 17 万行、0.4~25 秒（Rows_sent=1）。
-// 详情页每次访问打两次（上一篇 + 下一篇），几十个并发就能把 2 核 / 1.6G 的机器
-// 磁盘打满（100MB/s 读、load 30、systemd-logind 建会话超时），实例被反复硬复位。
+// 现在的形状：一条 SQL 的标量子查询
 //
-// 现在的形状：先用 MAX(id) / MIN(id) 走 MySQL 的 MIN/MAX 优化
-// （EXPLAIN = "Select tables optimized away"，只读 1 行、0.1ms），再按主键回表。
+//	WHERE id = (SELECT MAX(`id`) FROM archives WHERE category_id = ? AND id < ?)
 //
+// 本文件守调用链（谁调谁、方向实参），防止有人改回两步或改回 ORDER BY。
 // 为什么用 AST 而不是假驱动跑：这两个函数的返回值要补缩略图、伪静态链接、
 // 地区前缀，依赖一套真实站点配置，假驱动很容易测成「另一个函数」。
-// 形状由这里守，端到端效果由服务器 EXPLAIN 核对。
 type prevNextCase struct {
 	name    string // 函数名
-	prevArg string // findNeighborArchiveId 第三个实参的字面量
+	prevArg string // getNeighborArchive 第三个实参的字面量
 }
 
 var prevNextCases = []prevNextCase{
@@ -51,10 +48,9 @@ func checkPrevNext(file *ast.File) []string {
 		}
 
 		var (
-			neighborCalls  int
-			getArchiveCall int
-			orderCalls     int
-			rawCalls       int
+			neighborCalls int
+			orderCalls    int
+			rawCalls      int
 		)
 		ast.Inspect(fn.Body, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
@@ -70,15 +66,13 @@ func checkPrevNext(file *ast.File) []string {
 				rawCalls++
 			case "Order":
 				orderCalls++
-			case "GetArchiveByFunc":
-				getArchiveCall++
-			case "findNeighborArchiveId":
+			case "getNeighborArchive":
 				neighborCalls++
 				if len(call.Args) != 3 {
 					problems = append(problems, fmt.Sprintf(
-						"%s 调 findNeighborArchiveId 只给了 %d 个实参，期望 3 个（categoryId, id, 方向）",
+						"%s 调 getNeighborArchive 给了 %d 个实参，期望 3 个（categoryId, id, 方向）",
 						tc.name, len(call.Args)))
-					break
+					return true
 				}
 				// 方向实参要能静态读出来：true/false 在 Go AST 里是 Ident，
 				// 字符串字面量才是 BasicLit，两种都收。
@@ -90,8 +84,8 @@ func checkPrevNext(file *ast.File) []string {
 					dir = strings.Trim(arg.Value, "`\"")
 				default:
 					problems = append(problems, fmt.Sprintf(
-						"%s 调 findNeighborArchiveId 的方向实参必须是字面量，当前是表达式", tc.name))
-					break
+						"%s 调 getNeighborArchive 的方向实参必须是字面量，当前是表达式", tc.name))
+					return true
 				}
 				if dir != "" && dir != tc.prevArg {
 					problems = append(problems, fmt.Sprintf(
@@ -103,18 +97,13 @@ func checkPrevNext(file *ast.File) []string {
 
 		if neighborCalls != 1 {
 			problems = append(problems, fmt.Sprintf(
-				"%s 调了 %d 次 findNeighborArchiveId，期望恰好 1 次（上一篇/下一篇各定位一次）",
+				"%s 调了 %d 次 getNeighborArchive，期望恰好 1 次（一步查完，不要拆成定位 + 回表两次往返）",
 				tc.name, neighborCalls))
-		}
-		if getArchiveCall != 1 {
-			problems = append(problems, fmt.Sprintf(
-				"%s 调了 %d 次 GetArchiveByFunc，期望 1 次（按主键回表取整行）",
-				tc.name, getArchiveCall))
 		}
 		if orderCalls != 0 {
 			problems = append(problems, fmt.Sprintf(
 				"%s 里出现了 %d 次 Order：MySQL 5.7 无反向索引扫描，ORDER BY id DESC/ASC "+
-					"会把整个 category 区间读完再过滤，必须换成 MAX(id)/MIN(id) 索引定位",
+					"会把整个 category 区间读完再过滤，必须走 MAX(id)/MIN(id) 子查询定位",
 				tc.name, orderCalls))
 		}
 		if rawCalls != 0 {
@@ -123,25 +112,64 @@ func checkPrevNext(file *ast.File) []string {
 		}
 	}
 
-	// 定位辅助函数必须真的用了 MIN/MAX 聚合，否则「不写 Order」也可能是别的坏形状。
-	helper := findMethodDecl(file, "findNeighborArchiveId")
-	if helper == nil {
-		problems = append(problems, "findNeighborArchiveId 找不到：相邻文章必须走 MAX/MIN 索引定位")
+	// 中间层：getNeighborArchive 必须用 neighborArchiveScope 造查询，并用 takeArchive 取行。
+	mid := findMethodDecl(file, "getNeighborArchive")
+	if mid == nil {
+		problems = append(problems, "getNeighborArchive 找不到：上一篇/下一篇必须共用一条查询构造")
+		return problems
+	}
+	if n := countCalls(mid, "neighborArchiveScope"); n != 1 {
+		problems = append(problems, fmt.Sprintf(
+			"getNeighborArchive 调了 %d 次 neighborArchiveScope，期望 1 次", n))
+	}
+	if n := countCalls(mid, "takeArchive"); n != 1 {
+		problems = append(problems, fmt.Sprintf(
+			"getNeighborArchive 调了 %d 次 takeArchive，期望 1 次（一条 SQL 取整行）", n))
+	}
+
+	// 最底层：聚合必须真的是裸 MAX/MIN。
+	scope := findMethodDecl(file, "neighborArchiveScope")
+	if scope == nil {
+		problems = append(problems, "neighborArchiveScope 找不到：相邻文章必须走 MAX/MIN 索引定位")
 		return problems
 	}
 	var buf bytes.Buffer
-	if err := printer.Fprint(&buf, token.NewFileSet(), helper); err != nil {
-		problems = append(problems, fmt.Sprintf("打印 findNeighborArchiveId 源码失败：%v", err))
+	if err := printer.Fprint(&buf, token.NewFileSet(), scope); err != nil {
+		problems = append(problems, fmt.Sprintf("打印 neighborArchiveScope 源码失败：%v", err))
 		return problems
 	}
 	src := buf.String()
 	if !strings.Contains(src, "MAX(`id`)") {
-		problems = append(problems, "findNeighborArchiveId 里没有 MAX(`id`)：上一篇的定位方式不对")
+		problems = append(problems, "neighborArchiveScope 里没有 MAX(`id`)：上一篇的定位方式不对")
 	}
 	if !strings.Contains(src, "MIN(`id`)") {
-		problems = append(problems, "findNeighborArchiveId 里没有 MIN(`id`)：下一篇的定位方式不对")
+		problems = append(problems, "neighborArchiveScope 里没有 MIN(`id`)：下一篇的定位方式不对")
 	}
 	return problems
+}
+
+// countCalls 统计函数体内调用指定函数/方法的次数。
+// neighborArchiveScope 是包级函数（Ident），takeArchive 是方法（SelectorExpr），两种都收。
+func countCalls(fn *ast.FuncDecl, name string) int {
+	n := 0
+	ast.Inspect(fn.Body, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		switch fun := call.Fun.(type) {
+		case *ast.SelectorExpr:
+			if fun.Sel.Name == name {
+				n++
+			}
+		case *ast.Ident:
+			if fun.Name == name {
+				n++
+			}
+		}
+		return true
+	})
+	return n
 }
 
 func parseArchiveGo(t *testing.T, src, name string) *ast.File {
@@ -154,7 +182,7 @@ func parseArchiveGo(t *testing.T, src, name string) *ast.File {
 	return file
 }
 
-// TestPrevNextArchiveUsesMaxMinIndexLookup 护栏：上一篇 / 下一篇必须先走 MAX/MIN 索引定位。
+// TestPrevNextArchiveUsesMaxMinIndexLookup 护栏：上一篇 / 下一篇必须一步走 MAX/MIN 索引定位。
 func TestPrevNextArchiveUsesMaxMinIndexLookup(t *testing.T) {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, "archive.go", nil, 0)
@@ -207,10 +235,11 @@ func (w *Website) GetNextArchive(categoryId, id int64) (*model.Archive, error) {
 	}
 }
 
-// TestPrevNextGuardCatchesMissingAggregate 反向对照之二：定位函数在、但里面没用 MIN/MAX 聚合，
-// 也必须被抓出来（否则「去掉 Order」可能只是换了个别的坏形状）。
-func TestPrevNextGuardCatchesMissingAggregate(t *testing.T) {
-	badImpl := `
+// TestPrevNextGuardCatchesTwoStepImplementation 反向对照之二：
+// 「先 MAX(id) 取 id、再按主键回表」的两步实现也必须被抓到（多一次往返，
+// 而且当时真正的问题是索引不在、聚合退化成了整区间扫描）。
+func TestPrevNextGuardCatchesTwoStepImplementation(t *testing.T) {
+	twoStepImpl := `
 package provider
 
 import "gorm.io/gorm"
@@ -236,14 +265,10 @@ func (w *Website) GetNextArchive(categoryId, id int64) (*model.Archive, error) {
 	})
 	return archive, err
 }
-
-func (w *Website) findNeighborArchiveId(categoryId, id int64, prev bool) (int64, error) {
-	return 0, nil
-}
 `
-	problems := checkPrevNext(parseArchiveGo(t, badImpl, "bad_impl.go"))
+	problems := checkPrevNext(parseArchiveGo(t, twoStepImpl, "two_step_impl.go"))
 	if len(problems) == 0 {
-		t.Fatal("反向对照失败：没有 MIN/MAX 聚合的实现没有被护栏抓到")
+		t.Fatal("反向对照失败：两步实现没有被护栏抓到")
 	}
 	t.Logf("反向对照如期报错 %d 条：", len(problems))
 	for _, p := range problems {
