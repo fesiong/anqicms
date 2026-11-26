@@ -12,7 +12,7 @@
  */
 
 const IMAGE_EXT_RE = /\.(?:jpe?g|png|gif|webp|bmp|avif|svg)(?:[?#].*)?$/i;
-const VIDEO_EXT_RE = /\.(?:mp4|webm|ogv|ogg|mov|m4v)(?:[?#].*)?$/i;
+const VIDEO_EXT_RE = /\.(?:mp4|webm|ogv|ogg|mov|m4v|m3u8)(?:[?#].*)?$/i;
 
 export function isImageUrl(url?: string | null): boolean {
   if (!url) return false;
@@ -48,6 +48,22 @@ export function buildVideoHtml(src: string, poster?: string | null): string {
     attrs.push(`poster="${escapeAttr((poster as string).trim())}"`);
   }
   return `<video ${attrs.join(' ')}></video>`;
+}
+
+export function getAttachmentVideoSource(item: any): string {
+  return String(item?.play_url || item?.file_path || '');
+}
+
+export function getAttachmentVideoPoster(item: any): string {
+  const poster = String(
+    item?.video_task?.playlist?.poster_url || item?.logo || '',
+  );
+  return isImageUrl(poster) ? poster : '';
+}
+
+export function buildAttachmentVideoHtml(item: any): string {
+  const src = getAttachmentVideoSource(item);
+  return src ? buildVideoHtml(src, getAttachmentVideoPoster(item)) : '';
 }
 
 const VIDEO_TAG_RE = /<video\b([^>]*)>([\s\S]*?)<\/video\s*>/gi;

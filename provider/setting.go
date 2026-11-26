@@ -172,10 +172,11 @@ func (w *Website) LoadSystemSetting(value string) {
 }
 
 func (w *Website) LoadContentSetting(value string) {
-	w.Content = &config.ContentConfig{}
+	w.Content = &config.ContentConfig{Video: config.DefaultVideoProcessingConfig()}
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), w.Content)
 	}
+	w.Content.Video.Normalize()
 	if w.Content.MaxPage < 1 {
 		w.Content.MaxPage = 1000
 	}

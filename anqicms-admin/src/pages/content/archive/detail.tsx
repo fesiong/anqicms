@@ -3004,6 +3004,7 @@ class ArchiveForm extends React.Component<intlProps> {
                       <AttachmentSelect
                         onSelect={this.handleSelectImages}
                         open={false}
+                        type={1}
                         multiple={true}
                       >
                         <div className="ant-upload-item">

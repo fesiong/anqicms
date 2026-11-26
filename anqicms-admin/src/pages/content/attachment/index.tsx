@@ -29,6 +29,7 @@ import {
   Row,
   Select,
   Space,
+  Tag,
   Upload,
   message,
 } from 'antd';
@@ -695,6 +696,7 @@ class ImageList extends React.Component<intlProps> {
                     <Col sm={4} xs={12} key={item.id}>
                       <div className="image-item">
                         <div className="inner">
+                          <Tag className='image-tag' color='cyan'>{item.file_location?.substring(item.file_location?.lastIndexOf('.')+1).toUpperCase()}</Tag>
                           <Checkbox className="checkbox" value={item.id} />
                           <div
                             className="link"
@@ -704,6 +706,7 @@ class ImageList extends React.Component<intlProps> {
                               isImage={item.is_image}
                               timestamp={item.updated_time}
                               src={item.logo || item.file_location}
+                              posterSrc={item.logo}
                               preview={false}
                               alt={item.file_name}
                             />
@@ -766,6 +769,7 @@ class ImageList extends React.Component<intlProps> {
                 timestamp={currentAttach.updated_time}
                 src={currentAttach.logo || currentAttach.file_path}
                 previewSrc={currentAttach.file_path}
+                posterSrc={currentAttach.logo}
                 alt={currentAttach.file_name}
               />
             </div>

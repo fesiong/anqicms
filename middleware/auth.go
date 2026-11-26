@@ -157,6 +157,9 @@ func AdminMenuPathForURI(uri string, groups []*config.MenuGroup) (front string, 
 	if uri == "" {
 		return "", false
 	}
+	if strings.HasPrefix(uri, "/setting/video") {
+		uri = "/setting/content" + strings.TrimPrefix(uri, "/setting/video")
+	}
 	for _, group := range groups {
 		if group == nil {
 			continue
@@ -258,6 +261,16 @@ func AdminPermissionRequired(ctx iris.Context) {
 	}
 
 	adminPermissionDenied(ctx)
+}
+
+// AdminSuperRequired 仅允许站点超管执行安装软件等系统级操作。
+func AdminSuperRequired(ctx iris.Context) {
+	if ctx.Values().GetUintDefault("adminId", 0) != 1 {
+		ctx.StatusCode(http.StatusForbidden)
+		adminPermissionDenied(ctx)
+		return
+	}
+	ctx.Next()
 }
 
 func Check301(ctx iris.Context) {

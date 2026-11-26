@@ -7,16 +7,17 @@ import {
   Avatar,
   Button,
   Checkbox,
-  Image,
   Input,
   Select,
   Space,
+  Tag,
   Upload,
   message,
 } from 'antd';
 import React, { useEffect, useRef, useState } from 'react';
 import AiImageGenerate from '../aiimage';
 import AttachmentAddUrl from './addUrl';
+import ImageItem from './image';
 import './index.less';
 
 export type AttachmentContentProps = {
@@ -24,6 +25,7 @@ export type AttachmentContentProps = {
   onCancel?: () => void;
   style?: React.CSSProperties;
   className?: string;
+  type?: number | undefined;
   multiple?: boolean;
   intl?: any;
 };
@@ -41,7 +43,8 @@ const AttachmentContent: React.FC<AttachmentContentProps> = (props) => {
     getCategories().then((res) => {
       setCategories(res.data || []);
     });
-  }, []);
+    actionRef.current?.reload();
+  }, [props.type]);
 
   const handleAddUrl = () => {
     setAddUrlVisible(true);
@@ -286,6 +289,7 @@ const AttachmentContent: React.FC<AttachmentContentProps> = (props) => {
           request={(params) => {
             params.category_id = categoryId;
             params.q = keyword;
+            params.type = props.type;
             return getAttachments(params);
           }}
           grid={{ gutter: 16, column: 6 }}
@@ -302,22 +306,25 @@ const AttachmentContent: React.FC<AttachmentContentProps> = (props) => {
               render: (_: any, row: any) => {
                 return (
                   <div className="image-item">
+                    <Tag className='image-tag' color='cyan'>{row.file_location?.substring(row.file_location?.lastIndexOf('.')+1).toUpperCase()}</Tag>
                     {props.multiple && (
                       <Checkbox className="checkbox" value={row} />
                     )}
                     <div className="inner" title={row.file_name}>
-                      {row.thumb ? (
-                        <Image
+                      {row.thumb || row.is_image === 1 || row.is_image === 2 ? (
+                        <ImageItem
                           className="img"
-                          preview={{
-                            src: row.file_path,
-                          }}
-                          src={row.thumb}
+                          isImage={row.is_image}
+                          src={row.thumb || row.file_path}
+                          previewSrc={row.play_url || row.file_path}
+                          posterSrc={
+                            row.video_task?.playlist?.poster_url || row.logo || row.thumb
+                          }
                           alt={row.file_name}
                         />
                       ) : (
                         <a
-                          href={row.file_path}
+                          href={row.play_url || row.file_path}
                           target="_blank"
                           rel="noreferrer"
                         >

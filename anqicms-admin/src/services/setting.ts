@@ -1,4 +1,8 @@
+import { getLocale } from '@umijs/max';
+import config from './config';
 import { get, post } from './tools';
+import { getSessionStore, getStore } from '@/utils/store';
+import { parseSSEFrames } from './videoInstall';
 
 export async function getSettingSystem(
   params?: any,
@@ -140,6 +144,72 @@ export async function saveSettingContent(
     url: '/setting/content',
     body,
     options,
+  });
+}
+
+export async function getVideoFFmpeg() {
+  return get({ url: '/setting/video/ffmpeg' });
+}
+
+export async function installVideoFFmpeg(
+  onEvent: (event: any) => void,
+  options?: { signal?: AbortSignal },
+) {
+  const headers: Record<string, string> = {
+    Accept: 'text/event-stream',
+    'Content-Type': 'application/json',
+  };
+  const token = getSessionStore('adminToken') || getStore('adminToken');
+  if (token) headers.admin = token;
+  const siteId = getSessionStore('site-id');
+  if (siteId) headers['Site-Id'] = String(siteId);
+  const subSiteId = getSessionStore('sub-site-id');
+  if (subSiteId) headers['Sub-Site-Id'] = String(subSiteId);
+  const locale = getLocale();
+  if (locale) headers['Accept-Language'] = locale;
+
+  const response = await fetch(config.baseUrl + '/setting/video/ffmpeg/install', {
+    method: 'POST',
+    headers,
+    body: '{}',
+    signal: options?.signal,
+  });
+  if (!response.ok || !response.headers.get('Content-Type')?.includes('text/event-stream')) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.msg || `HTTP ${response.status}`);
+  }
+  if (!response.body) throw new Error('无法读取安装进度');
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  const consume = (text: string) => {
+    buffer += text;
+    const parsed = parseSSEFrames(buffer);
+    buffer = parsed.rest;
+    parsed.events.forEach((frame) => onEvent(frame.data));
+  };
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    consume(decoder.decode(value, { stream: true }));
+  }
+  consume(decoder.decode());
+  if (buffer.trim()) consume(buffer + '\n\n');
+}
+
+export async function getVideoTasks(params?: any) {
+  return get({ url: '/setting/video/tasks', params });
+}
+
+export async function retryVideoTask(id: number) {
+  return post({ url: '/setting/video/tasks/retry', body: { id } });
+}
+
+export async function enqueueHistoricalVideoTasks(force = false) {
+  return post({
+    url: '/setting/video/tasks/historical',
+    body: { force },
   });
 }
 

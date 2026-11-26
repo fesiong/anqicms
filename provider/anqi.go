@@ -1607,6 +1607,7 @@ func shutdownWebsite(w *Website) {
 	w.StopChannelManager()
 	// 通知工作者与渠道管理器同生命周期，同样必须先停。
 	w.StopNotifyWorker()
+	w.StopVideoWorker()
 	// 关闭数据库
 	if w.DB != nil {
 		db, err := w.DB.DB()

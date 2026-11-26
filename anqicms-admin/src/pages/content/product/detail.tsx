@@ -626,6 +626,58 @@ class ProductForm extends React.Component<intlProps> {
     );
   };
 
+  handleDragStart = (index: number) => {
+    this.setState({ dragImageIndex: index });
+  };
+
+  handleDragOver = (e: any, index: number) => {
+    e.preventDefault();
+    const { dragImageIndex, archive } = this.state;
+    if (dragImageIndex === -1 || dragImageIndex === index) {
+      return;
+    }
+    const images = [...(archive.images || [])];
+    const [moved] = images.splice(dragImageIndex, 1);
+    images.splice(index, 0, moved);
+    this.setState({
+      dragImageIndex: index,
+      archive: { ...archive, images },
+    });
+  };
+
+  handleDragEnd = () => {
+    this.setState({ dragImageIndex: -1 });
+  };
+
+  handleDrop = (e: any) => {
+    e.preventDefault();
+    this.handleDragEnd();
+  };
+
+  handleMoveImages = (index: number, direction: string, e: any) => {
+    e.stopPropagation();
+    const { archive } = this.state;
+    const images = [...(archive.images || [])];
+    if (direction === 'up') {
+      if (index <= 0) {
+        return;
+      }
+      const temp = images[index];
+      images[index] = images[index - 1];
+      images[index - 1] = temp;
+    } else {
+      if (index >= images.length - 1) {
+        return;
+      }
+      const temp = images[index];
+      images[index] = images[index + 1];
+      images[index + 1] = temp;
+    }
+    this.setState({
+      archive: { ...archive, images },
+    });
+  };
+
   handleCleanLogo = (index: number, e: any) => {
     e.stopPropagation();
     const { archive } = this.state;
@@ -3476,6 +3528,7 @@ class ProductForm extends React.Component<intlProps> {
                           <AttachmentSelect
                             onSelect={this.handleSelectVideo}
                             open={false}
+                            type={2}
                             multiple={false}
                           >
                             <div className="ant-upload-item">
@@ -3494,22 +3547,53 @@ class ProductForm extends React.Component<intlProps> {
                           {archive.images?.length
                             ? archive.images.map(
                                 (item: string, index: number) => (
-                                  <div className="ant-upload-item" key={index}>
+                                  <div className={
+                                'ant-upload-item' +
+                                (this.state.dragImageIndex === index
+                                  ? ' drag-over'
+                                  : '')
+                              }
+                              key={index}
+                              draggable
+                              onDragStart={() => this.handleDragStart(index)}
+                              onDragOver={(e) => this.handleDragOver(e, index)}
+                              onDragEnd={this.handleDragEnd}
+                              onDrop={this.handleDrop}>
                                     <Image
                                       preview={{
                                         src: item,
                                       }}
                                       src={item}
                                     />
-                                    <span
-                                      className="delete"
-                                      onClick={this.handleCleanLogo.bind(
-                                        this,
-                                        index,
-                                      )}
-                                    >
-                                      <DeleteOutlined />
-                                    </span>
+                                    <div className="ant-upload-item-action">
+                                      <Tag
+                                        onClick={this.handleMoveImages.bind(
+                                          this,
+                                          index,
+                                          'up',
+                                        )}
+                                      >
+                                        <LeftOutlined />
+                                      </Tag>
+                                      <Tag
+                                        color="red"
+                                        onClick={this.handleCleanLogo.bind(
+                                          this,
+                                          index,
+                                        )}
+                                      >
+                                        <DeleteOutlined />
+                                      </Tag>
+                                      <Tag
+                                        onClick={this.handleMoveImages.bind(
+                                          this,
+                                          index,
+                                          'down',
+                                        )}
+                                      >
+                                        <RightOutlined />
+                                      </Tag>
+                                    </div>
                                   </div>
                                 ),
                               )
@@ -3517,6 +3601,7 @@ class ProductForm extends React.Component<intlProps> {
                           <AttachmentSelect
                             onSelect={this.handleSelectImages}
                             open={false}
+                            type={1}
                             multiple={true}
                           >
                             <div className="ant-upload-item">

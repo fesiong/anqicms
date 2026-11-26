@@ -13,6 +13,7 @@ import setting from './zh-TW/setting';
 import statistic from './zh-TW/statistic';
 import tool from './zh-TW/tool';
 import website from './zh-TW/website';
+import video from './zh-TW/video';
 import { brandizeMessages } from '../oem/brandize';
 
 export default brandizeMessages({
@@ -25,6 +26,7 @@ export default brandizeMessages({
   ...dashboard,
   ...tool,
   ...website,
+  ...video,
   ...account,
   ...ai,
   ...statistic,

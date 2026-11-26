@@ -31,6 +31,7 @@ import { Iframe, isSafeEmbedSrc, parseIframeHtml } from './iframeExtension';
 import './index.less';
 import MaterialSelect, { MaterialElement } from './material';
 import {
+  buildAttachmentVideoHtml,
   buildVideoHtml,
   normalizeVideoHtml,
   sanitizeEditorHtml,
@@ -58,6 +59,7 @@ const NewAiEditor: React.FC<NewAiEditorProps> = forwardRef((props, ref) => {
   const [videoUrl, setVideoUrl] = useState<string>('');
   const [materialVisible, setMaterialVisible] = useState(false);
   const [attachVisible, setAttachVisible] = useState(false);
+  const [attachType, setAttachType] = useState<number | undefined>(undefined);
   const intl = useIntl();
   function setInnerContent(content: string) {
     // 判断是不是Markdown
@@ -91,7 +93,7 @@ const NewAiEditor: React.FC<NewAiEditorProps> = forwardRef((props, ref) => {
       // ⚠️ src 必须挂在 <video> 上：aieditor 的 video 节点只认 `video[src]`，
       // 写成 <video><source src></video> 会被当纯文本插进正文（直接显示源码）。
       // 见 mediaHtml.ts 顶部说明。
-      return buildVideoHtml(item.file_path, item.logo);
+      return buildAttachmentVideoHtml(item);
     } else if (
       item.file_location.indexOf('.mp3') !== -1 ||
       item.file_location.indexOf('.wav') !== -1
@@ -107,8 +109,9 @@ const NewAiEditor: React.FC<NewAiEditorProps> = forwardRef((props, ref) => {
       return `<a href="${item.file_path}" target="_blank" title="${item.file_name}">${item.file_name}</a>`;
     }
   };
-  function attachPlugin(editor: Editor) {
+  function attachPlugin(editor: Editor, type?: number) {
     setCurEditor(editor);
+    setAttachType(type || undefined);
     setAttachVisible(true);
   }
 
@@ -193,7 +196,7 @@ const NewAiEditor: React.FC<NewAiEditorProps> = forwardRef((props, ref) => {
 
   const handleSelectVideo = () => {
     if (curEditor) {
-      attachPlugin(curEditor);
+      attachPlugin(curEditor, 2); // Assuming 2 represents the video type
     }
   };
 
@@ -786,6 +789,7 @@ const NewAiEditor: React.FC<NewAiEditorProps> = forwardRef((props, ref) => {
           open={attachVisible}
           onCancel={() => setAttachVisible(false)}
           onSelect={handleSelectAttachment}
+          type={attachType}
           multiple={true}
           manual={true}
         />

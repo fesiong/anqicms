@@ -584,6 +584,9 @@ func InitWebsite(mw *model.Website) {
 		if notifyWorkerOnInit.Load() {
 			startNotifyWorkerOnInit(&w)
 		}
+		if videoWorkerOnInit.Load() {
+			startVideoWorkerOnInit(&w)
+		}
 		w.NewMailService()
 		// 初始化索引,异步处理
 		go w.InitFulltext(false)
@@ -597,6 +600,7 @@ func InitWebsite(mw *model.Website) {
 		// 否则它会继续用旧的 DB 句柄续租、重连。
 		w.StopChannelManager()
 		w.StopNotifyWorker()
+		w.StopVideoWorker()
 	}
 	// 到这里 limiter/cache/rewrite 都建好了，才允许对外服务。
 	// 在"逐站点放行"之前，这段窗口被全局闸门挡着看不出来；现在挡不住了，
@@ -961,6 +965,7 @@ func RemoveWebsite(siteId uint, removeFile bool) {
 	if stopped := GetWebsite(siteId); stopped != nil {
 		stopped.StopChannelManager()
 		stopped.StopNotifyWorker()
+		stopped.StopVideoWorker()
 	}
 	websites.Delete(siteId)
 	unmarkSiteServable(siteId)

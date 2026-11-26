@@ -116,6 +116,14 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 			setting.Post("/ai", manageController.SettingAiForm)
 			setting.Post("/system", manageController.SettingSystemForm)
 			setting.Post("/content", manageController.SettingContentForm)
+			video := setting.Party("/video", middleware.AdminPermissionRequired)
+			{
+				video.Get("/ffmpeg", manageController.SettingVideoFFmpeg)
+				video.Post("/ffmpeg/install", middleware.AdminSuperRequired, manageController.SettingVideoFFmpegInstall)
+				video.Get("/tasks", manageController.SettingVideoTaskList)
+				video.Post("/tasks/retry", manageController.SettingVideoTaskRetry)
+				video.Post("/tasks/historical", manageController.SettingVideoTaskHistorical)
+			}
 			setting.Post("/thumb/rebuild", manageController.SettingThumbRebuild)
 			setting.Post("/index", manageController.SettingIndexForm)
 			setting.Post("/nav", manageController.SettingNavForm)

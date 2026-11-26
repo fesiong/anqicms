@@ -28,6 +28,7 @@ var DefaultMenuGroups = []*MenuGroup{
 				Path:     "/setting/content",
 				GroupKey: "setting",
 				Name:     "内容设置",
+				Backend:  "/setting/content",
 			},
 			{
 				Path:     "/setting/safe",

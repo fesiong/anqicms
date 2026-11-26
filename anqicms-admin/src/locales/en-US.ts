@@ -13,6 +13,7 @@ import setting from './en-US/setting';
 import statistic from './en-US/statistic';
 import tool from './en-US/tool';
 import website from './en-US/website';
+import video from './en-US/video';
 import { brandizeMessages } from '../oem/brandize';
 
 export default brandizeMessages({
@@ -25,6 +26,7 @@ export default brandizeMessages({
   ...dashboard,
   ...tool,
   ...website,
+  ...video,
   ...account,
   ...ai,
   ...statistic,

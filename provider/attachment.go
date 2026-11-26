@@ -27,6 +27,8 @@ import (
 	"time"
 
 	"golang.org/x/image/tiff"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/h2non/filetype"
 	"github.com/parnurzeal/gorequest"
@@ -41,7 +43,6 @@ import (
 var imageMagickPath string
 var webpPath string
 var pngquantPath string
-var ffmpegPath string
 
 // allowedAttachmentExt 附件上传的扩展名白名单（含前导点、全小写）。
 //
@@ -120,7 +121,8 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	}
 
 	var attachment *model.Attachment
-	if attachId > 0 {
+	isReplacement := attachId > 0
+	if isReplacement {
 		attachment, err = w.GetAttachmentById(attachId)
 		if err != nil {
 			return nil, errors.New(w.Tr("TheImageResourceToBeReplacedDoesNotExist"))
@@ -139,13 +141,16 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	}
 	_, _ = file.Seek(0, 0)
 	md5Str := hex.EncodeToString(md5hash.Sum(nil))
+	contentChanged := attachment != nil && attachment.FileMd5 != md5Str
 	exists, _ := w.GetAttachmentByMd5(md5Str)
 	if attachment != nil {
 		if exists != nil && attachment.Id != exists.Id {
 			return nil, errors.New(w.Tr("ReplacementFailedCurrentlyUploadedResourcesAlreadyExist"))
 		}
 		fileName = attachment.FileName
-		fileExt = filepath.Ext(attachment.FileLocation)
+		if !isReplacement || attachment.IsImage != 2 {
+			fileExt = filepath.Ext(attachment.FileLocation)
+		}
 		attachId = attachment.Id
 	} else if exists != nil {
 		attachment = exists
@@ -153,6 +158,10 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 		// 如果更换了分类
 		if categoryId > 0 && attachment.CategoryId != categoryId {
 			db.Model(attachment).UpdateColumn("category_id", categoryId)
+		}
+		if attachment.IsImage == 2 && attachment.VideoTask != nil &&
+			attachment.VideoTask.Status == model.VideoTaskStatusSuccess && attachment.PlayURL != "" {
+			return attachment, nil
 		}
 		fileName = attachment.FileName
 		fileExt = filepath.Ext(attachment.FileLocation)
@@ -173,7 +182,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 		tmpName = tmpName + fileExt
 	}
 	filePath := time.Now().Format("uploads/200601/02/")
-	if attachId > 0 {
+	if attachId > 0 && (!isReplacement || isImage != 2) {
 		filePath = filepath.Dir(attachment.FileLocation) + "/"
 		tmpName = filepath.Base(attachment.FileLocation)
 	}
@@ -183,111 +192,49 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	// avif 暂时不支持处理，因此直接保存
 	if isImage != 1 || fileExt == ".avif" {
 		fileSize = info.Size
-		_, _ = file.Seek(0, 0)
-		_, err = w.UploadFile(filePath+tmpName, file)
-		if err != nil {
-			return nil, err
-		}
-		// 处理视频，对视频进行提取缩略图处理，并保存到 logo 字段中
-		var logoPath string
-		// 检查是否为视频文件
-		videoExts := map[string]bool{
-			".mp4":  true,
-			".avi":  true,
-			".mov":  true,
-			".wmv":  true,
-			".flv":  true,
-			".mkv":  true,
-			".webm": true,
-		}
-		if videoExts[fileExt] {
+		if isVideoFileExt(fileExt) {
 			isImage = 2
-			// 获取 ffmpeg 路径
-			ffmpegPath, err := getFfmpegPath()
-			if err == nil {
-				// 生成视频封面文件名
-				posterName := strings.TrimSuffix(tmpName, fileExt) + "_poster.jpg"
-				posterPath := filePath + posterName
-
-				// 处理不同存储类型的视频源
-				var videoInputPath string
-				var tmpVideoFile *os.File
-				var err error
-
-				if w.PluginStorage.StorageType != config.StorageTypeLocal && w.PluginStorage.KeepLocal == false {
-					// 存储不在本地且不保留本地副本，需要临时保存视频文件
-					tmpVideoFile, err = os.CreateTemp("", "video_*.tmp")
-					if err != nil {
-						fmt.Printf("Failed to create temp video file: %v\n", err)
-						// 继续执行，不影响视频上传
-					} else {
-						defer func() {
-							_ = tmpVideoFile.Close()
-							_ = os.Remove(tmpVideoFile.Name())
-						}()
-
-						// 重置文件指针到开头
-						if seeker, ok := file.(io.Seeker); ok {
-							_, _ = seeker.Seek(0, io.SeekStart)
-						}
-
-						// 复制文件内容到临时文件
-						_, err = io.Copy(tmpVideoFile, file)
-						if err != nil {
-							fmt.Printf("Failed to copy video to temp file: %v\n", err)
-							// 继续执行，不影响视频上传
-						} else {
-							// 重置临时文件指针到开头
-							_, _ = tmpVideoFile.Seek(0, io.SeekStart)
-							videoInputPath = tmpVideoFile.Name()
-						}
-					}
-				} else {
-					// 存储在本地或保留本地副本
-					videoInputPath = w.PublicPath + filePath + tmpName
+		}
+		// 视频封面和转码交给异步任务，上传请求不等待 ffmpeg。
+		logoPath := ""
+		expectedMD5 := ""
+		expectedLocation := ""
+		var existingAttachment *model.Attachment
+		if attachment != nil {
+			existingAttachment = attachment
+			expectedMD5 = attachment.FileMd5
+			expectedLocation = attachment.FileLocation
+		}
+		attachment = &model.Attachment{
+			UserId:       userId,
+			FileName:     fileName,
+			FileLocation: filePath + tmpName,
+			FileSize:     fileSize,
+			FileMd5:      md5Str,
+			CategoryId:   categoryId,
+			IsImage:      isImage,
+			Status:       1,
+			Logo:         logoPath,
+		}
+		attachment.Id = attachId
+		replacementHandled := false
+		if isImage == 2 && attachId > 0 {
+			if contentChanged {
+				if err := w.replaceVideoAttachment(attachment, expectedLocation, file, expectedMD5); err != nil {
+					return nil, err
 				}
-
-				if videoInputPath != "" {
-					// 构建 ffmpeg 命令：在第 1 秒提取一帧作为封面图
-					tmpPosterPath := w.PublicPath + posterPath
-					// 确保目录存在
-					_ = os.MkdirAll(filepath.Dir(tmpPosterPath), 0755)
-
-					cmd := exec.Command(ffmpegPath, "-i", videoInputPath, "-ss", "00:00:01", "-vframes", "1", "-y", tmpPosterPath)
-					var stderr bytes.Buffer
-					cmd.Stderr = &stderr
-					if err := cmd.Run(); err != nil {
-						// 提取封面图失败，记录错误但不影响视频上传
-						fmt.Printf("Failed to extract poster: %v, %s\n", err, stderr.String())
-					} else {
-						// 封面图提取成功
-						// 如果存储不在本地，需要上传封面图
-						if w.PluginStorage.StorageType != config.StorageTypeLocal {
-							posterFile, err := os.Open(tmpPosterPath)
-							if err == nil {
-								defer func() {
-									_ = posterFile.Close()
-								}()
-								_, err = w.UploadFile(posterPath, posterFile)
-								if err != nil {
-									fmt.Printf("Failed to upload poster: %v\n", err)
-									// 继续执行，不影响视频上传
-								} else {
-									logoPath = posterPath
-								}
-							} else {
-								fmt.Printf("Failed to open poster file: %v\n", err)
-							}
-						} else {
-							logoPath = posterPath
-						}
-
-						// 对封面图片生成缩略图
-						w.BuildThumb(posterPath)
-					}
-				}
+			} else {
+				attachment = existingAttachment
 			}
-		} else if fileExt == ".avif" {
+			replacementHandled = true
+		} else {
+			_, _ = file.Seek(0, 0)
+			_, err = w.UploadFile(filePath+tmpName, file)
+			if err != nil {
+				return nil, err
+			}
+		}
+		if fileExt == ".avif" {
 			// 尝试使用 ImageMagick 处理 avif 文件
 			iMPath, _ := getImageMagickPath()
 			var buf []byte
@@ -319,20 +266,32 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 		}
 
 		//文件上传完成
-		attachment = &model.Attachment{
-			UserId:       userId,
-			FileName:     fileName,
-			FileLocation: filePath + tmpName,
-			FileSize:     fileSize,
-			FileMd5:      md5Str,
-			CategoryId:   categoryId,
-			IsImage:      isImage,
-			Status:       1,
-			Logo:         logoPath,
+		if !replacementHandled {
+			if err := attachment.Save(w.DB); err != nil {
+				return nil, err
+			}
+			if contentChanged {
+				if err := db.Model(attachment).UpdateColumn("logo", "").Error; err != nil {
+					return nil, err
+				}
+			}
 		}
-		attachment.Id = attachId
-		_ = attachment.Save(w.DB)
 		attachment.GetThumb(w.PluginStorage.StorageUrl)
+		if isImage == 2 {
+			videoConfig := config.DefaultVideoProcessingConfig()
+			if w.Content != nil {
+				videoConfig = w.Content.Video
+			}
+			task, taskErr := w.EnqueueVideoTask(attachment, videoConfig, contentChanged)
+			if taskErr != nil {
+				log.Printf("[video] 站点 %d 的附件 #%d 上传成功但任务入队失败：%s", w.Id, attachment.Id, taskErr)
+			} else if task != nil {
+				attachment.VideoTask = task
+				if task.Playlist != nil {
+					attachment.PlayURL = task.Playlist.DefaultURL
+				}
+			}
+		}
 
 		return attachment, nil
 	}
@@ -603,6 +562,7 @@ func (w *Website) GetAttachmentByMd5(md5 string) (*model.Attachment, error) {
 	}
 
 	attach.GetThumb(w.PluginStorage.StorageUrl)
+	_ = w.attachVideoTasks([]*model.Attachment{&attach})
 
 	return &attach, nil
 }
@@ -627,6 +587,7 @@ func (w *Website) GetAttachmentByFileLocation(fileLocation string) (*model.Attac
 	}
 
 	attach.GetThumb(w.PluginStorage.StorageUrl)
+	_ = w.attachVideoTasks([]*model.Attachment{&attach})
 
 	return &attach, nil
 }
@@ -640,31 +601,196 @@ func (w *Website) GetAttachmentById(id uint) (*model.Attachment, error) {
 	}
 
 	attach.GetThumb(w.PluginStorage.StorageUrl)
+	_ = w.attachVideoTasks([]*model.Attachment{&attach})
 
 	return &attach, nil
 }
 
-func (w *Website) DeleteAttachment(attach *model.Attachment) error {
-	// 删除文件
-	_ = w.DeleteFile(attach.FileLocation)
-	// 删除thumb
-	if attach.IsImage == 1 {
-		paths, fileName := filepath.Split(attach.FileLocation)
-		thumb := paths + "thumb_" + fileName
-		_ = w.DeleteFile(thumb)
+func (w *Website) replaceVideoAttachment(
+	replacement *model.Attachment,
+	location string,
+	file multipart.File,
+	expectedMD5 string,
+) error {
+	var originalLocation, replacementLocation string
+	cleanupLocations := make([]string, 0)
+	uploaded := false
+	commitAttempted := false
+	err := w.DB.Transaction(func(tx *gorm.DB) error {
+		var current model.Attachment
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("`id` = ?", replacement.Id).First(&current).Error; err != nil {
+			return err
+		}
+		if current.FileMd5 != expectedMD5 || current.FileLocation != location {
+			return fmt.Errorf("video attachment %d changed during replacement", replacement.Id)
+		}
+		var active int64
+		if err := tx.Model(&model.VideoTask{}).
+			Where("`attachment_id` = ? AND `status` IN ?", current.Id,
+				[]int{model.VideoTaskStatusPending, model.VideoTaskStatusProcessing}).Count(&active).Error; err != nil {
+			return err
+		}
+		if active > 0 {
+			return fmt.Errorf("video attachment %d is being processed", current.Id)
+		}
+		tasks := make([]*model.VideoTask, 0)
+		if err := tx.Where("`attachment_id` = ?", current.Id).Find(&tasks).Error; err != nil {
+			return err
+		}
+		var err error
+		originalLocation, err = safeVideoStorageLocation(current.FileLocation)
+		if err != nil {
+			return err
+		}
+		cleanupLocations = append(cleanupLocations, originalLocation)
+		for _, task := range tasks {
+			cleanupLocations = append(cleanupLocations,
+				videoTaskArtifactLocations(w.Id, task, current.FileLocation, w.PluginStorage.StorageUrl)...)
+		}
+		desiredLocation, err := safeVideoStorageLocation(replacement.FileLocation)
+		if err != nil {
+			return err
+		}
+		fileExt := strings.ToLower(filepath.Ext(desiredLocation))
+		if !isVideoFileExt(fileExt) {
+			return fmt.Errorf("replacement video attachment %d has invalid extension %q", replacement.Id, fileExt)
+		}
+		token, err := newVideoArtifactToken()
+		if err != nil {
+			return err
+		}
+		replacementLocation = path.Join(
+			path.Dir(desiredLocation),
+			"source_"+token+fileExt,
+		)
+		if _, err := file.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
+		if _, err := w.UploadFile(replacementLocation, file); err != nil {
+			return err
+		}
+		uploaded = true
+		replacement.FileLocation = replacementLocation
+		if err := replacement.Save(tx); err != nil {
+			return err
+		}
+		if err := tx.Model(replacement).UpdateColumn("logo", "").Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&model.VideoTask{}).Where("`attachment_id` = ?", current.Id).
+			Updates(map[string]any{
+				"status":        model.VideoTaskStatusCancelled,
+				"progress":      0,
+				"error_msg":     "源视频已替换",
+				"playlist":      "",
+				"artifacts":     "[]",
+				"finished_at":   time.Now().Unix(),
+				"next_retry_at": 0,
+				"lease_until":   0,
+				"lease_owner":   "",
+			}).Error; err != nil {
+			return err
+		}
+		commitAttempted = true
+		return nil
+	})
+	if err != nil {
+		if !uploaded {
+			return err
+		}
+		var current model.Attachment
+		lookupErr := w.DB.Where("`id` = ?", replacement.Id).First(&current).Error
+		if lookupErr != nil {
+			return errors.Join(err, fmt.Errorf("verify replacement video commit: %w", lookupErr))
+		}
+		if current.FileLocation == replacementLocation && current.FileMd5 == replacement.FileMd5 {
+			log.Printf("视频附件 %d 提交结果未知，回查确认已保存，继续清理旧文件", replacement.Id)
+		} else if !commitAttempted && current.FileLocation == location && current.FileMd5 == expectedMD5 {
+			if cleanupErr := w.DeleteFile(replacementLocation); cleanupErr != nil {
+				return errors.Join(err, fmt.Errorf("cleanup replacement video %s: %w", replacementLocation, cleanupErr))
+			}
+			return err
+		} else {
+			return errors.Join(err, fmt.Errorf("replacement video %d commit could not be verified", replacement.Id))
+		}
 	}
-	// 删除poster
-	logo := strings.TrimPrefix(attach.Logo, w.PluginStorage.StorageUrl)
-	logo = strings.TrimPrefix(logo, "/")
-	if logo != "" && logo != attach.FileLocation {
-		_ = w.DeleteFile(logo)
-		// 删除thumb
-		paths, fileName := filepath.Split(logo)
-		thumb := paths + "thumb_" + fileName
-		_ = w.DeleteFile(thumb)
+	if err := w.DeleteFile(originalLocation); err != nil {
+		log.Printf("视频附件 %d 已替换，但删除原文件 %s 失败：%s", replacement.Id, originalLocation, err)
+	}
+	for _, location := range uniqueVideoLocations(cleanupLocations) {
+		if location == originalLocation {
+			continue
+		}
+		if err := w.DeleteFile(location); err != nil {
+			log.Printf("视频附件 %d 已替换，但删除旧制品 %s 失败：%s", replacement.Id, location, err)
+		}
+	}
+	return nil
+}
+
+func (w *Website) DeleteAttachment(attach *model.Attachment) error {
+	if attach == nil {
+		return fmt.Errorf("attachment is empty")
+	}
+	tasks := make([]*model.VideoTask, 0)
+	err := w.DB.Transaction(func(tx *gorm.DB) error {
+		var current model.Attachment
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("`id` = ?", attach.Id).First(&current).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("`attachment_id` = ?", current.Id).Find(&tasks).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&model.VideoTask{}).
+			Where("`attachment_id` = ? AND `status` IN ?", current.Id,
+				[]int{model.VideoTaskStatusPending, model.VideoTaskStatusProcessing}).
+			UpdateColumn("status", model.VideoTaskStatusCancelled).Error; err != nil {
+			return err
+		}
+		if err := tx.Unscoped().Where("`attachment_id` = ?", current.Id).Delete(&model.VideoTask{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Unscoped().Delete(&current).Error; err != nil {
+			return err
+		}
+		attach = &current
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
-	return w.DB.Unscoped().Delete(&attach).Error
+	var cleanupErr error
+	deleteFile := func(location string) {
+		cleaned, err := safeVideoStorageLocation(location)
+		if err != nil {
+			cleanupErr = errors.Join(cleanupErr, err)
+			return
+		}
+		if err := w.DeleteFile(cleaned); err != nil {
+			cleanupErr = errors.Join(cleanupErr, err)
+		}
+	}
+	for _, task := range tasks {
+		for _, location := range videoTaskArtifactLocations(w.Id, task, attach.FileLocation, w.PluginStorage.StorageUrl) {
+			deleteFile(location)
+		}
+	}
+	deleteFile(attach.FileLocation)
+	if attach.IsImage == 1 {
+		paths, fileName := filepath.Split(attach.FileLocation)
+		deleteFile(paths + "thumb_" + fileName)
+	}
+	logo := strings.TrimPrefix(attach.Logo, strings.TrimRight(w.PluginStorage.StorageUrl, "/")+"/")
+	logo = strings.TrimPrefix(logo, "/")
+	if logo != "" && logo != attach.FileLocation {
+		deleteFile(logo)
+		paths, fileName := filepath.Split(logo)
+		deleteFile(paths + "thumb_" + fileName)
+	}
+	return cleanupErr
 }
 
 func (w *Website) GetAttachmentList(categoryId uint, q string, isImage int, currentPage int, pageSize int) ([]*model.Attachment, int64, error) {
@@ -689,6 +815,7 @@ func (w *Website) GetAttachmentList(categoryId uint, q string, isImage int, curr
 	for i := range attachments {
 		attachments[i].GetThumb(w.PluginStorage.StorageUrl)
 	}
+	_ = w.attachVideoTasks(attachments)
 
 	return attachments, total, nil
 }
@@ -1403,24 +1530,4 @@ func getWebpPath() (string, error) {
 	}
 	webpPath = binPath
 	return webpPath, nil
-}
-
-func getFfmpegPath() (string, error) {
-	if ffmpegPath != "" {
-		return ffmpegPath, nil
-	}
-	// 尝试查找系统安装的 ffmpeg
-	binPath, err := exec.LookPath("ffmpeg")
-	if err != nil {
-		return "", fmt.Errorf("ffmpeg not found: %w", err)
-	}
-	// 验证 ffmpeg 是否可用
-	var stderr bytes.Buffer
-	cmd := exec.Command(binPath, "-version")
-	cmd.Stderr = &stderr
-	if err = cmd.Run(); err != nil {
-		return "", fmt.Errorf("ffmpeg not usable: %w, %s", err, stderr.String())
-	}
-	ffmpegPath = binPath
-	return ffmpegPath, nil
 }

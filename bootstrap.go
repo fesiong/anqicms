@@ -70,6 +70,7 @@ func (bootstrap *Bootstrap) Serve() {
 	// 通知投递工作者同理：默认不随站点初始化启动（测试/工具不发通知），
 	// 进程入口显式打开，且必须在 InitWebsites 之前。
 	provider.EnableNotifyWorkerOnInit()
+	provider.EnableVideoWorkerOnInit()
 
 	// 顺序：装路由/i18n/模板 → 开端口 → 后台做站点初始化（含库表迁移）。
 	//

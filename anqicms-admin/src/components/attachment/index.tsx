@@ -9,6 +9,7 @@ export type AttachmentProps = {
   onCancel?: (row?: any) => void;
   open?: boolean;
   manual?: boolean;
+  type?: number | undefined;
   multiple?: boolean;
   children?: React.ReactNode;
 };
@@ -65,6 +66,7 @@ const AttachmentSelect: React.FC<AttachmentProps> = (props) => {
       >
         <AttachmentContent
           multiple={props.multiple}
+          type={props.type}
           onSelect={(e: any) => {
             setDetail(e);
           }}

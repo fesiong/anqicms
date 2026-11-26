@@ -150,6 +150,7 @@ func AutoMigrateDB(db *gorm.DB, force bool) error {
 			&model.AdminLoginLog{},
 			&model.AdminLog{},
 			&model.Attachment{},
+			&model.VideoTask{},
 			&model.Category{},
 			&model.Nav{},
 			&model.NavType{},
@@ -255,6 +256,9 @@ func AutoMigrateDB(db *gorm.DB, force bool) error {
 			// 短信验证码状态机与发送流水
 			&model.SmsCode{},
 			&model.SmsLog{},
+		}
+		if err := migrateVideoTaskTimeColumns(db); err != nil {
+			return fmt.Errorf("convert video_tasks timestamps: %w", err)
 		}
 		// 迁移前先把 `type:varchar(32) not null` 这类写法规范化。全仓 752 列把
 		// 非空写进了类型字符串，gorm 因此认为模型可空、库列非空，每次迁移都会为

@@ -158,6 +158,12 @@ func MigrateSiteSchema(siteID uint, siteName string, db *gorm.DB) error {
 			"siteId", siteID, "name", siteName, "reason", err)
 	}
 	if !pending {
+		if err := ensureVideoTaskTable(db); err != nil {
+			atomic.AddInt64(&migrateRoundFailed, 1)
+			slog.Error("站点补建视频任务表失败，该站点将以未初始化状态运行",
+				"siteId", siteID, "name", siteName, "reason", err)
+			return err
+		}
 		atomic.AddInt64(&migrateRoundSkipped, 1)
 		return nil
 	}
@@ -186,6 +192,205 @@ func MigrateSiteSchema(siteID uint, siteName string, db *gorm.DB) error {
 		done, total, siteID, siteName, displayVersion(lastVersion), config.Version,
 		time.Since(started).Round(time.Second))
 	return nil
+}
+
+func ensureVideoTaskTable(db *gorm.DB) error {
+	if db == nil {
+		return nil
+	}
+	complete, err := videoTaskSchemaStatus(db)
+	if err != nil {
+		return err
+	}
+	if complete {
+		return nil
+	}
+	release := migrateSlot()
+	defer release()
+	complete, err = videoTaskSchemaStatus(db)
+	if err != nil {
+		return err
+	}
+	if complete {
+		return nil
+	}
+	if err := migrateVideoTaskTimeColumns(db); err != nil {
+		return fmt.Errorf("convert video_tasks timestamps: %w", err)
+	}
+	complete, err = videoTaskSchemaStatus(db)
+	if err != nil {
+		return err
+	}
+	if complete {
+		return nil
+	}
+	if err := db.AutoMigrate(&model.VideoTask{}); err != nil {
+		return fmt.Errorf("create or repair video_tasks: %w", err)
+	}
+	return nil
+}
+
+var videoTaskTimeColumns = []string{
+	"created_time", "updated_time", "next_retry_at", "started_at", "finished_at", "lease_until",
+}
+
+func videoTaskSchemaComplete(db *gorm.DB) bool {
+	complete, _ := videoTaskSchemaStatus(db)
+	return complete
+}
+
+func videoTaskSchemaStatus(db *gorm.DB) (bool, error) {
+	if db == nil || !db.Migrator().HasTable(&model.VideoTask{}) {
+		return false, nil
+	}
+	for _, column := range []string{
+		"id", "created_time", "updated_time", "attachment_id", "status", "progress",
+		"attempts", "error_msg", "config", "playlist", "artifacts", "next_retry_at",
+		"started_at", "finished_at", "lease_until", "lease_owner",
+	} {
+		if !db.Migrator().HasColumn(&model.VideoTask{}, column) {
+			return false, nil
+		}
+	}
+	var columns []struct {
+		ColumnName string `gorm:"column:column_name"`
+		DataType   string `gorm:"column:data_type"`
+	}
+	if err := db.Raw(
+		"SELECT COLUMN_NAME, DATA_TYPE FROM information_schema.COLUMNS "+
+			"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME IN ?",
+		"video_tasks", videoTaskTimeColumns,
+	).Scan(&columns).Error; err != nil {
+		return false, fmt.Errorf("inspect video_tasks timestamp columns: %w", err)
+	}
+	types := make(map[string]string, len(columns))
+	for _, column := range columns {
+		types[column.ColumnName] = column.DataType
+	}
+	for _, column := range videoTaskTimeColumns {
+		if !strings.EqualFold(types[column], "bigint") {
+			return false, nil
+		}
+	}
+	for _, index := range []string{"idx_attachment_status", "idx_status_retry", "idx_created_time"} {
+		if !db.Migrator().HasIndex(&model.VideoTask{}, index) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func migrateVideoTaskTimeColumns(db *gorm.DB) error {
+	if db == nil || !db.Migrator().HasTable(&model.VideoTask{}) {
+		return nil
+	}
+	var columns []struct {
+		ColumnName string `gorm:"column:column_name"`
+		DataType   string `gorm:"column:data_type"`
+	}
+	if err := db.Raw(
+		"SELECT COLUMN_NAME, DATA_TYPE FROM information_schema.COLUMNS "+
+			"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME IN ?",
+		"video_tasks", videoTaskTimeColumns,
+	).Scan(&columns).Error; err != nil {
+		return err
+	}
+	types := make(map[string]string, len(columns))
+	for _, column := range columns {
+		types[column.ColumnName] = column.DataType
+	}
+	legacy := make([]string, 0, len(videoTaskTimeColumns))
+	for _, column := range videoTaskTimeColumns {
+		dataType, exists := types[column]
+		if exists && !strings.EqualFold(dataType, "bigint") {
+			legacy = append(legacy, column)
+		}
+	}
+	if len(legacy) == 0 {
+		return nil
+	}
+	for _, column := range legacy {
+		staging := column + "_unix"
+		if db.Migrator().HasColumn(&model.VideoTask{}, staging) {
+			continue
+		}
+		if err := db.Exec(fmt.Sprintf(
+			"ALTER TABLE `video_tasks` ADD COLUMN `%s` BIGINT NOT NULL DEFAULT 0", staging,
+		)).Error; err != nil {
+			return err
+		}
+	}
+	for _, column := range legacy {
+		if err := backfillVideoTaskUnixColumn(db, column); err != nil {
+			return err
+		}
+	}
+	changes := make([]string, 0, len(legacy)*2+2)
+	dropRetryIndex := false
+	dropCreatedIndex := false
+	for _, column := range legacy {
+		if column == "next_retry_at" || column == "lease_until" {
+			dropRetryIndex = true
+		}
+		if column == "created_time" {
+			dropCreatedIndex = true
+		}
+	}
+	if dropRetryIndex && db.Migrator().HasIndex(&model.VideoTask{}, "idx_status_retry") {
+		changes = append(changes, "DROP INDEX `idx_status_retry`")
+	}
+	if dropCreatedIndex && db.Migrator().HasIndex(&model.VideoTask{}, "idx_created_time") {
+		changes = append(changes, "DROP INDEX `idx_created_time`")
+	}
+	for _, column := range legacy {
+		changes = append(changes,
+			fmt.Sprintf("DROP COLUMN `%s`", column),
+			fmt.Sprintf("CHANGE COLUMN `%s_unix` `%s` BIGINT NOT NULL DEFAULT 0", column, column),
+		)
+	}
+	if err := db.Exec("ALTER TABLE `video_tasks` " + strings.Join(changes, ", ")).Error; err != nil {
+		return err
+	}
+	return nil
+}
+
+func backfillVideoTaskUnixColumn(db *gorm.DB, column string) error {
+	const batchSize = 500
+	var lastID uint64
+	for {
+		var rows []struct {
+			ID    uint64
+			Value *time.Time
+		}
+		// DATETIME 历来由 loc=Local 扫描，必须在 Go 侧取 Unix，不能依赖 MySQL 会话时区。
+		if err := db.Raw(
+			fmt.Sprintf("SELECT id, `%s` AS value FROM `video_tasks` WHERE id > ? ORDER BY id LIMIT ?", column),
+			lastID,
+			batchSize,
+		).Scan(&rows).Error; err != nil {
+			return err
+		}
+		if len(rows) == 0 {
+			return nil
+		}
+		for _, row := range rows {
+			var timestamp int64
+			if row.Value != nil && !row.Value.IsZero() {
+				timestamp = row.Value.Unix()
+			}
+			if err := db.Exec(
+				fmt.Sprintf("UPDATE `video_tasks` SET `%s_unix` = ? WHERE id = ?", column),
+				timestamp,
+				row.ID,
+			).Error; err != nil {
+				return err
+			}
+			lastID = row.ID
+		}
+		if len(rows) < batchSize {
+			return nil
+		}
+	}
 }
 
 // MigrateRoundSummary 返回本轮进度的可读摘要，供启动收尾与离线迁移打印。

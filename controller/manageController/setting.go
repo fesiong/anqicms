@@ -269,6 +269,8 @@ func SettingContentForm(ctx iris.Context) {
 	currentSite.Content.Editor = req.Editor
 	currentSite.Content.MaxPage = req.MaxPage
 	currentSite.Content.MaxLimit = req.MaxLimit
+	req.Video.Normalize()
+	currentSite.Content.Video = req.Video
 
 	err = currentSite.SaveSettingValue(provider.ContentSettingKey, currentSite.Content)
 	if err != nil {

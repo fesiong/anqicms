@@ -28,6 +28,7 @@ import (
 var noJSONResponseHandlers = map[string]string{
 	"AiChat":                      "SSE 流式响应：ctx.ContentType + ctx.ResponseWriter 持续写流",
 	"AiAgentChat":                 "SSE 流式响应：同上",
+	"SettingVideoFFmpegInstall":   "SSE 流式响应：安装阶段和错误均通过 event/data 帧返回",
 	"GetQuickImportExcelTemplate": "直接回写 xlsx 文件流（ctx.ResponseWriter）",
 	"AdminFileServ":               "静态文件服务：ctx.ServeFile 回写文件，失败时才用 JSON 报错",
 	"DownloadDesignInfo":          "直接回写模板压缩包（ctx.ResponseWriter）",

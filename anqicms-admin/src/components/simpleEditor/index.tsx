@@ -32,6 +32,7 @@ import {
 } from 'react';
 import AiEditorOverlay from '../aiEditorOverlay';
 import Attachment from '../attachment/dialog';
+import { buildAttachmentVideoHtml } from '../newAiEditor/mediaHtml';
 import './index.less';
 
 export type SimpleEditorProps = {
@@ -66,9 +67,10 @@ const buildEmbedHtml = (item: any) => {
     // img
     return `<div class="content-image"><img src="${path}" alt="${name}" /></div>`;
   } else if (item.is_image === 2 || VIDEO_EXT.includes(ext)) {
-    return `<video controls="controls" controlslist="nodownload" poster="${escapeAttr(
-      item.logo,
-    )}"><source src="${path}" type="video/${ext}">您的浏览器不支持 video 标签。</video>`;
+    return (
+      buildAttachmentVideoHtml(item) ||
+      `<video controls="controls" controlslist="nodownload"><source src="${path}" type="video/${ext}">您的浏览器不支持 video 标签。</video>`
+    );
   } else if (AUDIO_EXT.includes(ext)) {
     return `<audio src="${path}" controls="controls"><source src="${path}" type="audio/${ext}">你的编辑器不支持 audio 标签</audio>`;
   } else {
