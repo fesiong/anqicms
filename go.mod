@@ -18,6 +18,7 @@ require (
 	github.com/getlantern/systray v1.2.2
 	github.com/go-pay/gopay v1.5.123
 	github.com/go-pay/xlog v0.0.3
+	github.com/go-sql-driver/mysql v1.9.3
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/gomarkdown/markdown v0.0.0-20261109103609-13f93121d67a
@@ -29,14 +30,15 @@ require (
 	github.com/jinzhu/now v1.1.5
 	github.com/jlaffaye/ftp v0.2.4
 	github.com/kataras/iris/v12 v12.2.11
+	github.com/larksuite/oapi-sdk-go/v3 v3.12.2
 	github.com/lib/pq v1.12.3
-	github.com/matm/go-nowpayments v1.0.4
 	github.com/medivhzhan/weapp/v3 v3.8.4
 	github.com/meilisearch/meilisearch-go v0.36.3
 	github.com/melbahja/goph v1.5.2
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/mojocn/base64Captcha v1.3.8
 	github.com/mozillazg/go-pinyin v0.21.0
+	github.com/open-dingtalk/dingtalk-stream-sdk-go v0.9.0
 	github.com/parnurzeal/gorequest v0.2.17
 	github.com/pkg/sftp v1.13.12
 	github.com/qiniu/go-sdk/v7 v7.30.0
@@ -98,7 +100,6 @@ require (
 	github.com/evanphx/json-patch v0.5.2 // indirect
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/flosch/pongo2/v4 v4.0.2 // indirect
-	github.com/gammazero/toposort v0.1.1 // indirect
 	github.com/getlantern/context v0.0.0-20190109183933-c447772a6520 // indirect
 	github.com/getlantern/errors v0.0.0-20190325191628-abdb3e3e36f7 // indirect
 	github.com/getlantern/golog v0.0.0-20190830074920-4ef2e798c2d7 // indirect
@@ -109,9 +110,9 @@ require (
 	github.com/go-pay/crypto v0.0.3 // indirect
 	github.com/go-pay/util v0.0.4 // indirect
 	github.com/go-pay/xtime v0.0.2 // indirect
-	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
+	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
@@ -120,8 +121,6 @@ require (
 	github.com/googleapis/gax-go/v2 v2.0.5 // indirect
 	github.com/goph/emperror v0.17.2 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
-	github.com/hashicorp/errwrap v1.1.0 // indirect
-	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/huichen/murmur v0.0.0-20130808212358-e0489551cf51 // indirect
 	github.com/iris-contrib/schema v0.0.6 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
@@ -145,7 +144,6 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
-	github.com/moul/http2curl v1.0.0 // indirect
 	github.com/mozillazg/go-httpheader v0.4.0 // indirect
 	github.com/nikolalohinski/gonja v1.5.3 // indirect
 	github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c // indirect
@@ -158,7 +156,6 @@ require (
 	github.com/richardlehane/mscfb v1.0.9 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
-	github.com/rotisserie/eris v0.5.4 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/schollz/closestmatch v2.1.0+incompatible // indirect
 	github.com/segmentio/asm v1.1.3 // indirect

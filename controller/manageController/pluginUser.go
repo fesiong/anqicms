@@ -411,6 +411,9 @@ func PluginUserGroupDetail(ctx iris.Context) {
 		})
 		return
 	}
+	// GetUserGroupInfo 不带授权栏目（它在 ParseUserToken 的热路径上），
+	// 详情接口需要回显，单独补一次查询。
+	currentSite.AttachUserGroupPublishCategories(group)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

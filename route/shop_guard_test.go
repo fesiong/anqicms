@@ -51,6 +51,8 @@ var expectedShopGuardRoutes = map[string]bool{
 	"POST /review/publish":             true,
 	"POST /review/praise":              true,
 	"POST /stripe/pay":                 true, // 注册于 notify Party，实际完整路径 /notify/stripe/pay
+	"POST /xunhupay/pay":               true, // 同上，/notify/xunhupay/pay
+	"POST /nowpayment/pay":             true, // 同上，/notify/nowpayment/pay
 }
 
 // TestShopGuardRoutesLocked 解析 route/base.go，收集所有挂了 ShopModeGuard 的路由，

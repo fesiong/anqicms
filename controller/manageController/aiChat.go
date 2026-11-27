@@ -158,7 +158,7 @@ func AiChat(ctx iris.Context) {
 					defaultSite.SaveSettingValue(provider.AiSettingKey, aiSetting)
 				}
 			} else {
-				sendSSEWarning(writer, "请先绑定安企账号，后开始使用AI助手")
+				sendSSEWarning(writer, "请先绑定"+config.Brand().NameCN+"账号，后开始使用AI助手")
 			}
 		}
 	}

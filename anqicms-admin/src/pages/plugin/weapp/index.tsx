@@ -1,4 +1,5 @@
 import { pluginGetWeappConfig, pluginSaveWeappConfig } from '@/services';
+import { brand } from '@/oem/brand';
 import { PageContainer, ProForm, ProFormText } from '@ant-design/pro-components';
 import { FormattedMessage, useIntl } from '@umijs/max';
 import { Button, Card, Divider, message } from 'antd';
@@ -48,15 +49,9 @@ const PluginWeapp: React.FC<any> = () => {
           <p>
             <FormattedMessage id="plugin.weapp.default.tips" />
           </p>
-          <p>
-            <FormattedMessage id="plugin.weapp.default.help" />
-            <a href="https://www.anqicms.com/help-basic/3495.html" target="_blank" rel="noreferrer">
-              https://www.anqicms.com/help-basic/3495.html
-            </a>
-          </p>
           <p><FormattedMessage id="plugin.weapp.default.source" /></p>
         </div>
-        <Button onClick={() => window.open('https://github.com/fesiong/anqicms-app/releases')}>
+        <Button onClick={() => window.open('https://github.com/fesiong/cms-miniprogram/releases')}>
           <FormattedMessage id="plugin.weapp.default.download" />
         </Button>
       </Card>

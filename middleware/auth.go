@@ -145,6 +145,69 @@ func ParseAdminUrlFile(ctx iris.Context) {
 	ctx.Next()
 }
 
+// AdminMenuPathForURI 把后台 URI 解析成前端菜单路径。
+//
+// 规则与历史实现完全一致：按 config.MenuGroups() 的顺序遍历，取第一条 Backend
+// 是 uri 前缀的菜单，返回它的 Path。命中的菜单没有 Path 时按「无法映射」处理。
+//
+// 菜单清单是可注入参数（而不是直接读配置）的唯一目的，是让调用方与测试能构造
+// 「清单里没有这条 Backend」的场景——那正是严格版权限检查最需要被证明的分支。
+func AdminMenuPathForURI(uri string, groups []*config.MenuGroup) (front string, mapped bool) {
+	uri = strings.TrimSpace(uri)
+	if uri == "" {
+		return "", false
+	}
+	if strings.HasPrefix(uri, "/setting/video") {
+		uri = "/setting/content" + strings.TrimPrefix(uri, "/setting/video")
+	}
+	for _, group := range groups {
+		if group == nil {
+			continue
+		}
+		for _, m := range group.Menus {
+			if m == nil || m.Backend == "" {
+				continue
+			}
+			if strings.HasPrefix(uri, m.Backend) {
+				if m.Path == "" {
+					return "", false
+				}
+				return m.Path, true
+			}
+		}
+	}
+	return "", false
+}
+
+// adminPermissionDenied 是后台权限不足的统一回执。
+func adminPermissionDenied(ctx iris.Context) {
+	ctx.JSON(iris.Map{
+		"code": config.StatusNoAccess,
+		"msg":  "权限不足。Permission denied.",
+	})
+}
+
+// adminGroupAllows 校验管理员分组是否拥有 front 菜单的权限前缀。
+// 超管（Id==1 / GroupId==1）由调用方先放行，这里只处理分组前缀匹配。
+func adminGroupAllows(currentSite *provider.Website, adminId uint, front string) bool {
+	admin, err := currentSite.GetAdminInfoById(adminId)
+	if err != nil || admin == nil {
+		return false
+	}
+	if admin.GroupId == 1 {
+		return true
+	}
+	if admin.Group == nil {
+		return false
+	}
+	for _, permission := range admin.Group.Setting.Permissions {
+		if strings.HasPrefix(front, permission) {
+			return true
+		}
+	}
+	return false
+}
+
 func AdminPermission(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	adminId := ctx.Values().GetUintDefault("adminId", 0)
@@ -155,48 +218,59 @@ func AdminPermission(ctx iris.Context) {
 	uri := strings.TrimPrefix(ctx.RequestPath(false), "/system/api")
 
 	// 检查后台对应的前端
-	var front string
-	for _, g := range config.DefaultMenuGroups {
-		exists := false
-		for _, m := range g.Menus {
-			if m.Backend != "" && strings.HasPrefix(uri, m.Backend) {
-				front = m.Path
-				exists = true
-				break
-			}
-		}
-		if exists {
-			break
-		}
-	}
+	front, mapped := AdminMenuPathForURI(uri, config.MenuGroups())
 
-	// 如果一个链接不在menu里，则不用拦截
-	if front == "" {
+	// 如果一个链接不在menu里，则不用拦截（历史行为，保持不变）。
+	// 需要「未知菜单一律拒绝」的端点在 party 上改用 AdminPermissionRequired。
+	if !mapped {
 		ctx.Next()
 		return
 	}
 
-	admin, err := currentSite.GetAdminInfoById(adminId)
-	if err == nil {
-		if admin.GroupId == 1 {
-			ctx.Next()
-			return
-		}
-		if admin.Group != nil {
-			permissions := admin.Group.Setting.Permissions
-			for i := range permissions {
-				if strings.HasPrefix(front, permissions[i]) {
-					ctx.Next()
-					return
-				}
-			}
-		}
+	if adminGroupAllows(currentSite, adminId, front) {
+		ctx.Next()
+		return
 	}
 
-	ctx.JSON(iris.Map{
-		"code": config.StatusNoAccess,
-		"msg":  "权限不足。Permission denied.",
-	})
+	adminPermissionDenied(ctx)
+}
+
+// AdminPermissionRequired 是严格版后台权限检查：URI 无法映射到任何菜单 Backend 时一律拒绝。
+//
+// 与 AdminPermission 的唯一差别就是「未映射」分支：后台历史行为对不在菜单里的路径是放行的，
+// 这对日常页面无害，但对渠道配置这类会签发绑定 token、能改平台凭据的端点，等于把授权
+// 寄托在「恰好没人注册这条路由」上。规格 §10 要求渠道端点显式授权，所以这里默认拒绝。
+func AdminPermissionRequired(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	adminId := ctx.Values().GetUintDefault("adminId", 0)
+	if adminId == 1 {
+		ctx.Next()
+		return
+	}
+	uri := strings.TrimPrefix(ctx.RequestPath(false), "/system/api")
+
+	front, mapped := AdminMenuPathForURI(uri, config.MenuGroups())
+	if !mapped {
+		adminPermissionDenied(ctx)
+		return
+	}
+
+	if adminGroupAllows(currentSite, adminId, front) {
+		ctx.Next()
+		return
+	}
+
+	adminPermissionDenied(ctx)
+}
+
+// AdminSuperRequired 仅允许站点超管执行安装软件等系统级操作。
+func AdminSuperRequired(ctx iris.Context) {
+	if ctx.Values().GetUintDefault("adminId", 0) != 1 {
+		ctx.StatusCode(http.StatusForbidden)
+		adminPermissionDenied(ctx)
+		return
+	}
+	ctx.Next()
 }
 
 func Check301(ctx iris.Context) {

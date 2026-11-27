@@ -221,7 +221,7 @@ func AggregateByDay(db *gorm.DB, startTime, endTime int64) ([]UsageStats, error)
 		Select(`
 			'common' as session_id,
 			0 as agent_id,
-			DATE(FROM_UNIXTIME(created_time)) as date,
+			`+ChartDateSQL("created_time")+`,
 			model_name,
 			COUNT(*) as turns,
 			SUM(prompt_tokens) as prompt_tokens,

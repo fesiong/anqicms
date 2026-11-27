@@ -2,6 +2,7 @@ package fulltext
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"unicode/utf8"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/fesiong/wukong/types"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/provider/segmenter"
 )
 
 // WukongService
@@ -37,12 +39,26 @@ func (criteria DiyScoringCriteria) Score(doc types.IndexedDocument, fields inter
 }
 
 func NewWukongService(cfg *config.PluginFulltextConfig, indexName string) (Service, error) {
+	// 分词器全进程共用一份（provider/segmenter）：不再给
+	// SegmenterDictionaries 让每个站点的引擎各 LoadDictionary 一遍。
+	// 官方词典实测每份堆常驻 +124MB —— 106 个站点就是 13GB 起，
+	// 这是启动期机器被吃满、端口迟迟不开的主要原因之一。
+	seg := segmenter.Shared()
+	if seg == nil {
+		// 引擎要求 Segmenter 与 SegmenterDictionaries 二选一，都没有时
+		// 它会 log.Fatal 直接退出进程。这里显式报错，让上层把全文搜索
+		// 状态置为 -1 展示给用户，而不是让整个服务起不来。
+		return nil, fmt.Errorf("分词词典不可用，悟空全文搜索无法初始化：%s", segmenter.StatusNow().Error)
+	}
 	s := &WukongService{
 		config:   cfg,
 		searcher: new(engine.Engine),
 	}
+	// 传外部 segmenter 还有第二个好处：engine.Close() 只关自己加载的那个
+	// （usingExternalSegmenter == false 才 Close），站点重载全文搜索
+	// 不会把共享词典关掉。
 	s.searcher.Init(types.EngineInitOptions{
-		SegmenterDictionaries: config.ExecPath + "dictionary.txt",
+		Segmenter: seg,
 	})
 
 	return s, nil
@@ -141,6 +157,18 @@ func (s *WukongService) Search(keyword string, moduleId uint, page int, pageSize
 		}
 	}
 	return docs, total, nil
+}
+
+func (s *WukongService) Count() (int64, error) {
+	if s.searcher == nil {
+		return 0, errors.New("uninitialized")
+	}
+	// 悟空没有"索引中有多少个文档"的直接接口，只能读引擎计数器。
+	// 注意 NumDocumentsIndexed 统计的是**写入次数**：同一篇文档被重复
+	// 更新会重复计数，所以它略大于实际文档数；但索引重建后的首次值
+	// 就等于真实写入条数（重建会新建引擎，计数器归零），足以回答
+	// "索引里到底装了多少条"这个问题。
+	return int64(s.searcher.NumDocumentsIndexed()), nil
 }
 
 func (s *WukongService) Close() {

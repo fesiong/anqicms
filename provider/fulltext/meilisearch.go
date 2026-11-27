@@ -234,6 +234,18 @@ func (s *MeiliSearchService) Search(keyword string, moduleId uint, page int, pag
 	return docs, total, nil
 }
 
+func (s *MeiliSearchService) Count() (int64, error) {
+	stats, err := s.apiClient.Index(s.indexName).GetStats(nil)
+	if err != nil {
+		return 0, err
+	}
+	if stats == nil {
+		return 0, nil
+	}
+
+	return stats.NumberOfDocuments, nil
+}
+
 func (s *MeiliSearchService) Close() {
 	// nothing to do
 }

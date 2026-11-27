@@ -113,9 +113,11 @@ func SetOfficialConfig(modelName string) error {
 		modelName = "anqi-flash"
 	}
 	cfg := &Config{
-		Name:    "official",
-		Model:   modelName,
-		BaseURL: "https://auth.anqicms.com/auth/v1",
+		Name:  "official",
+		Model: modelName,
+		// 网关地址随品牌在编译期固化：OEM 版必须打到自己的网关，
+		// 否则客户的 AI 请求会全部出现在官网的调用日志里。
+		BaseURL: config.Brand().AuthBase + "/v1",
 		APIKey:  config.AnqiUser.Token, // 初始值，InitClient 时会实时读取
 	}
 

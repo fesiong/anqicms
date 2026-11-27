@@ -1,16 +1,18 @@
 package route
 
 import (
+	"embed"
+
 	"github.com/kataras/iris/v12"
-	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/controller"
 	"kandaoni.com/anqicms/controller/manageController"
 	"kandaoni.com/anqicms/middleware"
 )
 
-func manageRoute(app *iris.Application) {
+func manageRoute(app *iris.Application, systemFiles embed.FS) {
 	system := app.Party("/system", middleware.ParseAdminUrlFile, manageController.AdminFileServ)
 	{
-		system.HandleDir("/", config.ExecPath+"system")
+		system.HandleDir("/", systemFiles)
 	}
 	manage := system.Party("/api", middleware.ParseAdminUrl)
 	{
@@ -38,6 +40,10 @@ func manageRoute(app *iris.Application) {
 			anqi.Get("/info", manageController.GetAnqiInfo)
 			anqi.Get("/check", manageController.CheckAnqiInfo)
 			anqi.Post("/login", manageController.AnqiLogin)
+			anqi.Post("/register", manageController.AnqiRegister)
+			anqi.Get("/packages", manageController.GetAnqiPackages)
+			anqi.Post("/recharge", manageController.AnqiRecharge)
+			anqi.Get("/recharge/status", manageController.AnqiRechargeStatus)
 			anqi.Post("/upload", manageController.AnqiUploadAttachment)
 			anqi.Post("/template/share", manageController.AnqiShareTemplate)
 			anqi.Post("/template/download", manageController.AnqiDownloadTemplate)
@@ -111,6 +117,14 @@ func manageRoute(app *iris.Application) {
 			setting.Post("/ai", manageController.SettingAiForm)
 			setting.Post("/system", manageController.SettingSystemForm)
 			setting.Post("/content", manageController.SettingContentForm)
+			video := setting.Party("/video", middleware.AdminPermissionRequired)
+			{
+				video.Get("/ffmpeg", manageController.SettingVideoFFmpeg)
+				video.Post("/ffmpeg/install", middleware.AdminSuperRequired, manageController.SettingVideoFFmpegInstall)
+				video.Get("/tasks", manageController.SettingVideoTaskList)
+				video.Post("/tasks/retry", manageController.SettingVideoTaskRetry)
+				video.Post("/tasks/historical", manageController.SettingVideoTaskHistorical)
+			}
 			setting.Post("/thumb/rebuild", manageController.SettingThumbRebuild)
 			setting.Post("/index", manageController.SettingIndexForm)
 			setting.Post("/nav", manageController.SettingNavForm)
@@ -220,6 +234,7 @@ func manageRoute(app *iris.Application) {
 			statistic.Get("/product", manageController.GetStatisticProduct)
 			statistic.Get("/search", manageController.GetStatisticSearch)
 			statistic.Get("/search/detail", manageController.GetStatisticSearchDetail)
+			statistic.Get("/archive", manageController.GetStatisticArchive)
 		}
 
 		design := manage.Party("/design", middleware.ParseAdminToken, middleware.AdminPermission)
@@ -353,6 +368,14 @@ func manageRoute(app *iris.Application) {
 				sendmail.Post("/template", manageController.PluginSendmailSaveTemplate)
 				sendmail.Post("/template/preview", manageController.PluginSendmailTemplatePreview)
 				sendmail.Post("/test", manageController.PluginSendmailTest)
+			}
+
+			sms := plugin.Party("/sms", middleware.AdminPermissionRequired)
+			{
+				sms.Get("/setting", manageController.PluginSmsSetting)
+				sms.Post("/setting", manageController.PluginSmsSettingForm)
+				sms.Post("/test", manageController.PluginSmsTest)
+				sms.Get("/logs", manageController.PluginSmsLogs)
 			}
 
 			importApi := plugin.Party("/import")
@@ -706,6 +729,11 @@ func manageRoute(app *iris.Application) {
 				place.Get("/detail", manageController.PlaceDetail)
 				place.Post("/detail", manageController.PlaceDetailForm)
 				place.Post("/delete", manageController.PlaceDelete)
+				// 后台运费设置的国家/州/城市级联。这三个 handler 同时服务前台
+				// /api/place/*，后台过去没有注册同路径，导致 PlaceCascader 404。
+				place.Get("/countries", controller.ApiPlaceCountries)
+				place.Get("/country/states", controller.ApiPlaceCountryStates)
+				place.Get("/country/cities", controller.ApiPlaceCountryCities)
 			}
 
 			shipping := plugin.Party("/shipping")
@@ -713,6 +741,33 @@ func manageRoute(app *iris.Application) {
 				shipping.Get("/setting", manageController.PluginGetShippingSetting)
 				shipping.Post("/setting", manageController.PluginSaveShippingSetting)
 			}
+		}
+
+		// 企业 IM 渠道（飞书长连接 / 钉钉 Stream）的连接配置、状态与能力清单。
+		// 用 AdminPermissionRequired 而不是 AdminPermission：后台历史行为对「不在菜单里的
+		// 路径」是放行的，而渠道端点能改平台凭据、能开聊天管理，必须显式授权（规格 §10）。
+		channels := manage.Party("/channels", middleware.ParseAdminToken, middleware.AdminPermissionRequired)
+		{
+			channels.Get("/", manageController.ChannelList)
+			channels.Get("/detail", manageController.ChannelDetail)
+			channels.Post("/detail", manageController.ChannelDetailForm)
+			channels.Post("/delete", manageController.ChannelDelete)
+			channels.Get("/status", manageController.ChannelStatus)
+			channels.Get("/capabilities", manageController.ChannelCapabilities)
+			channels.Post("/test", manageController.ChannelTestSend)
+			channels.Post("/binding/token", manageController.ChannelBindingToken)
+			channels.Get("/bindings", manageController.ChannelBindings)
+			channels.Post("/binding/revoke", manageController.ChannelBindingRevoke)
+			channels.Get("/targets", manageController.ChannelTargets)
+			channels.Post("/target", manageController.ChannelTargetSave)
+			channels.Get("/rules", manageController.ChannelRules)
+			channels.Post("/rule", manageController.ChannelRuleSave)
+			channels.Post("/rule/delete", manageController.ChannelRuleDelete)
+			channels.Get("/templates", manageController.ChannelTemplates)
+			channels.Post("/template", manageController.ChannelTemplateSave)
+			channels.Post("/template/preview", manageController.ChannelTemplatePreview)
+			channels.Get("/records", manageController.ChannelRecords)
+			channels.Post("/delivery/retry", manageController.ChannelDeliveryRetry)
 		}
 	}
 }

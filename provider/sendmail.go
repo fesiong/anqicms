@@ -347,11 +347,11 @@ We noticed you left some items in your cart without completing the purchase. Don
 
 Order Summary:
 Items: 
-{% for item in cart.Items %}
-- {{item.Title}} x{{item.Quantity}} ({{priceFormat(item.Price)}} each)
+{% for item in order.Details %}
+- {{item.Goods.Title}} x{{item.Quantity}} ({{priceFormat(item.Price)}} each)
 {% endfor %}
 
-Total Amount: {{priceFormat(cart.Amount)}}
+Total Amount: {{priceFormat(order.Amount)}}
 
 Complete your purchase now to secure these items before they go back into inventory. We'd hate for you to miss out on what you've selected.
 
@@ -383,7 +383,7 @@ Total: {{priceFormat(cart.Amount)}}
 
 These items might sell out soon, so we recommend completing your purchase quickly to avoid disappointment.
 
-[Return to Cart]({url})
+[Return to Cart]({{url|safe}})
 
 We've also included a special discount code valid for the next 24 hours to thank you for your interest.
 
@@ -658,10 +658,32 @@ func (w *Website) SaveEmailTemplateInfo(req *config.EmailTemplate) (*config.Emai
 	return &template, nil
 }
 
+// Email template functions are registered by tags during initialization, avoiding
+// a provider -> tags import cycle.
+var emailTemplateFunctions = pongo2.Context{}
+
+func RegisterEmailTemplateFunc(name string, fn interface{}) {
+	emailTemplateFunctions[name] = fn
+}
+
 func (w *Website) RenderEmailTemplate(template *config.EmailTemplate, data map[string]interface{}) (*config.EmailTemplate, error) {
+	ctx := make(pongo2.Context, len(data)+len(emailTemplateFunctions))
+	for name, value := range data {
+		ctx[name] = value
+	}
+	for name, fn := range emailTemplateFunctions {
+		ctx[name] = fn
+	}
+	render := func(source string) (string, error) {
+		tpl, err := pongo2.FromString(source)
+		if err != nil {
+			return "", err
+		}
+		return tpl.Execute(ctx)
+	}
 	var err error
 	var err2 error
-	template.Subject, err2 = pongo2.RenderTemplateString(template.Subject, data)
+	template.Subject, err2 = render(template.Subject)
 	if err2 != nil {
 		// 渲染失败
 		err = err2
@@ -669,13 +691,13 @@ func (w *Website) RenderEmailTemplate(template *config.EmailTemplate, data map[s
 	}
 	// render content
 	// content先从Markdown转换为HTML
-	template.Content, err2 = pongo2.RenderTemplateString(template.Content, data)
+	template.Content, err2 = render(template.Content)
 	if err2 != nil {
 		// 渲染失败败
 		err = err2
 		template.Content = err.Error()
 	}
-	if !strings.HasPrefix(template.Content, "<") {
+	if !strings.HasPrefix(strings.TrimSpace(template.Content), "<") {
 		template.Content = library.MarkdownToHTML(template.Content)
 	}
 
@@ -807,10 +829,14 @@ func (w *Website) SendMail(subject, content string, attach *library.Attachment, 
 		return errors.New(w.Tr("PleaseConfigureSender"))
 	}
 	userHtml := false
-	if strings.HasPrefix(content, "<") {
+	if strings.HasPrefix(strings.TrimSpace(content), "<") {
 		userHtml = true
 	}
-	err := w.sendMail(subject, content, nil, recipients, userHtml, true)
+	var attachments []*library.Attachment
+	if attach != nil {
+		attachments = append(attachments, attach)
+	}
+	err := w.sendMail(subject, content, attachments, recipients, userHtml, true)
 
 	return err
 }
@@ -836,7 +862,7 @@ func (w *Website) sendMail(subject, content string, attachments []*library.Attac
 	email := library.NewEMail(`{"port":25}`)
 	email.From = setting.Account
 	email.Host = setting.Server
-	email.Port = setting.Port
+	email.Port = port
 	email.Username = setting.Account
 	if setting.UseSSL == 1 {
 		email.Secure = "SSL"
@@ -861,7 +887,7 @@ func (w *Website) sendMail(subject, content string, attachments []*library.Attac
 		}
 	}
 	// 多个收件地址的时候，分开发送
-	var err error
+	var sendErrors []error
 	for _, to := range recipients {
 		email.To = []string{to}
 		email.Subject = subject
@@ -871,7 +897,8 @@ func (w *Website) sendMail(subject, content string, attachments []*library.Attac
 			email.Text = content
 		}
 
-		if err = email.Send(); err != nil {
+		if err := email.Send(); err != nil {
+			sendErrors = append(sendErrors, err)
 			if setLog {
 				w.logMailError(to, subject, err.Error())
 			}
@@ -881,7 +908,7 @@ func (w *Website) sendMail(subject, content string, attachments []*library.Attac
 			w.logMailError(to, subject, w.Tr("SentSuccessfully"))
 		}
 	}
-	return err
+	return errors.Join(sendErrors...)
 }
 
 func (w *Website) logMailError(address, subject, status string) {
@@ -987,9 +1014,7 @@ func (w *Website) SendUserGroupChangeEmail(user *model.User, oldGroup *model.Use
 		return err
 	}
 
-	w.SendMail(template.Subject, template.Content, nil, user.Email)
-
-	return nil
+	return w.SendMail(template.Subject, template.Content, nil, user.Email)
 }
 
 func (w *Website) SendNewOrderEmail(user *model.User, order *model.Order) error {
@@ -1012,15 +1037,16 @@ func (w *Website) SendNewOrderEmail(user *model.User, order *model.Order) error 
 		return err
 	}
 
+	var sendErrors []error
 	// 开启了 brevo 则不发送给用户，因此要判断 UseBrevo == false 才发送
 	if user.Email != "" && template.Open && w.PluginSendmail.UseBrevo == false {
 		// 发给用户
-		w.SendMail(template.Subject, template.Content, nil, user.Email)
+		sendErrors = append(sendErrors, w.SendMail(template.Subject, template.Content, nil, user.Email))
 	}
 	// 发给网站管理员
-	_ = w.sendMail(template.Subject, template.Content, nil, nil, false, false)
+	sendErrors = append(sendErrors, w.SendMail(template.Subject, template.Content, nil))
 
-	return nil
+	return errors.Join(sendErrors...)
 }
 
 func (w *Website) SendPayOrderEmail(user *model.User, order *model.Order) error {
@@ -1043,15 +1069,16 @@ func (w *Website) SendPayOrderEmail(user *model.User, order *model.Order) error 
 		return err
 	}
 
+	var sendErrors []error
 	// 开启了 brevo 则不发送给用户，因此要判断 UseBrevo == false 才发送
 	if user.Email != "" && template.Open && w.PluginSendmail.UseBrevo == false {
 		// 发给用户
-		w.SendMail(template.Subject, template.Content, nil, user.Email)
+		sendErrors = append(sendErrors, w.SendMail(template.Subject, template.Content, nil, user.Email))
 	}
 	// 发给网站管理员
-	_ = w.sendMail(template.Subject, template.Content, nil, nil, false, false)
+	sendErrors = append(sendErrors, w.SendMail(template.Subject, template.Content, nil))
 
-	return nil
+	return errors.Join(sendErrors...)
 }
 
 func (w *Website) AddMailPlan(plan *model.MailPlan) error {
@@ -1118,9 +1145,7 @@ func (w *Website) SendInvoiceMail(user *model.User, order *model.Order, invoiceP
 	}
 
 	// 发给用户
-	w.SendMail(template.Subject, template.Content, &attachment, user.Email)
-
-	return nil
+	return w.SendMail(template.Subject, template.Content, &attachment, user.Email)
 }
 
 func (w *Website) SendCommunicationSummitedEmail(order *model.CommunicationOrder) error {
@@ -1264,15 +1289,16 @@ func (w *Website) SendOrderCustomFormEmail(user *model.User, order *model.Order)
 		return err
 	}
 
+	var sendErrors []error
 	// 开启了 brevo 则不发送给用户，因此要判断 UseBrevo == false 才发送
 	if user.Email != "" && template.Open && w.PluginSendmail.UseBrevo == false {
 		// 发给用户
-		w.SendMail(template.Subject, template.Content, nil, user.Email)
+		sendErrors = append(sendErrors, w.SendMail(template.Subject, template.Content, nil, user.Email))
 	}
 	// 发给网站管理员
-	_ = w.sendMail(template.Subject, template.Content, nil, nil, false, false)
+	sendErrors = append(sendErrors, w.SendMail(template.Subject, template.Content, nil))
 
-	return nil
+	return errors.Join(sendErrors...)
 }
 
 func (w *Website) SendDeliveryOrderEmail(user *model.User, order *model.Order) error {
@@ -1296,9 +1322,7 @@ func (w *Website) SendDeliveryOrderEmail(user *model.User, order *model.Order) e
 	}
 
 	// 发给用户
-	w.SendMail(template.Subject, template.Content, nil, user.Email)
-
-	return nil
+	return w.SendMail(template.Subject, template.Content, nil, user.Email)
 }
 
 func (w *Website) SendCompletedOrderEmail(user *model.User, order *model.Order) error {
@@ -1322,9 +1346,7 @@ func (w *Website) SendCompletedOrderEmail(user *model.User, order *model.Order) 
 	}
 
 	// 发给用户
-	w.SendMail(template.Subject, template.Content, nil, user.Email)
-
-	return nil
+	return w.SendMail(template.Subject, template.Content, nil, user.Email)
 }
 
 func (w *Website) SendRefundOrderEmail(user *model.User, order *model.Order) error {
@@ -1348,9 +1370,7 @@ func (w *Website) SendRefundOrderEmail(user *model.User, order *model.Order) err
 	}
 
 	// 发给用户
-	w.SendMail(template.Subject, template.Content, nil, user.Email)
-
-	return nil
+	return w.SendMail(template.Subject, template.Content, nil, user.Email)
 }
 
 func (w *Website) SendReviewOrderPlan(user *model.User, order *model.Order) error {
@@ -1381,9 +1401,7 @@ func (w *Website) SendReviewOrderPlan(user *model.User, order *model.Order) erro
 		Content:    template.Content,
 		SendTime:   time.Now().Add(time.Second * time.Duration(template.Delay)).Unix(),
 	}
-	err = w.AddMailPlan(&plan)
-
-	return nil
+	return w.AddMailPlan(&plan)
 }
 
 func (w *Website) SendRecoverAbandonedOrderPlan(user *model.User, order *model.Order) error {
@@ -1395,10 +1413,28 @@ func (w *Website) SendRecoverAbandonedOrderPlan(user *model.User, order *model.O
 		return errors.New("no template")
 	}
 
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
+	items := make([]map[string]interface{}, 0, len(order.Details))
+	for _, detail := range order.Details {
+		title := ""
+		if detail.Goods != nil {
+			title = detail.Goods.Title
+		}
+		items = append(items, map[string]interface{}{
+			"Title": title, "Quantity": detail.Quantity, "Price": detail.Price,
+		})
+	}
 	data := map[string]interface{}{
 		"website": w,
 		"order":   order,
 		"user":    user,
+		"cart": map[string]interface{}{
+			"Items": items, "Amount": order.Amount,
+		},
+		"url": strings.TrimRight(frontUrl, "/") + "/order/checkout?order_id=" + order.OrderId,
 	}
 	var err error
 	template, err = w.RenderEmailTemplate(template, data)
@@ -1414,7 +1450,5 @@ func (w *Website) SendRecoverAbandonedOrderPlan(user *model.User, order *model.O
 		Content:    template.Content,
 		SendTime:   time.Now().Add(time.Second * time.Duration(template.Delay)).Unix(),
 	}
-	err = w.AddMailPlan(&plan)
-
-	return nil
+	return w.AddMailPlan(&plan)
 }

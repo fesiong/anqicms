@@ -13,8 +13,10 @@ import setting from './en-US/setting';
 import statistic from './en-US/statistic';
 import tool from './en-US/tool';
 import website from './en-US/website';
+import video from './en-US/video';
+import { brandizeMessages } from '../oem/brandize';
 
-export default {
+export default brandizeMessages({
   'site.title': 'AnQiCMS',
   ...pages,
   ...menu,
@@ -24,6 +26,7 @@ export default {
   ...dashboard,
   ...tool,
   ...website,
+  ...video,
   ...account,
   ...ai,
   ...statistic,
@@ -31,4 +34,4 @@ export default {
   ...content,
   ...plugin,
   ...common,
-};
+});

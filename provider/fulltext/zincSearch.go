@@ -303,6 +303,27 @@ func (s *ZincSearchService) Search(keyword string, moduleId uint, page int, page
 	return docs, total, nil
 }
 
+// Count 返回索引中的文档数量。zinc 的 SDK 没有独立的统计接口，
+// 这里用 match_all + size=0 的查询取总命中数。
+func (s *ZincSearchService) Count() (int64, error) {
+	metaQuery := *client.NewMetaQuery()
+	query := *client.NewMetaZincQuery()
+	query.SetQuery(metaQuery)
+	query.SetSize(0)
+
+	resp, r, err := s.apiClient.Search.Search(s.ctx, s.indexName).Query(query).Execute()
+	if err != nil {
+		log.Printf("Error when calling `SearchApi.Search``: %v\n", err)
+		log.Printf("Full HTTP response: %v\n", r)
+		return 0, err
+	}
+	if resp == nil || resp.Hits == nil || resp.Hits.Total == nil {
+		return 0, nil
+	}
+
+	return int64(resp.Hits.Total.GetValue()), nil
+}
+
 func (s *ZincSearchService) Close() {
 	// nothing to do
 }

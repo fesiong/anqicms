@@ -1,6 +1,6 @@
 package config
 
-const Version = "3.8.0"
+const Version = "3.8.5"
 const Trial = false
 const VersionType = ""
 
@@ -95,7 +95,8 @@ const (
 	PayWayBalance    = "balance"    // 余额支付
 	PayWayPaypal     = "paypal"     // paypal
 	PayWayStripe     = "stripe"     // stripe
-	PayWayNowpayment = "nowpayment" // nowpayment
+	PayWayNowpayment = "nowpayment" // nowpayment（加密货币，NOWPayments）
+	PayWayXunhupay   = "xunhupay"   // 虎皮椒（个人微信/支付宝聚合）
 )
 
 const (
@@ -163,6 +164,7 @@ const (
 	PlatformGoogle   = "google"   // google +
 	PlatformInWechat = "inwechat" // in the wechat browser
 	PlatformWebsite  = "website"  // normal login way, like email/cellphone/username
+	PlatformSms      = "sms"      // phone + sms verification code login
 )
 
 const (

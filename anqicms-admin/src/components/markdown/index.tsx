@@ -18,6 +18,7 @@ import {
 } from 'react';
 import AiEditorOverlay from '../aiEditorOverlay';
 import Attachment from '../attachment/dialog';
+import { buildAttachmentVideoHtml } from '../newAiEditor/mediaHtml';
 import './index.less';
 
 export type MarkdownEditorProps = {
@@ -61,13 +62,16 @@ const MarkdownEditor: React.FC<MarkdownEditorProps> = forwardRef(
                     item.file_location.indexOf('.ogg') !== -1 ||
                     item.file_location.indexOf('.webm') !== -1
                   ) {
-                    return `<video controls="controls" controlslist="nodownload" poster="${
-                      item.logo
-                    }"><source src="${
-                      item.file_path
-                    }" type="video/${item.file_location.substr(
-                      item.file_location.lastIndexOf('.') + 1,
-                    )}">您的浏览器不支持 video 标签。</video>`;
+                    return (
+                      buildAttachmentVideoHtml(item) ||
+                      `<video controls="controls" controlslist="nodownload" poster="${
+                        item.logo
+                      }"><source src="${
+                        item.file_path
+                      }" type="video/${item.file_location.substr(
+                        item.file_location.lastIndexOf('.') + 1,
+                      )}">您的浏览器不支持 video 标签。</video>`
+                    );
                   } else if (
                     item.file_location.indexOf('.mp3') !== -1 ||
                     item.file_location.indexOf('.wav') !== -1

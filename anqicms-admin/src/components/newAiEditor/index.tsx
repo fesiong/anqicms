@@ -27,8 +27,16 @@ import {
   useState,
 } from 'react';
 import AttachmentSelect from '../attachment';
+import { Iframe, isSafeEmbedSrc, parseIframeHtml } from './iframeExtension';
 import './index.less';
 import MaterialSelect, { MaterialElement } from './material';
+import {
+  buildAttachmentVideoHtml,
+  buildVideoHtml,
+  normalizeVideoHtml,
+  sanitizeEditorHtml,
+} from './mediaHtml';
+import { enableRelativeLinks } from './relativeLinks';
 
 const MonacoEditor = lazy(() => import('react-monaco-editor'));
 
@@ -51,10 +59,11 @@ const NewAiEditor: React.FC<NewAiEditorProps> = forwardRef((props, ref) => {
   const [videoUrl, setVideoUrl] = useState<string>('');
   const [materialVisible, setMaterialVisible] = useState(false);
   const [attachVisible, setAttachVisible] = useState(false);
+  const [attachType, setAttachType] = useState<number | undefined>(undefined);
   const intl = useIntl();
   function setInnerContent(content: string) {
     // 判断是不是Markdown
-    aiEditorRef.current?.setContent(content);
+    aiEditorRef.current?.setContent(normalizeVideoHtml(content));
   }
 
   useImperativeHandle(ref, () => ({
@@ -81,13 +90,10 @@ const NewAiEditor: React.FC<NewAiEditorProps> = forwardRef((props, ref) => {
       item.file_location.indexOf('.ogg') !== -1 ||
       item.file_location.indexOf('.webm') !== -1
     ) {
-      return `<video controls="controls" controlslist="nodownload" poster="${
-        item.logo
-      }"><source src="${
-        item.file_path
-      }" type="video/${item.file_location.substr(
-        item.file_location.lastIndexOf('.') + 1,
-      )}">Your browser does not support video tags.</video>`;
+      // ⚠️ src 必须挂在 <video> 上：aieditor 的 video 节点只认 `video[src]`，
+      // 写成 <video><source src></video> 会被当纯文本插进正文（直接显示源码）。
+      // 见 mediaHtml.ts 顶部说明。
+      return buildAttachmentVideoHtml(item);
     } else if (
       item.file_location.indexOf('.mp3') !== -1 ||
       item.file_location.indexOf('.wav') !== -1
@@ -98,13 +104,14 @@ const NewAiEditor: React.FC<NewAiEditorProps> = forwardRef((props, ref) => {
         item.file_location.lastIndexOf('.') + 1,
       )}">Your browser does not support audio tags.</audio>`;
     } else if (item.is_image === 3) {
-      return `<iframe src="${item.file_location}" title="${item.file_name}" width="100%" height="480px" frameborder="0" allowfullscreen="true"></iframe>`;
+      return `<iframe src="${item.file_location}" title="${item.file_name}" width="100%" height="480" frameborder="0" allowfullscreen="true"></iframe>`;
     } else {
       return `<a href="${item.file_path}" target="_blank" title="${item.file_name}">${item.file_name}</a>`;
     }
   };
-  function attachPlugin(editor: Editor) {
+  function attachPlugin(editor: Editor, type?: number) {
     setCurEditor(editor);
+    setAttachType(type || undefined);
     setAttachVisible(true);
   }
 
@@ -162,11 +169,23 @@ const NewAiEditor: React.FC<NewAiEditorProps> = forwardRef((props, ref) => {
           } as any)
           .run();
       } else if (trimmed.indexOf('<') === 0) {
-        // 其它 iframe 嵌入代码原样插入
-        curEditor.chain().focus().insertContent(trimmed).run();
-      } else if (trimmed.indexOf('http') === 0) {
-        const videoHtml = `<video controls="controls" controlslist="nodownload" poster=""><source src="${trimmed}" type="video/mp4">Your browser does not support video tags.</video>`;
-        curEditor.chain().focus().insertContent(videoHtml).run();
+        // 其它嵌入代码：iframe 有专门的节点（B 站/优酷等），旧式
+        // <video><source src></video> 先归一化，否则都解析不成节点、源码会当正文显示
+        const embed = parseIframeHtml(trimmed);
+        if (embed && !isSafeEmbedSrc(embed.src)) {
+          message.error(
+            intl.formatMessage({ id: 'component.editor.video.iframe.invalid' }),
+          );
+        } else {
+          curEditor
+            .chain()
+            .focus()
+            .insertContent(normalizeVideoHtml(trimmed))
+            .run();
+        }
+      } else if (/^https?:\/\//i.test(trimmed)) {
+        // 视频直链：src 必须挂到 <video> 上（见 mediaHtml.ts 说明）
+        curEditor.chain().focus().insertContent(buildVideoHtml(trimmed)).run();
       } else {
         curEditor.chain().focus().insertContent(trimmed).run();
       }
@@ -177,7 +196,7 @@ const NewAiEditor: React.FC<NewAiEditorProps> = forwardRef((props, ref) => {
 
   const handleSelectVideo = () => {
     if (curEditor) {
-      attachPlugin(curEditor);
+      attachPlugin(curEditor, 2); // Assuming 2 represents the video type
     }
   };
 
@@ -300,17 +319,15 @@ const NewAiEditor: React.FC<NewAiEditorProps> = forwardRef((props, ref) => {
 
   const showSourceCode = (editor: Editor) => {
     setCurEditor(editor);
-    let htmlCode = editor.getHTML();
-    // 移除 a标签的 rel 属性，其它属性保留
-    htmlCode = htmlCode.replace(/<a(\s[^>]*)?>/gi, (match) => {
-      return match.replaceAll(/\srel\s*=\s*["'][^"']*["']/gi, '');
-    });
+    // 移除 a 标签的 rel 属性，给 video 补 controlslist（见 sanitizeEditorHtml）
+    const htmlCode = sanitizeEditorHtml(editor.getHTML());
     codes[props.field] = htmlCode;
     setHtmlMode(true);
   };
 
   const hideSourceCode = () => {
-    aiEditorRef.current?.setContent(codes[props.field]);
+    // 源码模式里可能是手写的旧式 <video><source src></video>，归一化后才不会变成文本
+    aiEditorRef.current?.setContent(normalizeVideoHtml(codes[props.field]));
     setHtmlMode(false);
   };
 
@@ -466,7 +483,9 @@ const NewAiEditor: React.FC<NewAiEditorProps> = forwardRef((props, ref) => {
       const aiEditor = new AiEditor({
         element: divRef.current,
         placeholder: intl.formatMessage({ id: 'component.editor.placeholder' }),
-        content: props.content,
+        // 库里历史内容有 <video><source src></video> 写法，直接塞进去会被当文本渲染，
+        // 载入前统一归一化成 video[src]（见 mediaHtml.ts）
+        content: normalizeVideoHtml(props.content),
         // 关闭 UniqueID 扩展：它默认给每个块级节点（段落/标题/表格/图片等）
         // 生成 UUID，并在渲染时统一写成 data-id="..."。这些 ID 只服务于
         // 协作编辑的块定位，本站是单机 CMS，用不上；而正文里的
@@ -477,6 +496,9 @@ const NewAiEditor: React.FC<NewAiEditorProps> = forwardRef((props, ref) => {
         // ⚠️ 标题的 id / data-toc-id 属于 TableOfContents 扩展（另一套），
         // 不受影响，文档目录功能保持正常。
         uniqueId: false,
+        // aieditor 只内置 youtube / twitch 嵌入节点，没有通用 iframe：
+        // 不注册这个扩展，B 站/优酷等 <iframe> 嵌入代码会被当纯文本插进正文
+        extensions: [Iframe],
         // aieditor 内部给 youtube 扩展硬编码了 nocookie: true，会把
         // youtube.com/watch 链接改写成 youtube-nocookie.com/embed，导致
         // 前台无法播放。tiptap youtube 扩展在渲染时运行时读取该选项，
@@ -556,11 +578,8 @@ const NewAiEditor: React.FC<NewAiEditorProps> = forwardRef((props, ref) => {
           toolApproval: 'always',
         },
         onUpdate: (ed: Editor) => {
-          let htmlCode = ed.getHTML();
-          // 移除 a标签的 rel 属性，其它属性保留
-          htmlCode = htmlCode.replace(/<a(\s[^>]*)?>/gi, (match) => {
-            return match.replaceAll(/\srel\s*=\s*["'][^"']*["']/gi, '');
-          });
+          // 移除 a 标签的 rel 属性 + 给 video 补 controlslist
+          const htmlCode = sanitizeEditorHtml(ed.getHTML());
           props.setContent(htmlCode);
           codes[props.field] = htmlCode;
         },
@@ -640,6 +659,7 @@ const NewAiEditor: React.FC<NewAiEditorProps> = forwardRef((props, ref) => {
         },
       });
 
+      enableRelativeLinks(aiEditor);
       aiEditorRef.current = aiEditor;
     }
   };
@@ -769,6 +789,7 @@ const NewAiEditor: React.FC<NewAiEditorProps> = forwardRef((props, ref) => {
           open={attachVisible}
           onCancel={() => setAttachVisible(false)}
           onSelect={handleSelectAttachment}
+          type={attachType}
           multiple={true}
           manual={true}
         />

@@ -44,6 +44,21 @@ func GetDefaultDB() *gorm.DB {
 	return defaultDB
 }
 
+// mysqlDSN 拼 DSN。database 传空串表示"只连服务不选库"（建库前用）。
+//
+// ⚠️ timeout=10s 是**拨号**超时，必须有。过去没有它时，某个站点的库所在主机
+// 不可达（防火墙丢包、容器网络不通）会按内核 TCP 重传节奏耗到 2 分钟才报错，
+// 而初始化是逐个站点串行遍历的 —— N 个坏站点就能把"端口迟迟不开"拖成 2N 分钟，
+// 日志里还只有一句连不上，完全看不出是超时等待。
+//
+// readTimeout / writeTimeout 故意**不设**：3.8.0 的商品属性回填是一条
+// `INSERT INTO archive_products ... SELECT ... FROM archives`，
+// 万行库上本来就要跑几分钟，加读超时会把正常升级直接打断。
+func mysqlDSN(cfg *config.MysqlConfig, database string) string {
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local&timeout=10s",
+		cfg.User, cfg.Password, cfg.Host, cfg.Port, database)
+}
+
 func InitDB(cfg *config.MysqlConfig) (*gorm.DB, error) {
 	var db *gorm.DB
 	var err error
@@ -54,13 +69,11 @@ func InitDB(cfg *config.MysqlConfig) (*gorm.DB, error) {
 		PrepareStmtTTL:                           15 * time.Minute,
 		Logger:                                   defaultLogger,
 	}
-	cfgUrl := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
+	cfgUrl := mysqlDSN(cfg, cfg.Database)
 	db, err = gorm.Open(mysql.Open(cfgUrl), gormCfg)
 	if err != nil {
 		if strings.Contains(err.Error(), "1049") {
-			url2 := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4&parseTime=True&loc=Local",
-				cfg.User, cfg.Password, cfg.Host, cfg.Port)
+			url2 := mysqlDSN(cfg, "")
 			db, err = gorm.Open(mysql.Open(url2), gormCfg)
 			if err != nil {
 				return nil, err
@@ -130,13 +143,14 @@ func AutoMigrateDB(db *gorm.DB, force bool) error {
 		// 强制转换archive表的title字段
 		forceChangeArchiveTitle(db)
 
-		//自动迁移数据库
+		// 自动迁移数据库
 		var models = []interface{}{
 			&model.Admin{},
 			&model.AdminGroup{},
 			&model.AdminLoginLog{},
 			&model.AdminLog{},
 			&model.Attachment{},
+			&model.VideoTask{},
 			&model.Category{},
 			&model.Nav{},
 			&model.NavType{},
@@ -172,10 +186,12 @@ func AutoMigrateDB(db *gorm.DB, force bool) error {
 
 			&model.User{},
 			&model.UserGroup{},
+			&model.UserGroupCategory{},
 			&model.LoginLog{},
 			&model.UserWechat{},
 			&model.UserWithdraw{},
 			&model.WeappQrcode{},
+			&model.SubscribedUser{},
 			&model.Order{},
 			&model.OrderDetail{},
 			&model.OrderAddress{},
@@ -223,6 +239,33 @@ func AutoMigrateDB(db *gorm.DB, force bool) error {
 			&model.PaymentStatistic{},
 			&model.MailPlan{},
 			&model.OrderOptionStock{},
+			// 站点智能体接入飞书/钉钉：渠道、绑定、目标、入站、会话、租约、审计
+			&model.MessageChannel{},
+			&model.ChannelBindingToken{},
+			&model.ChannelBinding{},
+			&model.ChannelTarget{},
+			&model.ChannelInbox{},
+			&model.ChannelSession{},
+			&model.ChannelLease{},
+			&model.ChannelAudit{},
+			// 通知事件、规则、模板与逐目标投递
+			&model.NotificationRule{},
+			&model.NotificationTemplate{},
+			&model.NotificationEvent{},
+			&model.NotificationDelivery{},
+			// 短信验证码状态机与发送流水
+			&model.SmsCode{},
+			&model.SmsLog{},
+		}
+		if err := migrateVideoTaskTimeColumns(db); err != nil {
+			return fmt.Errorf("convert video_tasks timestamps: %w", err)
+		}
+		// 迁移前先把 `type:varchar(32) not null` 这类写法规范化。全仓 752 列把
+		// 非空写进了类型字符串，gorm 因此认为模型可空、库列非空，每次迁移都会为
+		// 它们发一批"改完不变"的 ALTER（实测单站点一轮 660 条 / 193 秒）。
+		// 详见 normalizeSchemaFieldNullability 的注释。
+		if n := normalizeModelFieldNullability(db, models); n > 0 {
+			log.Printf("迁移前规范化非空标记：%d 个字段（消除空转 ALTER）", n)
 		}
 		//自动迁移数据库
 		err := db.Set("gorm:table_options", "DEFAULT CHARSET=utf8mb4").AutoMigrate(models...)
@@ -303,6 +346,18 @@ func (w *Website) InitModelData() {
 	// 老站库的 modules 表没有 kind 列，Automigrate 又只在版本变化时跑，
 	// 所以这里无条件补一次（幂等）。
 	_ = w.ensureModuleKindColumn()
+	// 用户组-可投稿栏目关系表：同样不能只靠 AutoMigrateDB（见 ensureUserGroupCategoryTable）。
+	_ = w.ensureUserGroupCategoryTable()
+	// PayPal 退款字段（payments.capture_id / order_refunds.terrace_id）：退款链路缺列直接报错。
+	_ = w.ensurePaypalColumns()
+	// sms_logs.template_id 历史列宽只有 varchar(64)，而 Twilio 的该槽承载整段
+	// 未渲染文案（英文文案普遍 > 64 字符），老库必须幂等加宽（R138）。
+	_ = w.ensureSmsLogTemplateColumn()
+	// 旧站升级不会建出 sms_codes / sms_logs / users.phone_country：
+	// AutoMigrateDB 只在 last_run_version != config.Version 时跑，跑过 3.8.4 的
+	// 站点不会再迁移。缺表发码报 1146、缺列注册报 1054，且会被错误出口归约成
+	// 「短信发送失败」而看不出根因。这里每次初始化都幂等补一次。
+	_ = w.ensureSmsSchema()
 	// 商品属性拆表（3.7.1 回填 + 3.8.0 删列），顺序与失败闸门见 initArchiveSchema。
 	w.initArchiveSchema()
 	// 检查默认模型，如果没有，则添加, 默认的模型：1 文章，2 产品
@@ -406,6 +461,94 @@ func (w *Website) InitModelData() {
 			w.UpgradeMultiCategory()
 		}()
 	}
+}
+
+// ensureSmsSchema 幂等补齐短信相关的表与列，不依赖 config.Version。
+//
+// 为什么不能只靠 AutoMigrateDB：它只在 last_run_version != config.Version 时执行。
+// 已经跑过 3.8.4 的站点升级后不会重新迁移，于是：
+//   - sms_codes / sms_logs 不存在 → 发码报 1146；
+//   - users.phone_country 不存在 → 注册/查号报 1054；
+//
+// 两者都会被前台错误出口归约成「短信发送失败」，根因完全不可见。
+//
+// 每一步失败都只记日志并继续（不能让建表失败把后续加列也跳过），最后返回聚合
+// 错误；调用方 InitModelData 与其它 ensure* 一致，选择记日志后继续启动。
+func (w *Website) ensureSmsSchema() error {
+	if w.DB == nil {
+		return nil
+	}
+	var errs []error
+
+	needMigrate := !w.DB.Migrator().HasTable(&model.SmsCode{}) ||
+		!w.DB.Migrator().HasTable(&model.SmsLog{})
+	if needMigrate {
+		if err := w.DB.Set("gorm:table_options", "DEFAULT CHARSET=utf8mb4").
+			AutoMigrate(&model.SmsCode{}, &model.SmsLog{}); err != nil {
+			log.Println("创建短信表 sms_codes / sms_logs 失败：", err)
+			errs = append(errs, err)
+		}
+	}
+
+	// 列定义必须与 model.User 的 gorm tag **逐字一致**（varchar(8) / NOT NULL / DEFAULT '86'），
+	// 不能在这里另立一套。
+	//
+	// 为什么不是「默认空串」：模型 tag 是 `type:varchar(8);not null;default:'86'`，
+	// 新装站的 AutoMigrateDB 按 tag 建列；这里若写成 varchar(10) DEFAULT ''，
+	// 同一张表在「新装」与「老站升级」两条路径上会长出两种形态（宽度与默认值都不同），
+	// 之后任何按 COLUMN_TYPE/DEFAULT 判定的逻辑都会二义，且 `sms_user_test.go`
+	// 与 `sms_schema_test.go` 会互相打架（2026-11-15 实测踩到）。
+	// 空串与 '86' 在业务上等价（normalizePhoneCountry 把两者都归一成 86），
+	// 所以「未绑定手机号」不会被误判成 86 号码持有者——回填 86 仍是独立的数据迁移。
+	if w.DB.Migrator().HasTable(&model.User{}) &&
+		!w.DB.Migrator().HasColumn(&model.User{}, "phone_country") {
+		if err := w.DB.Exec("ALTER TABLE `users` ADD COLUMN `phone_country` varchar(8) NOT NULL DEFAULT '86'").Error; err != nil {
+			log.Println("添加 users.phone_country 列失败：", err)
+			errs = append(errs, err)
+		}
+	}
+
+	// 表/列建好后仍按 information_schema 复核一次（尤其 sms_logs.template_id
+	// 必须 ≥ 500，Twilio 模板正文会超过历史 varchar(64)）。该函数内部已记日志。
+	if err := w.ensureSmsLogTemplateColumn(); err != nil {
+		errs = append(errs, err)
+	}
+
+	return errors.Join(errs...)
+}
+
+// ensureSmsLogTemplateColumn 把 sms_logs.template_id 从历史 varchar(64)/varchar(500)
+// 幂等加宽到 varchar(2000)（R153）。
+//
+// 为什么不能只靠 AutoMigrateDB：它只在 last_run_version != config.Version 时执行
+// （升级才跑），而模型标签已改成 varchar(2000)，老站库的物理列仍可能是 varchar(64)
+// 或 varchar(500)。Twilio 的 TemplateId 槽承载整段未渲染文案（provider/sms/resolve.go），
+// Body 上限是 1600 字符，varchar(500) 仍会触发 MySQL 1406 Data too long，整条发码
+// 链路直接失败。
+//
+// 只在 information_schema 报的列宽 < 2000 时执行 ALTER；失败只记日志不 panic；
+// 绝不 DROP 列、绝不改数据。
+func (w *Website) ensureSmsLogTemplateColumn() error {
+	if w.DB == nil || !w.DB.Migrator().HasTable(&model.SmsLog{}) {
+		return nil
+	}
+	var length int64
+	if err := w.DB.Raw(
+		"SELECT COALESCE(CHARACTER_MAXIMUM_LENGTH, 0) FROM information_schema.COLUMNS " +
+			"WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sms_logs' AND COLUMN_NAME = 'template_id'").
+		Row().Scan(&length); err != nil {
+		log.Println("检查 sms_logs.template_id 列宽失败：", err)
+		return err
+	}
+	if length >= 2000 {
+		return nil
+	}
+	if err := w.DB.Exec("ALTER TABLE `sms_logs` MODIFY COLUMN `template_id` varchar(2000) NOT NULL DEFAULT ''").Error; err != nil {
+		log.Println("加宽 sms_logs.template_id 失败：", err)
+		return err
+	}
+	log.Printf("sms_logs.template_id 列宽已从 %d 加宽到 2000\n", length)
+	return nil
 }
 
 func getTableEngine(db *gorm.DB, tableName string) (string, error) {

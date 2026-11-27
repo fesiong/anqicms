@@ -57,8 +57,24 @@ func newArchiveProductTestSite(t *testing.T) *Website {
 	if err := w.ensureArchiveProductTable(); err != nil {
 		t.Fatalf("建侧表失败：%v", err)
 	}
+	enableShopMode(t, w)
 	w.registerArchiveProductLoader()
 	return w
+}
+
+// enableShopMode 把站点按商城模式对待，测试结束还原。
+//
+// 侧表读取受 archiveProductScope 两道闸门控制（商城模式 + 产品模型）：内容的
+// 站点不读商品属性。这组测试跑的就是商品链路，必须满足前提，否则测到的只是
+// 「闸门关掉之后什么都不读」，护栏会变成空转。
+func enableShopMode(t *testing.T, w *Website) {
+	t.Helper()
+	if w.System == nil {
+		w.System = &config.SystemConfig{}
+	}
+	prev := w.System.ShopMode
+	w.System.ShopMode = 1
+	t.Cleanup(func() { w.System.ShopMode = prev })
 }
 
 // TestArchiveProductFieldsAreIgnoredByGorm 锁住 model 层的 tag。

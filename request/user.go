@@ -21,25 +21,26 @@ import (
 //   - Password：空串的语义是「不改密码」，绝不能解释成「把密码清空」。
 //   - Extra：map，nil 已能表达「未传」。
 type UserRequest struct {
-	Id         uint    `json:"id"`              // 用户 ID
-	UserName   string  `json:"user_name"`       // 用户名
-	RealName   *string `json:"real_name"`       // 真实姓名
-	FirstName  *string `json:"first_name"`      // First Name
-	LastName   *string `json:"last_name"`       // Last Name
-	Birthday   *int64  `json:"birthday"`        // 生日（时间戳）
-	AvatarURL  *string `json:"avatar_url"`      // 用户头像地址
-	Introduce  *string `json:"introduce"`       // 用户简介
-	Phone      *string `json:"phone"`           // 手机号
-	Email      *string `json:"email"`           // 邮箱
-	GroupId    *uint   `json:"group_id"`        // 用户组 ID
-	Status     *int    `json:"status"`          // 用户状态：0=待审核，1=正常，-1=禁用
-	Balance    *int64  `json:"balance" ast:"-"` // 余额不在这里写，走 PluginUserChangeBalance，保留字段仅为兼容旧请求体
-	IsRetailer *int    `json:"is_retailer"`     // 是否是分销员
-	ParentId   *uint   `json:"parent_id"`       // 上级用户 ID
-	Password   string  `json:"password"`        // 用户密码，需更新密码时传递
-	InviteCode *string `json:"invite_code"`     // 邀请码
-	ExpireTime *int64  `json:"expire_time"`     // 用户组过期时间（一般用于VIP过期）
-	UpdateAll  bool    `json:"update_all" ast:"-"`
+	Id           uint    `json:"id"`              // 用户 ID
+	UserName     string  `json:"user_name"`       // 用户名
+	RealName     *string `json:"real_name"`       // 真实姓名
+	FirstName    *string `json:"first_name"`      // First Name
+	LastName     *string `json:"last_name"`       // Last Name
+	Birthday     *int64  `json:"birthday"`        // 生日（时间戳）
+	AvatarURL    *string `json:"avatar_url"`      // 用户头像地址
+	Introduce    *string `json:"introduce"`       // 用户简介
+	Phone        *string `json:"phone"`           // 手机号
+	PhoneCountry *string `json:"phone_country"`   // 手机区号，未传不改（否则编辑资料会静默重置成 86）
+	Email        *string `json:"email"`           // 邮箱
+	GroupId      *uint   `json:"group_id"`        // 用户组 ID
+	Status       *int    `json:"status"`          // 用户状态：0=待审核，1=正常，-1=禁用
+	Balance      *int64  `json:"balance" ast:"-"` // 余额不在这里写，走 PluginUserChangeBalance，保留字段仅为兼容旧请求体
+	IsRetailer   *int    `json:"is_retailer"`     // 是否是分销员
+	ParentId     *uint   `json:"parent_id"`       // 上级用户 ID
+	Password     string  `json:"password"`        // 用户密码，需更新密码时传递
+	InviteCode   *string `json:"invite_code"`     // 邀请码
+	ExpireTime   *int64  `json:"expire_time"`     // 用户组过期时间（一般用于VIP过期）
+	UpdateAll    bool    `json:"update_all" ast:"-"`
 	// Partial 走 PATCH 语义：只覆盖显式传入的字段，未传的一律保持原值。
 	// 与 UpdateAll 互为反向开关，且优先——控制器用 req.UpdateAll = !req.Partial 归一。
 	Partial bool `json:"partial" ast:"-"`
@@ -75,16 +76,26 @@ type UserPasswordRequest struct {
 // 指针语义同 UserRequest：Status 的 0 是合法业务值（停用），Level 的 0 也是（最低等级），
 // 用值类型就永远写不进去——SaveUserGroupInfo 原本甚至硬编码 Status: 1，
 // 等于用户组一旦创建就无法停用。
+//
+// PublishCategoryIds（可投稿栏目）同样必须是指针，而且是最容易被改坏的一个：
+//
+//	nil     —— 不改动现有授权
+//	空数组  —— 清空授权，该用户组从此不能在前台投稿
+//	非空    —— 全量替换（前端表单提交走这条）
+//
+// 改成值类型会把「没传」和「传了空」混成一件事，于是所有没带这个字段的调用
+// （AI / 老前端 / 第三方集成）都会在保存用户组时顺手抹掉管理员配好的授权。
 type UserGroupRequest struct {
-	Id          uint                    `json:"id"`                 // 用户组 ID
-	Title       *string                 `json:"title"`              // 用户组名称
-	Description *string                 `json:"description"`        // 用户组介绍
-	Level       *int                    `json:"level"`              // group level：0,1,2,3...
-	Price       *int64                  `json:"price"`              // 用户组售价，单位：分，用于VIP
-	Status      *int                    `json:"status"`             // 用户组状态：0=停用，1=启用
-	Setting     *model.UserGroupSetting `json:"setting"`            //用户组配置
-	UpdateAll   bool                    `json:"update_all" ast:"-"` // 全量覆盖：未传字段按零值写入
-	Partial     bool                    `json:"partial" ast:"-"`    // PATCH：只写显式传入的字段
+	Id                 uint                    `json:"id"`                   // 用户组 ID
+	Title              *string                 `json:"title"`                // 用户组名称
+	Description        *string                 `json:"description"`          // 用户组介绍
+	Level              *int                    `json:"level"`                // group level：0,1,2,3...
+	Price              *int64                  `json:"price"`                // 用户组售价，单位：分，用于VIP
+	Status             *int                    `json:"status"`               // 用户组状态：0=停用，1=启用
+	Setting            *model.UserGroupSetting `json:"setting"`              //用户组配置
+	PublishCategoryIds *[]uint                 `json:"publish_category_ids"` // 可投稿栏目 ID 列表（空数组=清空授权）
+	UpdateAll          bool                    `json:"update_all" ast:"-"`   // 全量覆盖：未传字段按零值写入
+	Partial            bool                    `json:"partial" ast:"-"`      // PATCH：只写显式传入的字段
 }
 
 type UserGroupDeleteRequest struct {
@@ -103,18 +114,25 @@ type ApiRegisterRequest struct {
 	Introduce     string `json:"introduce"`
 	Email         string `json:"email"`
 	Phone         string `json:"phone"`
+	PhoneCountry  string `json:"phone_country"`
 	CaptchaId     string `json:"captcha_id"`
 	Captcha       string `json:"captcha"`
-	Code          string `json:"code"`  //phone verify code
+	Code          string `json:"code"`  // 本期真正承载短信验证码（register 场景，规格 §7.1）
 	State         string `json:"state"` // 注册状态
 	ResetPassword bool   `json:"reset_password"`
 
 	Extra map[string]interface{} `json:"extra"`
+
+	// PhoneNormalized 是内部标记，绝不由前台 JSON 绑定（R85，tag 必须忽略 JSON）。
+	// LoginViaSms 在 sms.NormalizePhone 成功后置 true；RegisterUser 仅在此为 true
+	// 时跳过历史 VerifyCellphoneFormat 老正则——该老正则只服务邮箱/密码注册路径，
+	// 会误拒国际本地号，而规格 §6.2 六道闸门已由 sms.NormalizePhone 严格校验。
+	PhoneNormalized bool `json:"-"`
 }
 
 type ApiLoginRequest struct {
 	InviteId      uint   `json:"invite_id"` // 邀请用户ID
-	Code          string `json:"code"`      //微信临时凭证,或者是验证码
+	Code          string `json:"code"`      // 本期真正承载短信验证码（sms 平台登录，规格 §7.1）
 	AnonymousCode string `json:"anonymousCode"`
 	Platform      string `json:"platform"`
 	Avatar        string `json:"avatar"`
@@ -127,6 +145,7 @@ type ApiLoginRequest struct {
 	Iv            string `json:"iv"`
 	Signature     string `json:"signature"`
 	RawData       string `json:"rawData"`
+	PhoneCountry  string `json:"phone_country"`
 
 	Remember  bool   `json:"remember"` // keep login state
 	UserName  string `json:"user_name"`

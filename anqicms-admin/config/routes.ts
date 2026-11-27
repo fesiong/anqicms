@@ -10,6 +10,8 @@
  * @param icon 配置路由的图标，取值参考 https://ant.design/components/icon-cn， 注意去除风格后缀和大小写，如想要配置图标为 <StepBackwardOutlined /> 则取值应为 stepBackward 或 StepBackward，如想要配置图标为 <UserOutlined /> 则取值应为 user 或者 User
  * @doc https://umijs.org/docs/guides/routes
  */
+import { brand } from '../src/oem/brand';
+
 export default [
   {
     path: '/login',
@@ -554,6 +556,15 @@ export default [
             icon: 'sendmail',
           },
           {
+            // path 必须与后端 config/menu.go 的 Menu.Path 逐字一致，
+            // 它同时是管理员分组权限的 KEY。
+            path: '/plugin/channel/sms',
+            name: 'sms',
+            type: 'system',
+            component: '@/pages/plugin/sms/index',
+            icon: 'sendmail',
+          },
+          {
             path: '/plugin/channel/subscription',
             name: 'subscription',
             type: 'system',
@@ -587,6 +598,15 @@ export default [
             type: 'system',
             component: '@/pages/plugin/google/index',
             icon: 'google',
+          },
+          {
+            // path 必须与后端 config/menu.go 的 Menu.Path 逐字一致，
+            // 它同时是管理员分组权限的 KEY。
+            path: '/plugin/channel/channels',
+            name: 'channels',
+            icon: 'message',
+            type: 'normal',
+            component: '@/pages/plugin/channels/index',
           },
         ],
       },
@@ -682,20 +702,6 @@ export default [
           },
         ],
       },
-      {
-        path: '/plugin/google',
-        name: 'google',
-        type: 'system',
-        component: '@/pages/plugin/google/index',
-        icon: 'google',
-      },
-      {
-        path: '/plugin/llms',
-        name: 'llms',
-        type: 'normal',
-        component: '@/pages/plugin/llms/index',
-        icon: 'llms',
-      },
     ],
   },
   {
@@ -732,9 +738,13 @@ export default [
         component: '@/pages/design/doc',
       },
       {
+        // 设计市场是官方模板市场的入口（iframe 嵌 anqicms.com），
+        // OEM 品牌不暴露，按 brand.official 在构建期隐藏菜单项；
+        // 页面自身也会在非官方品牌下重定向，避免直接敲 URL 泄漏官方品牌。
         path: '/design/market',
         name: 'market',
         component: '@/pages/design/market',
+        hideInMenu: !brand.official,
       },
       {
         path: '/design/diyfield',
@@ -749,6 +759,11 @@ export default [
     icon: 'lineChart',
     access: 'canAdmin',
     routes: [
+      {
+        path: '/statistic/archive',
+        name: 'archive',
+        component: '@/pages/statistic/archive',
+      },
       {
         path: '/statistic/liveview',
         name: 'liveview',

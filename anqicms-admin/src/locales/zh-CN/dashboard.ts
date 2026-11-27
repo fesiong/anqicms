@@ -1,6 +1,6 @@
 export default {
-  'dashboard.guide.name': '安企CMS商城版',
-  'dashboard.guide.welcome': '欢迎使用安企CMS商城版',
+  'dashboard.guide.name': '安企CMS',
+  'dashboard.guide.welcome': '欢迎使用安企CMS',
   'dashboard.guide.description': '我们准备了几个链接供你开始使用！',
   'dashboard.guide.start': '开始使用',
   'dashboard.guide.system': '给您的店铺起名',

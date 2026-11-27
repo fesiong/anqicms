@@ -169,9 +169,7 @@ func CategoryDetail(ctx iris.Context) {
 						category.Extra[field.FieldName] = val
 					}
 				} else if field.Type == config.CustomFieldTypeTexts && category.Extra[field.FieldName] != nil {
-					var texts []config.CustomFieldTexts
-					_ = json.Unmarshal([]byte(fmt.Sprint(category.Extra[field.FieldName])), &texts)
-					category.Extra[field.FieldName] = texts
+					category.Extra[field.FieldName] = currentSite.FormatCustomFieldTexts(category.Extra[field.FieldName], true)
 				} else if field.Type == config.CustomFieldTypeTimeline && category.Extra[field.FieldName] != nil {
 					var val config.TimelineField
 					_ = json.Unmarshal([]byte(fmt.Sprint(category.Extra[field.FieldName])), &val)

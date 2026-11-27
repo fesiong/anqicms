@@ -126,3 +126,62 @@ func TestRateLimiterIsConcurrencySafe(t *testing.T) {
 		t.Fatalf("并发下应恰好放行 50 次，实际 %d 次", allowed)
 	}
 }
+
+// TestRateLimiterCheckDoesNotConsumeQuota（R69）：Check 只判断窗口内是否还有名额、
+// 绝不写 hits；连调 N 次后 Allow 的可放行次数不变，且 Allow 既有语义未变
+// （拒绝不记账、滑窗后恢复）。本函数只追加，不改既有用例与格式。
+func TestRateLimiterCheckDoesNotConsumeQuota(t *testing.T) {
+	l := NewRateLimiter(2, time.Minute)
+	now := time.Now()
+	l.now = func() time.Time { return now }
+
+	hitsOf := func() []time.Time {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		return append([]time.Time(nil), l.hits["a"]...)
+	}
+
+	// Check 连调 100 次：每次都判「还有名额」，且绝不写 hits / 不消耗额度。
+	for i := 0; i < 100; i++ {
+		if !l.Check("a") {
+			t.Fatalf("第 %d 次 Check 应判有名额（Check 不记账），却返回 false", i+1)
+		}
+	}
+	if got := len(hitsOf()); got != 0 {
+		t.Fatalf("Check 连调 100 次后 hits[a] 应仍为空，实际 %d 个时间戳（Check 绝不写 hits）", got)
+	}
+
+	// Check 未消耗额度：Allow 仍可放行恰好 2 次，第 3 次拒绝。
+	for i := 1; i <= 2; i++ {
+		if !l.Allow("a") {
+			t.Fatalf("Check 后 Allow 第 %d 次应放行（限额 2），却被拒", i)
+		}
+	}
+	if l.Allow("a") {
+		t.Fatal("Check 后 Allow 第 3 次应被拒（限额 2 未被 Check 消耗）")
+	}
+
+	// Allow 既有语义：被拒调用不记账 —— 连拒 10 次，hits 时间戳集合不变。
+	before := hitsOf()
+	for i := 0; i < 10; i++ {
+		now = now.Add(5 * time.Second)
+		if l.Allow("a") {
+			t.Fatal("窗口内超额调用应被拒")
+		}
+	}
+	after := hitsOf()
+	if len(before) != len(after) {
+		t.Fatalf("被拒调用改变了 hits 长度：before=%d after=%d（拒绝不记账）", len(before), len(after))
+	}
+	for i := range before {
+		if !before[i].Equal(after[i]) {
+			t.Fatalf("被拒调用改变了 hits[%d] 时间戳（拒绝不记账）", i)
+		}
+	}
+
+	// Allow 既有语义：滑窗后恢复 —— 推进超过 window 后重新放行。
+	now = now.Add(61 * time.Second)
+	if !l.Allow("a") {
+		t.Fatal("窗口滑过后应重新放行（被拒调用不该顺延窗口）")
+	}
+}

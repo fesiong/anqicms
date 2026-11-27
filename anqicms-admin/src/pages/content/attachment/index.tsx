@@ -14,7 +14,7 @@ import {
 import { acceptedExtensions, calculateFileMd5, sizeFormat } from '@/utils';
 import { DownOutlined, LoadingOutlined } from '@ant-design/icons';
 import { ModalForm, ProFormText } from '@ant-design/pro-components';
-import { FormattedMessage, injectIntl } from '@umijs/max';
+import { FormattedMessage, injectIntl, useIntl } from '@umijs/max';
 import {
   Alert,
   Button,
@@ -29,13 +29,17 @@ import {
   Row,
   Select,
   Space,
+  Tag,
   Upload,
   message,
 } from 'antd';
 import dayjs from 'dayjs';
 import React from 'react';
-import { IntlShape } from 'react-intl';
 import './index.less';
+
+// react-intl 不是本项目的直接依赖（pnpm 严格布局下业务侧根本解析不到），
+// 为一个类型去引一份带 Context 的运行时库不划算，直接从 umi 的 useIntl 推导。
+type IntlShape = ReturnType<typeof useIntl>;
 
 export type intlProps = {
   intl: IntlShape;
@@ -692,6 +696,7 @@ class ImageList extends React.Component<intlProps> {
                     <Col sm={4} xs={12} key={item.id}>
                       <div className="image-item">
                         <div className="inner">
+                          <Tag className='image-tag' color='cyan'>{item.file_location?.substring(item.file_location?.lastIndexOf('.')+1).toUpperCase()}</Tag>
                           <Checkbox className="checkbox" value={item.id} />
                           <div
                             className="link"
@@ -701,6 +706,7 @@ class ImageList extends React.Component<intlProps> {
                               isImage={item.is_image}
                               timestamp={item.updated_time}
                               src={item.logo || item.file_location}
+                              posterSrc={item.logo}
                               preview={false}
                               alt={item.file_name}
                             />
@@ -763,6 +769,7 @@ class ImageList extends React.Component<intlProps> {
                 timestamp={currentAttach.updated_time}
                 src={currentAttach.logo || currentAttach.file_path}
                 previewSrc={currentAttach.file_path}
+                posterSrc={currentAttach.logo}
                 alt={currentAttach.file_name}
               />
             </div>

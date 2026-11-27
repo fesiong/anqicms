@@ -97,13 +97,13 @@ func ApiGetOrderChartData(ctx iris.Context) {
 	// 最近30天
 	startTime := time.Now().AddDate(0, 0, -30).Unix()
 	if showType == "" { // total
-		currentSite.DB.Model(&model.Order{}).Where("user_id = ? and created_time >= ? and status not in(?)", userId, startTime, []int{config.OrderStatusCanceled, config.OrderStatusWaiting}).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, sum(amount) as `value`, 'total' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+		currentSite.DB.Model(&model.Order{}).Where("user_id = ? and created_time >= ? and status not in(?)", userId, startTime, []int{config.OrderStatusCanceled, config.OrderStatusWaiting}).Select(provider.ChartDateSQL("created_time") + ", sum(amount) as `value`, 'total' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
 	} else if showType == "pending" {
-		currentSite.DB.Model(&model.Order{}).Where("user_id = ? and created_time >= ? and status = ?", userId, startTime, config.OrderStatusWaiting).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, sum(amount) as `value`, 'pending' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+		currentSite.DB.Model(&model.Order{}).Where("user_id = ? and created_time >= ? and status = ?", userId, startTime, config.OrderStatusWaiting).Select(provider.ChartDateSQL("created_time") + ", sum(amount) as `value`, 'pending' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
 	} else if showType == "processing" {
-		currentSite.DB.Model(&model.Order{}).Where("user_id = ? and created_time >= ? and status (?)", userId, startTime, []int{config.OrderStatusPaid, config.OrderStatusDelivering}).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, sum(amount) as `value`, 'processing' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+		currentSite.DB.Model(&model.Order{}).Where("user_id = ? and created_time >= ? and status (?)", userId, startTime, []int{config.OrderStatusPaid, config.OrderStatusDelivering}).Select(provider.ChartDateSQL("created_time") + ", sum(amount) as `value`, 'processing' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
 	} else if showType == "completed" {
-		currentSite.DB.Model(&model.Order{}).Where("user_id = ? and created_time >= ? and status = ?", userId, startTime, config.OrderStatusCompleted).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, sum(amount) as `value`, 'completed' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+		currentSite.DB.Model(&model.Order{}).Where("user_id = ? and created_time >= ? and status = ?", userId, startTime, config.OrderStatusCompleted).Select(provider.ChartDateSQL("created_time") + ", sum(amount) as `value`, 'completed' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
 	}
 
 	ctx.JSON(iris.Map{
@@ -328,7 +328,26 @@ func ApiGetOrderCheckout(ctx iris.Context) {
 		return
 	}
 	if len(req.Details) == 0 {
-		req.Details = []request.OrderDetail{{GoodsId: req.GoodsId, GoodsSkuId: req.GoodsSkuId, Quantity: req.Quantity}}
+		req.Details = []request.OrderDetail{{
+			GoodsId:          req.GoodsId,
+			GoodsSkuId:       req.GoodsSkuId,
+			Quantity:         req.Quantity,
+			QuantityProvided: req.QuantityProvided,
+		}}
+	}
+	// 数量非法直接拒绝：结算页先给出 -US$0.50 这种金额没有意义，
+	// 校验规则与 ApiCreateOrder 保持一致（省略 = 1 件，显式 0/负数 = 非法）。
+	for i := range req.Details {
+		if req.Details[i].Quantity == 0 && !req.Details[i].QuantityProvided {
+			req.Details[i].Quantity = 1
+		}
+		if req.Details[i].Quantity <= 0 {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("InvalidQuantity"),
+			})
+			return
+		}
 	}
 	var activity *model.Activity
 	if req.ActivityId > 0 {
@@ -965,6 +984,24 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 		})
 		return
 	}
+	// ⚠️ 只有「待支付 + 自己的订单」才能生成付款链接。
+	// 客户实测：订单取消后连续调用两次 /api/order/payment 都成功，还生成了两个不同的
+	// PayPal 订单（同一 payment 的 terrace_id 被覆盖），买家可能付到一张已取消的单上。
+	// 另外这里原本没有归属校验，任何登录用户都能给别人的订单发起支付。
+	if order.UserId != userId {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("TheOrderIsNotOperational"),
+		})
+		return
+	}
+	if order.Status != config.OrderStatusWaiting || order.PaidTime > 0 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("TheOrderIsNotOperational"),
+		})
+		return
+	}
 
 	payment, err := currentSite.GeneratePayment(order, &req)
 	if err != nil {
@@ -974,7 +1011,6 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 		})
 		return
 	}
-	// 推送事件
 	currentSite.CreateEvent(provider.EventOrderCheckout, map[string]interface{}{
 		"order_id": order.OrderId,
 		"amount":   float32(order.Amount) / 100,
@@ -991,6 +1027,10 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 		createPaypalPayment(ctx, payment, order)
 	} else if req.PayWay == config.PayWayStripe {
 		createStripePayment(ctx, payment, order)
+	} else if req.PayWay == config.PayWayXunhupay {
+		createXunhupayPayment(ctx, payment)
+	} else if req.PayWay == config.PayWayNowpayment {
+		createNowpaymentPayment(ctx, payment)
 	} else if req.PayWay == config.PayWayBalance {
 		createBalancePayment(ctx, payment, order)
 	} else {
@@ -1245,6 +1285,26 @@ func createPaypalPayment(ctx iris.Context, payment *model.Payment, order *model.
 		return
 	}
 
+	// ⚠️ 同一笔 payment 已有 PayPal 订单时优先复用：原来每次都新开一单并把
+	// payments.terrace_id 覆盖掉，买家用旧链接付款后通知对不上，等于凭空多出一个订单。
+	if payment.TerraceId != "" {
+		if detailRsp, dErr := client.OrderDetail(ctx, payment.TerraceId, make(gopay.BodyMap)); dErr == nil &&
+			detailRsp.Code == paypal.Success && detailRsp.Response != nil &&
+			detailRsp.Response.Status != "COMPLETED" && detailRsp.Response.Status != "VOIDED" {
+			if jumpUrl := paypalApproveLink(detailRsp.Response.Links); jumpUrl != "" {
+				ctx.JSON(iris.Map{
+					"code": config.StatusOK,
+					"msg":  "",
+					"data": iris.Map{
+						"pay_way":  config.PayWayPaypal,
+						"jump_url": jumpUrl,
+					},
+				})
+				return
+			}
+		}
+	}
+
 	var purchases = []*paypal.PurchaseUnit{
 		{
 			ReferenceId: payment.PaymentId,
@@ -1307,6 +1367,20 @@ func createPaypalPayment(ctx iris.Context, payment *model.Payment, order *model.
 	})
 }
 
+// paypalApproveLink 从 PayPal 订单的 links 里取买家付款页地址。
+// 新版返回 rel=payer-action，旧版是 rel=approve，两种都认。
+func paypalApproveLink(links []*paypal.Link) string {
+	for _, l := range links {
+		if l == nil || l.Href == "" {
+			continue
+		}
+		if l.Rel == "payer-action" || l.Rel == "approve" {
+			return l.Href
+		}
+	}
+	return ""
+}
+
 func createStripePayment(ctx iris.Context, payment *model.Payment, order *model.Order) {
 	currentSite := provider.CurrentSite(ctx)
 	account := currentSite.GetSingleValidPaymentAccount(config.PayWayStripe, payment.Amount)
@@ -1355,6 +1429,17 @@ func createStripePayment(ctx iris.Context, payment *model.Payment, order *model.
 
 func createBalancePayment(ctx iris.Context, payment *model.Payment, order *model.Order) {
 	currentSite := provider.CurrentSite(ctx)
+	// ⚠️ 金额闸门：`user.Balance < payment.Amount` 对负数恒 false，
+	// `balance - (-N)` 会把扣款变成给攻击者加钱。数量侧虽已在 CreateOrder 堵死负数量，
+	// 这里作为最后一道防线：任何非正金额的付款单都不允许进入余额扣款流程。
+	// 必须排在余额比较、Begin 事务和任何 UpdateColumn 之前。
+	if payment.Amount <= 0 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("UnableToCreatePaymentOrder"),
+		})
+		return
+	}
 	// 检查用户余额是否足够
 	user, err := currentSite.GetUserInfoById(payment.UserId)
 	if err != nil {
@@ -1376,7 +1461,32 @@ func createBalancePayment(ctx iris.Context, payment *model.Payment, order *model
 	payment.PayWay = config.PayWayBalance
 	payment.PaidTime = time.Now().Unix()
 	payment.TerraceId = strconv.FormatInt(payment.PaidTime, 10)
-	tx.Save(payment)
+	// 用 paid_time = 0 的条件更新抢占这张支付单：用户双击「余额支付」/前端重试会并发打进来，
+	// 原来是无条件 Save，两次都会扣一次余额、记一条付款流水。
+	res := tx.Model(&model.Payment{}).
+		Where("`id` = ? AND `paid_time` = 0", payment.Id).
+		Updates(map[string]interface{}{
+			"pay_way":    payment.PayWay,
+			"paid_time":  payment.PaidTime,
+			"terrace_id": payment.TerraceId,
+		})
+	if res.Error != nil || res.RowsAffected == 0 {
+		tx.Rollback()
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("PaymentFailed"),
+		})
+		return
+	}
+	if order.PaidTime > 0 || order.Status == config.OrderStatusRefunded {
+		// 订单已被另一张支付单付掉/已退款：不能再扣一次余额
+		tx.Rollback()
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("PaymentFailed"),
+		})
+		return
+	}
 	order.PaymentId = payment.PaymentId
 	tx.Save(order)
 
@@ -1422,6 +1532,93 @@ func createBalancePayment(ctx iris.Context, payment *model.Payment, order *model
 			"payment_id": payment.PaymentId,
 			"order_id":   order.OrderId,
 			"status":     1,
+		},
+	})
+}
+
+// createXunhupayPayment 虎皮椒下单：网关返回跳转地址（手机端）与二维码图片地址（PC 端）。
+//
+// PC 端 `url` 官方已停用，只给 url_qrcode，所以两个都往回调数据里塞：
+// 模板有 jump_url 就跳转、没有就拿 code_url 当 <img src>，与微信扫码支付同一套约定。
+func createXunhupayPayment(ctx iris.Context, payment *model.Payment) {
+	currentSite := provider.CurrentSite(ctx)
+	account := currentSite.GetSingleValidPaymentAccount(config.PayWayXunhupay, payment.Amount)
+	if account == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("UnableToCreatePaymentOrder"),
+		})
+		return
+	}
+	frontUrl := currentSite.System.BaseUrl
+	if currentSite.System.FrontUrl != "" {
+		frontUrl = currentSite.System.FrontUrl
+	}
+
+	payUrl, qrcodeUrl, err := currentSite.CreateXunhupayPayment(payment, account,
+		currentSite.System.BaseUrl+"/notify/xunhupay/pay", frontUrl+"/account/index")
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	currentSite.DB.Model(payment).UpdateColumn("payment_account_id", account.Id)
+
+	data := iris.Map{
+		"pay_way": config.PayWayXunhupay,
+	}
+	if payUrl != "" {
+		data["jump_url"] = payUrl
+	}
+	if qrcodeUrl != "" {
+		data["code_url"] = qrcodeUrl
+		data["qrcode"] = qrcodeUrl
+	}
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": data,
+	})
+}
+
+// createNowpaymentPayment NOWPayments 下单：创建发票，用户跳到托管页选币种付款。
+func createNowpaymentPayment(ctx iris.Context, payment *model.Payment) {
+	currentSite := provider.CurrentSite(ctx)
+	account := currentSite.GetSingleValidPaymentAccount(config.PayWayNowpayment, payment.Amount)
+	if account == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("UnableToCreatePaymentOrder"),
+		})
+		return
+	}
+	frontUrl := currentSite.System.BaseUrl
+	if currentSite.System.FrontUrl != "" {
+		frontUrl = currentSite.System.FrontUrl
+	}
+
+	invoice, err := currentSite.CreateNowpaymentInvoice(payment, account,
+		currentSite.System.BaseUrl+"/notify/nowpayment/pay", frontUrl+"/account/index", frontUrl+"/account/index")
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	currentSite.DB.Model(payment).UpdateColumn("payment_account_id", account.Id)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
+			"pay_way":    config.PayWayNowpayment,
+			"jump_url":   invoice.InvoiceUrl,
+			"payment_id": string(invoice.Id),
+			"amount":     payment.Amount,
+			"currency":   provider.NowpaymentPriceCurrency(account),
 		},
 	})
 }
@@ -1705,6 +1902,7 @@ func ApiReviewPraise(ctx iris.Context) {
 		})
 		return
 	}
+	review = provider.SanitizePublicReview(review)
 	// 检查是否点赞过
 	_, err = currentSite.AddReviewPraise(uint(userId), int64(review.Id), review.ArchiveId)
 	if err != nil {

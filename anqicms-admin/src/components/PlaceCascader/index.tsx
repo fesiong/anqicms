@@ -8,6 +8,7 @@ import { useIntl } from '@umijs/max';
 import type { CascaderProps } from 'antd';
 import { Cascader } from 'antd';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { hasSelectedPlace } from './selection';
 
 export interface PlaceItem {
   id?: number;
@@ -77,14 +78,21 @@ const PlaceCascader: React.FC<PlaceCascaderProps> = ({
   const resolvedPlaceholder =
     placeholder ??
     intl.formatMessage({ id: 'component.placeCascader.placeholder' });
+  const requiredMessage = intl.formatMessage({
+    id: 'component.placeCascader.required',
+  });
   const resolvedRules =
     rules ??
     [
       {
+        // 保留 required 只为让表单显示必填星号；真正的判定在 validator：
+        // 清空选择时 value 是 {country_code:'',country:''}，required 会放行。
         required: true,
-        message: intl.formatMessage({
-          id: 'component.placeCascader.required',
-        }),
+        message: requiredMessage,
+        validator: (_: any, value: any) =>
+          hasSelectedPlace(value, multiple)
+            ? Promise.resolve()
+            : Promise.reject(new Error(requiredMessage)),
       },
     ];
   const [options, setOptions] = useState<CascaderOption[]>([]);

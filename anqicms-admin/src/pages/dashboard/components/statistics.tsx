@@ -1,3 +1,4 @@
+import { contentListPath } from '@/utils/contentRoutes';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import { Col, Row, Space, Statistic, Tag, Tooltip } from 'antd';
 
@@ -74,7 +75,7 @@ const StatisticsRow = ({
                 label={intl.formatMessage({ id: 'dashboard.component.today' })}
                 value={data.archive_count?.today || 0}
               />
-              <Link to={'/product/index?status=plan'}>
+              <Link to={contentListPath('plan')}>
                 <Field
                   label={intl.formatMessage({
                     id: 'dashboard.component.unrelease',
@@ -82,7 +83,7 @@ const StatisticsRow = ({
                   value={data.archive_count?.un_release || 0}
                 />
               </Link>
-              <Link to={'/product/index?status=draft'}>
+              <Link to={contentListPath('draft')}>
                 <Field
                   label={intl.formatMessage({
                     id: 'dashboard.component.draft',

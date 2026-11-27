@@ -21,6 +21,17 @@ type SpiderData struct {
 	Spider        string
 }
 
+// ChartDateSQL 生成图表按天分组时的日期列，别名固定为 `date`。
+//
+// 不要退回成 DATE(FROM_UNIXTIME(col))：DSN 开了 parseTime=True（provider/dao.go），
+// 驱动会把 DATE 结果解析成 time.Time，GORM 塞进 response.ChartData.Date（string）后
+// JSON 序列化成 RFC3339 的 "2026-11-05T00:00:00+08:00"，前端图表 x 轴就显示这一长串。
+// 用 DATE_FORMAT 让 MySQL 直接返回字符串，落到 string 字段就是约定的 2006-01-02，
+// 与 Go 侧 time.Unix(..).Format("2006-01-02") 的分支保持一致。
+func ChartDateSQL(column string) string {
+	return "DATE_FORMAT(FROM_UNIXTIME(`" + column + "`), '%Y-%m-%d') AS `date`"
+}
+
 func (w *Website) StatisticSpider() []response.ChartData {
 	var result []response.ChartData
 
@@ -125,6 +136,34 @@ func (w *Website) CleanStatistics() {
 	w.StatisticLog.Clear(false)
 }
 
+// statisticsExactThreshold 是摘要统计「估算回退真实值」的阈值，与全表预检共用
+// 同一个数字：估算落在这个区间内就不惜做一次真实 COUNT，只有大盘站点保留估算。
+const statisticsExactThreshold = 100000
+
+// countSummaryRows 统计摘要里的一个记录数。dest 传 &model.Archive{} 或
+// &model.ArchiveDraft{}，where 由调用方写一次，估算路径和真实计数共用，
+// 避免两条路径的过滤条件各写一遍后漂移。
+func (w *Website) countSummaryRows(exact bool, dest interface{}, where string, args ...interface{}) int64 {
+	build := func(tx *gorm.DB) *gorm.DB {
+		return tx.Model(dest).Where(where, args...)
+	}
+	var count int64
+	if exact {
+		build(w.DB).Count(&count)
+		return count
+	}
+	toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+		// First 只为产出一条与计数同条件的 SQL 给 EXPLAIN，本身不参与统计
+		return build(tx).First(dest)
+	})
+	count = w.GetExplainCount(toSql)
+	if count <= statisticsExactThreshold {
+		// 再次求取准确值
+		build(w.DB).Count(&count)
+	}
+	return count
+}
+
 func (w *Website) GetStatisticsSummary(exact bool) *response.Statistics {
 	var result = response.Statistics{}
 	cacheKey := "cachedStatistics"
@@ -134,84 +173,43 @@ func (w *Website) GetStatisticsSummary(exact bool) *response.Statistics {
 		// 重新获取
 		// 先检查文章总量是否超过10万
 		explainCount := w.GetExplainCount("SELECT id FROM archives")
-		if explainCount <= 100000 {
+		if explainCount <= statisticsExactThreshold {
 			exact = true
 		}
-		module := w.GetModuleFromCache(2)
-		counter := response.ModuleCount{
-			Id:   module.Id,
-			Name: module.Title,
+		// 文档量按「全部启用模型」合计，不再只看硬编码的 2 号产品模型：
+		// 旧实现把文章模型整个漏掉，普通内容站的文档量恒为 0，商城模式只是碰巧对上。
+		// GetCacheModules 只返回 status=1 的模型，模型被停用或重建过（id 变化）时，
+		// 也不会再像 GetModuleFromCache(2) 那样返回 nil 并在取 Id 时空指针。
+		modules := w.GetCacheModules()
+		moduleIds := make([]uint, 0, len(modules))
+		for i := range modules {
+			moduleIds = append(moduleIds, modules[i].Id)
 		}
-		if exact {
-			w.DB.Model(&model.Archive{}).Where("`module_id` = ?", module.Id).Count(&counter.Total)
-		} else {
-			toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
-				return tx.Model(&model.Archive{}).Where("`module_id` = ?", module.Id).First(&model.Archive{})
-			})
-			counter.Total = w.GetExplainCount(toSql)
-			if counter.Total <= 100000 {
-				// 再次求取准确值
-				w.DB.Model(&model.Archive{}).Where("`module_id` = ?", module.Id).Count(&counter.Total)
+		for i := range modules {
+			counter := response.ModuleCount{
+				Id:   modules[i].Id,
+				Name: modules[i].Title,
+				// 老库里的 kind 可能是空串或脏值，归一后再交给前端，
+				// 保证它只会拿到 article / product 两种取值
+				Kind:  normalizeModuleKind(modules[i].Kind),
+				Total: w.countSummaryRows(exact, &model.Archive{}, "`module_id` = ?", modules[i].Id),
 			}
+			result.ModuleCounts = append(result.ModuleCounts, counter)
+			result.ArchiveCount.Total += counter.Total
 		}
-		result.ModuleCounts = append(result.ModuleCounts, counter)
-		result.ArchiveCount.Total += counter.Total
 		lastWeek := now.BeginningOfWeek()
 		today := now.BeginningOfDay()
-		if exact {
-			w.DB.Model(&model.Archive{}).Where("module_id = ? and created_time >= ? and created_time < ?", module.Id, lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix()).Count(&result.ArchiveCount.LastWeek)
-		} else {
-			toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
-				return tx.Model(&model.Archive{}).Where("module_id = ? and created_time >= ? and created_time < ?", module.Id, lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix()).First(&model.Archive{})
-			})
-			result.ArchiveCount.LastWeek = w.GetExplainCount(toSql)
-			if result.ArchiveCount.LastWeek <= 100000 {
-				// 再次求取准确值
-				w.DB.Model(&model.Archive{}).Where("module_id = ? and created_time >= ? and created_time < ?", module.Id, lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix()).Count(&result.ArchiveCount.LastWeek)
-			}
-		}
-		if exact {
-			w.DB.Model(&model.Archive{}).Where("module_id = ? and created_time >= ? and created_time < ?", module.Id, today.Unix(), time.Now().Unix()).Count(&result.ArchiveCount.Today)
-		} else {
-			toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
-				return tx.Model(&model.Archive{}).Where("module_id = ? and created_time >= ? and created_time < ?", module.Id, today.Unix(), time.Now().Unix()).First(&model.Archive{})
-			})
-			result.ArchiveCount.Today = w.GetExplainCount(toSql)
-			if result.ArchiveCount.Today <= 100000 {
-				// 再次求取准确值
-				w.DB.Model(&model.Archive{}).Where("module_id = ? and created_time >= ? and created_time < ?", module.Id, today.Unix(), time.Now().Unix()).Count(&result.ArchiveCount.Today)
-			}
-		}
-		if exact {
-			w.DB.Model(&model.ArchiveDraft{}).Where("module_id = ? and created_time > ?", module.Id, time.Now().Unix()).Count(&result.ArchiveCount.UnRelease)
-		} else {
-			toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
-				return tx.Model(&model.ArchiveDraft{}).Where("module_id = ? and created_time > ?", module.Id, time.Now().Unix()).First(&model.ArchiveDraft{})
-			})
-			result.ArchiveCount.UnRelease = w.GetExplainCount(toSql)
-			if result.ArchiveCount.UnRelease <= 100000 {
-				// 再次求取准确值
-				w.DB.Model(&model.ArchiveDraft{}).Where("module_id = ? and created_time > ?", module.Id, time.Now().Unix()).Count(&result.ArchiveCount.UnRelease)
-			}
-		}
-		if exact {
-			w.DB.Model(&model.ArchiveDraft{}).Where("module_id = ? and status = 0", module.Id).Count(&result.ArchiveCount.Draft)
-		} else {
-			toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
-				return tx.Model(&model.ArchiveDraft{}).Where("module_id = ? and status = 0", module.Id).First(&model.ArchiveDraft{})
-			})
-			result.ArchiveCount.Draft = w.GetExplainCount(toSql)
-			if result.ArchiveCount.Draft <= 100000 {
-				// 再次求取准确值
-				w.DB.Model(&model.ArchiveDraft{}).Where("module_id = ? and status = 0", module.Id).Count(&result.ArchiveCount.Draft)
-			}
-		}
-		w.DB.Model(&model.Category{}).Where("module_id = ? and `type` != ?", module.Id, config.CategoryTypePage).Count(&result.CategoryCount)
+		result.ArchiveCount.LastWeek = w.countSummaryRows(exact, &model.Archive{}, "module_id IN ? and created_time >= ? and created_time < ?", moduleIds, lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix())
+		result.ArchiveCount.Today = w.countSummaryRows(exact, &model.Archive{}, "module_id IN ? and created_time >= ? and created_time < ?", moduleIds, today.Unix(), time.Now().Unix())
+		result.ArchiveCount.UnRelease = w.countSummaryRows(exact, &model.ArchiveDraft{}, "module_id IN ? and created_time > ?", moduleIds, time.Now().Unix())
+		result.ArchiveCount.Draft = w.countSummaryRows(exact, &model.ArchiveDraft{}, "module_id IN ? and status = 0", moduleIds)
+		// 分类数与页面数分别跳转全站分类列表、单页列表，口径也必须覆盖全部模型
+		w.DB.Model(&model.Category{}).Where("`type` != ?", config.CategoryTypePage).Count(&result.CategoryCount)
 		w.DB.Model(&model.Link{}).Count(&result.LinkCount)
 		w.DB.Model(&model.Guestbook{}).Count(&result.GuestbookCount)
 		designList := w.GetDesignList()
 		result.TemplateCount = int64(len(designList))
-		w.DB.Model(&model.Category{}).Where("module_id = ? and `type` = ?", module.Id, config.CategoryTypePage).Count(&result.PageCount)
+		w.DB.Model(&model.Category{}).Where("`type` = ?", config.CategoryTypePage).Count(&result.PageCount)
 		w.DB.Model(&model.Attachment{}).Count(&result.AttachmentCount)
 
 		timeStamp := now.BeginningOfDay().AddDate(0, 0, -7).Unix()
@@ -237,6 +235,9 @@ func (w *Website) GetStatisticsSummary(exact bool) *response.Statistics {
 		var installTime int64
 		_ = json.Unmarshal([]byte(w.GetSettingValue(InstallTimeKey)), &installTime)
 		// show guide 安装的第一天，还没设置站点名称，还没创建分类，没有发布文章，则show guide
+		// 这里的 ArchiveCount/CategoryCount 现在是全模型口径：旧实现只数产品模型，
+		// 纯文章站永远满足「没有发布文章」，接口每次都返回 show_guide=true
+		// （前端虽有 close_guide 本地标记能暂时压住，换浏览器/清缓存就又冒出来）。
 		result.ShowGuide = (installTime+86400) > time.Now().Unix() || result.CategoryCount == 0 || result.ArchiveCount.Total == 0 || len(w.System.SiteName) == 0
 		result.Exact = exact
 		// 写入缓存，并缓存60秒
@@ -250,17 +251,17 @@ func (w *Website) StatisticCoupon(startTime int64, endTime int64) []response.Cha
 	// 优惠券领取数量
 	// 优惠券使用数量
 	var tmpResult []response.ChartData
-	w.DB.Model(&model.CouponCode{}).Where("get_time >= ? and get_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(get_time)) AS `date`, count(*) as `value`, 'gain' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+	w.DB.Model(&model.CouponCode{}).Where("get_time >= ? and get_time < ?", startTime, endTime).Select(ChartDateSQL("get_time") + ", count(*) as `value`, 'gain' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
 
 	var tmpResult2 []response.ChartData
-	w.DB.Model(&model.CouponCode{}).Where("use_time >= ? and use_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(use_time)) AS `date`, count(*) as `value`, 'used' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
+	w.DB.Model(&model.CouponCode{}).Where("use_time >= ? and use_time < ?", startTime, endTime).Select(ChartDateSQL("use_time") + ", count(*) as `value`, 'used' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
 
 	return append(tmpResult, tmpResult2...)
 }
 
 func (w *Website) StatisticSearch(startTime int64, endTime int64) []response.ChartData {
 	var tmpResult []response.ChartData
-	w.DB.Model(&model.SearchLog{}).Where("created_time >= ? and created_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'search' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+	w.DB.Model(&model.SearchLog{}).Where("created_time >= ? and created_time < ?", startTime, endTime).Select(ChartDateSQL("created_time") + ", count(*) as `value`, 'search' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
 
 	return tmpResult
 }
@@ -269,10 +270,10 @@ func (w *Website) StatisticCustomer(startTime int64, endTime int64) []response.C
 	// 新注册用户数量
 	// 活跃用户数量
 	var tmpResult []response.ChartData
-	w.DB.Model(&model.User{}).Where("created_time >= ? and created_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'register' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+	w.DB.Model(&model.User{}).Where("created_time >= ? and created_time < ?", startTime, endTime).Select(ChartDateSQL("created_time") + ", count(*) as `value`, 'register' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
 
 	var tmpResult2 []response.ChartData
-	w.DB.Model(&model.LoginLog{}).Where("created_time >= ? and created_time < ? and status = 1", startTime, endTime).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'login' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
+	w.DB.Model(&model.LoginLog{}).Where("created_time >= ? and created_time < ? and status = 1", startTime, endTime).Select(ChartDateSQL("created_time") + ", count(*) as `value`, 'login' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
 
 	return append(tmpResult, tmpResult2...)
 }
@@ -286,7 +287,7 @@ func (w *Website) StatisticProduct(startTime int64, endTime int64) []response.Ch
 	w.DB.Model(&model.Archive{}).
 		Where("module_id IN (SELECT `id` FROM `modules` WHERE `kind` = ?)", model.ModuleKindProduct).
 		Where("created_time >= ? and created_time < ?", startTime, endTime).
-		Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'new' as `label`").
+		Select(ChartDateSQL("created_time") + ", count(*) as `value`, 'new' as `label`").
 		Group("`date`").Order("`date`").Scan(&result)
 	// 如果结束时间是今天，则今天的数据需要获取最新的数据
 	today := now.EndOfDay().Unix()
@@ -322,12 +323,12 @@ func (w *Website) StatisticOrder(startTime int64, endTime int64) []response.Char
 	// 下单
 	// 支付
 	var tmpResult []response.ChartData
-	w.DB.Model(&model.Order{}).Where("created_time >= ? and created_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'create' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+	w.DB.Model(&model.Order{}).Where("created_time >= ? and created_time < ?", startTime, endTime).Select(ChartDateSQL("created_time") + ", count(*) as `value`, 'create' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
 
 	var tmpResult2 []response.ChartData
-	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(paid_time)) AS `date`, count(*) as `value`, 'pay' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
+	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select(ChartDateSQL("paid_time") + ", count(*) as `value`, 'pay' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
 	var tmpResult3 []response.ChartData
-	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(paid_time)) AS `date`, sum(amount) as `value`, 'pay' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult3)
+	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select(ChartDateSQL("paid_time") + ", sum(amount) as `value`, 'pay' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult3)
 
 	tmpResult = append(tmpResult, tmpResult2...)
 	tmpResult = append(tmpResult, tmpResult3...)
@@ -398,15 +399,15 @@ func (w *Website) StatisticLive(startTime int64, endTime int64) map[string][]res
 	var results = map[string][]response.ChartData{}
 	// 销售额
 	var tmpResult1 []response.ChartData
-	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(paid_time)) AS `date`, sum(amount) as `value`, 'pay' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult1)
+	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select(ChartDateSQL("paid_time") + ", sum(amount) as `value`, 'pay' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult1)
 	results["amount"] = tmpResult1
 	// 平均订单金额
 	var tmpResult2 []response.ChartData
-	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(paid_time)) AS `date`, ROUND(sum(amount)/count(*)) as `value`, 'average' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
+	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select(ChartDateSQL("paid_time") + ", ROUND(sum(amount)/count(*)) as `value`, 'average' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
 	results["average_amount"] = tmpResult2
 	// 订单数量
 	var tmpResult3 []response.ChartData
-	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(paid_time)) AS `date`, count(*) as `value`, 'count' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult3)
+	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select(ChartDateSQL("paid_time") + ", count(*) as `value`, 'count' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult3)
 	results["order_count"] = tmpResult3
 
 	// 如果结束时间是今天，则今天的数据需要获取最新的数据

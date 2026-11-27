@@ -38,22 +38,12 @@ func GetWebsiteList(ctx iris.Context) {
 	// 与 `token_secret` 都是明文。detail 接口早已改用 WebsiteDetailResponse，
 	// list 漏了同一处——两个入口读同一批数据，只堵一个等于没堵。
 	// 2026-10-27 由 MCP 全接口测试发现：siteops_website/list 能读到库密码。
+	//
+	// 与 detail 共用一个构造函数，避免两个入口各自拼接字段再次分叉
+	// （历史上 list 就是这样漏掉脱敏的）。list 不需要管理员用户名，传空串。
 	list := make([]request.WebsiteDetailResponse, 0, len(dbSites))
 	for _, site := range dbSites {
-		item := request.WebsiteDetailResponse{
-			Id:          site.Id,
-			RootPath:    site.RootPath,
-			Name:        site.Name,
-			Status:      site.Status,
-			Mysql:       request.SafeMysql(site.Mysql),
-			BaseUrl:     site.BaseUrl,
-			Initialed:   site.Status == 1,
-			CreatedTime: site.CreatedTime,
-		}
-		if site.Id == 1 {
-			item.Mysql = request.SafeMysql(config.Server.Mysql)
-		}
-		list = append(list, item)
+		list = append(list, buildWebsiteDetailResponse(site, provider.GetWebsite(site.Id), ""))
 	}
 
 	ctx.JSON(iris.Map{
@@ -94,28 +84,51 @@ func GetWebsiteInfo(ctx iris.Context) {
 	}
 	// 用只读结构体而不是 WebsiteRequest：后者带 AdminPassword，
 	// json tag 无 omitempty，空值也会出现在响应里（见 WebsiteDetailResponse 的注释）。
-	result := request.WebsiteDetailResponse{
-		Id:        dbSite.Id,
-		RootPath:  dbSite.RootPath,
-		Name:      dbSite.Name,
-		Status:    dbSite.Status,
-		Mysql:     request.SafeMysql(dbSite.Mysql),
-		AdminUser: adminInfo.UserName,
-	}
-	if website != nil {
-		result.BaseUrl = website.System.BaseUrl
-		result.FrontUrl = website.System.FrontUrl
-		result.Initialed = website.Initialed
-	}
-	if dbSite.Id == 1 {
-		result.Mysql = request.SafeMysql(config.Server.Mysql)
-	}
+	result := buildWebsiteDetailResponse(dbSite, website, adminInfo.UserName)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": result,
 	})
+}
+
+// buildWebsiteDetailResponse 把库里的站点行与运行时注册表里的站点合成详情响应。
+//
+// 为什么要抽成纯函数：`GetWebsiteInfo` 原来只判 `website != nil` 就直接读
+// `website.System.BaseUrl`。而注册表里可能存在**半初始化**站点——InitWebsite
+// 先 `websites.Set(&w)` 再 `w.InitSetting()`，而 InitSetting 在 DB 连不上时
+// 直接 return，于是该站点的 `System` 永远是 nil。点进这种站点的详情页就会空指针
+// panic，被 recover 兜成 500「服务器内部错误」。
+//
+// 2026-11-15 的线上 error.log 里 139 条 panic 全是这一类（列表接口）；详情接口
+// 是同一个坑的另一个入口，一并堵掉。抽出来后可以脱离数据库直接测。
+func buildWebsiteDetailResponse(dbSite *model.Website, site *provider.Website, adminUser string) request.WebsiteDetailResponse {
+	var result request.WebsiteDetailResponse
+	if dbSite == nil {
+		return result
+	}
+	result.Id = dbSite.Id
+	result.RootPath = dbSite.RootPath
+	result.Name = dbSite.Name
+	result.Status = dbSite.Status
+	result.Mysql = request.SafeMysql(dbSite.Mysql)
+	result.AdminUser = adminUser
+	result.CreatedTime = dbSite.CreatedTime
+	// 站点 1 的库信息以配置为准（库里那行可能是旧值），按 id 判断而不是行号。
+	if dbSite.Id == 1 {
+		result.Mysql = request.SafeMysql(config.Server.Mysql)
+	}
+	if site != nil {
+		result.Initialed = site.Initialed
+		// System == nil 时不补运行时字段，退化成库里的值（Status 已由
+		// provider.GetDBWebsiteInfo 归 0 表示不可用）。
+		if site.System != nil {
+			result.BaseUrl = site.System.BaseUrl
+			result.FrontUrl = site.System.FrontUrl
+		}
+	}
+	return result
 }
 
 // SaveWebsiteInfo 保存或创建多站点信息，仅默认站点（ID 为 1）可操作，保存后会重启对应站点。
@@ -272,6 +285,9 @@ func SaveWebsiteInfo(ctx iris.Context) {
 				}
 			}
 			if dbSite.Status != 1 {
+				// 站点被禁用：这里不经过 InitWebsite，必须显式停掉渠道管理器，
+				// 否则它会继续连平台、续租并往 Inbox 落库。
+				current.StopChannelManager()
 				current.Initialed = false
 			}
 		}
@@ -414,6 +430,8 @@ func SaveWebsiteInfo(ctx iris.Context) {
 				return
 			}
 			if dbSite.Status != 1 {
+				// 站点被禁用：同上方分支，未经过 InitWebsite 也要停掉渠道管理器。
+				current.StopChannelManager()
 				current.Initialed = false
 			}
 		}

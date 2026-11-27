@@ -37,30 +37,36 @@ func main() {
 }
 
 func onReady() {
+	// 托盘菜单是桌面版唯一的常驻界面，品牌与链接全部取自编译期注入的品牌配置：
+	// 漏一处就是客户天天看到官方名字。
+	brand := config.Brand()
 	systray.SetTemplateIcon(anqicms.AppIcon, anqicms.AppIcon)
 	systray.SetIcon(anqicms.AppIcon)
-	systray.SetTitle("安企CMS")
-	about := systray.AddMenuItem("关于", "安企CMS")
+	systray.SetTitle(brand.NameCN)
+	about := systray.AddMenuItem("关于", brand.NameCN)
 	systray.AddSeparator()
 	openMain := systray.AddMenuItem("后台管理", "打开网站后台管理页面")
-	openHelp := systray.AddMenuItem("使用帮助", "打开使用帮助")
-	openOrigination := systray.AddMenuItem("访问官网", "https://www.anqicms.com")
+	var openHelp *systray.MenuItem
+	if brand.Docs != "" {
+		openHelp = systray.AddMenuItem("使用帮助", "打开使用帮助")
+	}
+	openOrigination := systray.AddMenuItem("访问官网", brand.Website)
 	systray.AddSeparator()
-	mQuit := systray.AddMenuItem("退出", "退出安企CMS")
+	mQuit := systray.AddMenuItem("退出", "退出"+brand.NameCN)
 
 	go func() {
 		for {
 			select {
 			case <-about.ClickedCh:
-				_ = open.Run("https://www.anqicms.com/about.html")
+				_ = open.Run(brand.Website + "/about.html")
 			case <-openMain.ClickedCh:
 				_ = open.Run(fmt.Sprintf("http://127.0.0.1:%d/system/", config.Server.Server.Port))
 
-			case <-openHelp.ClickedCh:
-				_ = open.Run("https://www.anqicms.com/help")
+			case <-helpClicked(openHelp):
+				_ = open.Run(brand.Docs)
 
 			case <-openOrigination.ClickedCh:
-				_ = open.Run("https://www.anqicms.com/")
+				_ = open.Run(brand.Website)
 
 			case <-mQuit.ClickedCh:
 				systray.Quit()
@@ -68,6 +74,15 @@ func onReady() {
 			}
 		}
 	}()
+}
+
+// helpClicked 在没有帮助入口时返回一个永不触发的通道，
+// 避免 select 里对 nil 菜单项取值 panic。
+func helpClicked(item *systray.MenuItem) chan struct{} {
+	if item != nil {
+		return item.ClickedCh
+	}
+	return nil
 }
 
 func onExit() {

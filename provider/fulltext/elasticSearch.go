@@ -340,6 +340,24 @@ func (s *ElasticSearchService) Search(keyword string, moduleId uint, page int, p
 	return docs, total, nil
 }
 
+func (s *ElasticSearchService) Count() (int64, error) {
+	body, status, err := s.doRequest(context.Background(), http.MethodGet, "/"+s.indexName+"/_count", nil)
+	if err != nil {
+		return 0, err
+	}
+	if status != http.StatusOK {
+		return 0, fmt.Errorf("elasticsearch count failed, status code: %d", status)
+	}
+	var result struct {
+		Count int64 `json:"count"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return 0, err
+	}
+
+	return result.Count, nil
+}
+
 func (s *ElasticSearchService) Close() {
 }
 

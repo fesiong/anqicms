@@ -1,13 +1,21 @@
 package route
 
 import (
+	"embed"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/controller"
 	"kandaoni.com/anqicms/controller/graphql"
 	"kandaoni.com/anqicms/middleware"
+	"kandaoni.com/anqicms/provider"
 )
 
-func Register(app *iris.Application) {
+func Register(app *iris.Application, systemFiles embed.FS) {
+	// 启动阶段的就绪/进度端点。必须在通配路由之前注册（静态路径优先），
+	// 且不挂在任何需要站点上下文的中间件上：站点还没初始化完时，
+	// 这是唯一能告诉外界"进程活着、在干什么"的出口，也是负载均衡的就绪探针。
+	app.Get(provider.StartupStatusPath, middleware.StartupStatus)
+
 	//注册macros
 	//设置错误
 	app.Use(controller.Inspect)
@@ -18,7 +26,13 @@ func Register(app *iris.Application) {
 
 	//由于使用了自定义路由，它不能同时解析两条到一起，因此这里不能启用fileserver，需要用nginx设置，有没研究出方法了再改进
 	//app.HandleDir("/", fmt.Sprintf("%spublic", config.ExecPath)
-	app.Get("/{path:path}", middleware.Check301, middleware.ParseUserToken, middleware.HandlerTimeout, controller.ReRouteContext)
+	// 前端页面同时接受 HEAD：探活、部分爬虫与 CDN 回源会先发 HEAD。
+	// iris 的 Get 只注册 GET（FireMethodNotAllowed 默认关闭 → 未注册方法直接 404），
+	// 所以之前 HEAD 请求拿不到 200。这里复用同一条 GET 处理链：
+	// 响应体由 net/http 自动丢弃，状态码与响应头与 GET 完全一致。
+	// 不要为了省渲染而给 HEAD 单独开一条"只解析不渲染"的捷径——301/404/410
+	// 这些状态码只有真的走完路由解析（含模板存在性判断）才知道。
+	app.HandleMany("GET HEAD", "/{path:path}", middleware.Check301, middleware.ParseUserToken, middleware.HandlerTimeout, controller.ReRouteContext)
 
 	app.Get("/install", controller.Install)
 	app.Post("/install", controller.InstallForm)
@@ -26,7 +40,7 @@ func Register(app *iris.Application) {
 	app.HandleMany(iris.MethodPost, "/comment/praise /{base:string}/comment/praise", middleware.ParseUserToken, middleware.UserAuth, controller.CommentPraise)
 	app.HandleMany(iris.MethodGet, "/comment/{id:uint} /{base:string}/comment/{id:uint}", middleware.ParseUserToken, middleware.HandlerTimeout, controller.CommentList)
 
-	app.HandleMany(iris.MethodGet, "/guestbook.html /{base:string}/guestbook.html", middleware.ParseUserToken, middleware.HandlerTimeout, controller.GuestbookPage)
+	app.HandleMany("GET HEAD", "/guestbook.html /{base:string}/guestbook.html", middleware.ParseUserToken, middleware.HandlerTimeout, controller.GuestbookPage)
 	app.HandleMany(iris.MethodPost, "/guestbook.html /{base:string}/guestbook.html", middleware.ParseUserToken, controller.GuestbookForm)
 
 	// 内容导入API
@@ -37,15 +51,16 @@ func Register(app *iris.Application) {
 	app.HandleMany(iris.MethodPost, "/api/import/sitemap /{base:string}/api/import/sitemap", middleware.ParseUserToken, controller.VerifyApiToken, controller.ApiImportMakeSitemap)
 	app.HandleMany(iris.MethodPost, "/api/import/review /{base:string}/api/import/review", middleware.ParseUserToken, controller.VerifyApiToken, controller.ApiImportReview)
 
-	// login and register
-	app.HandleMany(iris.MethodGet, "/login /login/{platform:string}", controller.LoginPage)
-	app.HandleMany(iris.MethodGet, "/register /register/{platform:string}", controller.RegisterPage)
+	// login and register（页面同样接受 HEAD，理由见上面 /{path:path} 的注释）
+	app.HandleMany("GET HEAD", "/login /login/{platform:string}", controller.LoginPage)
+	app.HandleMany("GET HEAD", "/register /register/{platform:string}", controller.RegisterPage)
+	// /logout 故意只留 GET：它是有副作用的动作（清登录态），不能靠 HEAD 触发。
 	app.Get("/logout", middleware.ParseUserToken, controller.AccountLogout)
 	// account party
-	app.Get("/account/password/reset", controller.AccountPasswordResetPage)
-	app.Get("/account/{route:path}", middleware.ParseUserToken, controller.AccountIndexPage)
+	app.HandleMany("GET HEAD", "/account/password/reset", controller.AccountPasswordResetPage)
+	app.HandleMany("GET HEAD", "/account/{route:path}", middleware.ParseUserToken, controller.AccountIndexPage)
 	// order
-	app.Get("/order/{route:path}", middleware.ParseUserToken, controller.OrderIndexPage)
+	app.HandleMany("GET HEAD", "/order/{route:path}", middleware.ParseUserToken, controller.OrderIndexPage)
 
 	api := app.Party("/api", middleware.ParseUserToken)
 	{
@@ -67,6 +82,11 @@ func Register(app *iris.Application) {
 		api.Post("/friendlink/check", controller.VerifyApiLinkToken, controller.ApiImportCheckFriendLink)
 		// 前端api
 		api.Post("/login", controller.ApiLogin)
+		api.Post("/sms/send", controller.ApiSmsSend)
+		// 短信找回密码：独立端点，不挂 AccountProbeGuard（其预算语义围绕三个邮箱探针，R94）。
+		api.Post("/sms/password/reset", controller.ApiSmsPasswordReset)
+		// 手机号换绑：要求登录态（R94）。
+		api.Post("/sms/phone/bind", middleware.UserAuth, controller.ApiSmsPhoneBind)
 		// 下面三个端点都能判断「某个邮箱是否已注册」，共用一份按 IP 的预算：
 		// register 报「已注册」、verify/email 报「用户不存在」、state=exist 回布尔值。
 		api.Post("/register", middleware.AccountProbeGuard, controller.ApiRegister)
@@ -190,6 +210,8 @@ func Register(app *iris.Application) {
 		notify.Post("/alipay/pay", controller.NotifyAlipay)
 		notify.Post("/paypal/pay", controller.NotifyPayPal)
 		notify.Post("/stripe/pay", middleware.ShopModeGuard, controller.NotifyStripe)
+		notify.Post("/xunhupay/pay", middleware.ShopModeGuard, controller.NotifyXunhupay)
+		notify.Post("/nowpayment/pay", middleware.ShopModeGuard, controller.NotifyNowpayment)
 	}
 
 	returnParty := app.Party("/return")
@@ -199,7 +221,7 @@ func Register(app *iris.Application) {
 	}
 
 	//后台管理路由相关
-	manageRoute(app)
+	manageRoute(app, systemFiles)
 
 	// MCP 对外端点：按域名解析站点 + Bearer token 鉴权
 	app.Any("/api/mcp", middleware.McpTokenAuth, controller.McpStreamableHTTP)

@@ -5,7 +5,7 @@ type OrderService struct {
 	Id          int64  `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
 	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
 	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
-	ServiceCode string `json:"service_code" gorm:"column:service_code;type:varchar(255);not null;unique"`
+	ServiceCode string `json:"service_code" gorm:"column:service_code;type:varchar(190);not null;unique"`
 	ServiceName string `json:"service_name" gorm:"column:service_name;type:varchar(255);not null"`
 	ServiceType string `json:"service_type" gorm:"column:service_type;type:varchar(255);not null"`
 	Description string `json:"description" gorm:"column:description;type:text;default null"`
@@ -24,7 +24,7 @@ type OrderServiceAddon struct {
 	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
 	OrderId     string `json:"order_id" gorm:"column:order_id;type:varchar(36);not null;index"`
 	ServiceId   int64  `json:"service_id" gorm:"column:service_id;type:int(10) unsigned not null;default:0"`
-	ServiceCode string `json:"service_code" gorm:"column:service_code;type:varchar(255);not null;unique"`
+	ServiceCode string `json:"service_code" gorm:"column:service_code;type:varchar(190);not null;unique"`
 	ServiceFee  int64  `json:"service_fee" gorm:"column:service_fee;type:bigint(20) not null;default:0"`
 
 	OrderService *OrderService `json:"order_service" gorm:"-"`

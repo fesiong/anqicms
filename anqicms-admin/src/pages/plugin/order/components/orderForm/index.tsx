@@ -1,3 +1,4 @@
+import CustomFieldTextsView from '@/components/customFieldTexts/render';
 import {
   pluginGetOrderInfo,
   pluginOrderApplyRefund,
@@ -15,6 +16,7 @@ import { FormattedMessage, useIntl } from '@umijs/max';
 import { AutoComplete, Divider, Image, Modal, Space, message } from 'antd';
 import dayjs from 'dayjs';
 import React, { useEffect, useState } from 'react';
+import { orderLogisticsFields } from './logistics';
 import './index.less';
 
 export type OrderFormProps = {
@@ -247,6 +249,15 @@ const OrderForm: React.FC<OrderFormProps> = (props) => {
               ? dayjs(order.deliver_time * 1000).format('YYYY-MM-DD HH:mm:ss')
               : '-'}
           </ProFormText>
+          {orderLogisticsFields(order).map((field) => (
+            <ProFormText
+              key={field.labelKey}
+              label={intl.formatMessage({ id: field.labelKey })}
+              readonly
+            >
+              {field.value}
+            </ProFormText>
+          ))}
           <ProFormText
             label={intl.formatMessage({ id: 'plugin.order.finished-time' })}
             readonly
@@ -483,18 +494,9 @@ const OrderForm: React.FC<OrderFormProps> = (props) => {
                       {item.order_fields?.map((field: any, index: number) => (
                         <ProFormText key={index} label={field.name} readonly>
                           {field.type === 'texts' ? (
-                            <div className="text-groups">
-                              {item.order_extra?.[field.field_name].map(
-                                (text: any, index: number) => (
-                                  <div className="text-group" key={index}>
-                                    <div className="text-key">{text.key}: </div>
-                                    <div className="text-value">
-                                      {text.value}
-                                    </div>
-                                  </div>
-                                ),
-                              )}
-                            </div>
+                            <CustomFieldTextsView
+                              value={item.order_extra?.[field.field_name]}
+                            />
                           ) : field.type === 'image' ? (
                             <Image
                               height={100}

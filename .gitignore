@@ -28,3 +28,7 @@ keyword.json
 
 # apilive 冒烟工具的本地编译产物（go build ./cmd/apilive）
 /apilive
+# 教程截图流水线：本地预编译二进制 + Playwright 截图脚本（不入库）
+/anqicms_shot
+/.workbuddy-shot
+/anqicms-admin/.workbuddy-shot

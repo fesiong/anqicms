@@ -618,7 +618,7 @@ func AdminMenus(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
-		"data": config.DefaultMenuGroups,
+		"data": config.MenuGroups(),
 	})
 }
 

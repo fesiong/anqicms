@@ -1,4 +1,6 @@
+import ArchivePicker from '@/components/archiveSearch/ArchivePicker';
 import AttachmentSelect from '@/components/attachment';
+import CustomFieldTextsEditor from '@/components/customFieldTexts';
 import {
   getArchives,
   getCategories,
@@ -9,14 +11,13 @@ import {
 } from '@/services';
 import {
   DeleteOutlined,
-  DownOutlined,
   LeftOutlined,
   PlusOutlined,
   RightOutlined,
-  UpOutlined,
 } from '@ant-design/icons';
 import {
   ModalForm,
+  ProForm,
   ProFormCheckbox,
   ProFormDatePicker,
   ProFormDigit,
@@ -27,7 +28,7 @@ import {
   ProFormTextArea,
 } from '@ant-design/pro-components';
 import { FormattedMessage, useIntl } from '@umijs/max';
-import { Button, Divider, Image, Modal, Tag, message } from 'antd';
+import { Button, Divider, Image, Tag, message } from 'antd';
 import dayjs from 'dayjs';
 import React, { useEffect, useRef, useState } from 'react';
 
@@ -232,107 +233,16 @@ const UserForm: React.FC<UserFormProps> = (props) => {
     }));
   };
 
-  const onAddExtraTextsField = (field: string) => {
-    if (!user.extra[field]) {
-      user.extra[field] = { value: [] };
-    }
-    user.extra[field].value.push({
-      key: '',
-      value: '',
-    });
+  // texts 字段的统一入口：子组件回传序列化后的条目数组，state 与表单同步更新
+  const onChangeExtraTexts = (field: string, list: any[]) => {
+    const nextExtra = {
+      ...(user.extra || {}),
+      [field]: { ...(user.extra?.[field] || {}), value: list },
+    };
+    setUser((prev: any) => ({ ...prev, extra: nextExtra }));
     const extra: any = {};
-    extra[field] = { value: user.extra[field].value };
+    extra[field] = { value: list };
     formRef?.current?.setFieldsValue({ extra });
-    setUser((prevUser: any) => ({
-      ...prevUser,
-      extra: {
-        ...user.extra,
-      },
-    }));
-  };
-
-  const onChangeExtraTextsField = (
-    field: string,
-    idx: number,
-    keyName: any,
-    value: any,
-  ) => {
-    if (!user.extra[field].value[idx]) {
-      user.extra[field].value[idx] = {};
-    }
-    user.extra[field].value[idx][keyName] = value;
-    const extra: any = {};
-    extra[field] = { idx: { keyName: value } };
-    formRef?.current?.setFieldsValue({ extra });
-    setUser((prevUser: any) => ({
-      ...prevUser,
-      extra: {
-        ...user.extra,
-      },
-    }));
-  };
-
-  const onMoveUpExtraTextsField = (field: string, idx: number) => {
-    // 移动
-    if (idx > 0) {
-      const tmp = user.extra[field].value[idx];
-      user.extra[field].value[idx] = user.extra[field].value[idx - 1];
-      user.extra[field].value[idx - 1] = tmp;
-      const extra: any = {};
-      extra[field] = { value: user.extra[field].value };
-      formRef?.current?.setFieldsValue({ extra });
-      setUser((prevUser: any) => ({
-        ...prevUser,
-        extra: {
-          ...user.extra,
-        },
-      }));
-    }
-  };
-
-  const onMoveDownExtraTextsField = (field: string, idx: number) => {
-    // 移动
-    if (idx < user.extra[field].value.length - 1) {
-      const tmp = user.extra[field].value[idx];
-      user.extra[field].value[idx] = user.extra[field].value[idx + 1];
-      user.extra[field].value[idx + 1] = tmp;
-      const extra: any = {};
-      extra[field] = { value: user.extra[field].value };
-      formRef?.current?.setFieldsValue({ extra });
-      setUser((prevUser: any) => ({
-        ...prevUser,
-        extra: {
-          ...user.extra,
-        },
-      }));
-    }
-  };
-
-  const onRemoveExtraTextsField = (field: string, idx: number) => {
-    Modal.confirm({
-      title: intl.formatMessage({
-        id: 'content.module.field.delete.confirm',
-      }),
-      content: intl.formatMessage({
-        id: 'content.module.field.delete.content',
-      }),
-      onOk: () => {
-        if (user.extra[field].value.length === 1) {
-          user.extra[field] = { value: [] };
-        } else {
-          user.extra[field].value.splice(idx, 1);
-        }
-        setUser((prevUser: any) => ({
-          ...prevUser,
-          extra: {
-            ...user.extra,
-          },
-        }));
-        const extra: any = {};
-        extra[field] = { value: user.extra[field].value };
-        formRef?.current?.setFieldsValue({ extra });
-      },
-    });
   };
 
   const onSearchArchives = (e: any) => {
@@ -757,120 +667,20 @@ const UserForm: React.FC<UserFormProps> = (props) => {
             )}
           </ProFormText>
         ) : item.type === 'texts' ? (
-          <ProFormText label={item.name}>
-            <div className="text-groups">
-              <div className="text-group">
-                <div className="text-key">Key</div>
-                <div className="text-value">Value</div>
-                <div className="text-action"></div>
-              </div>
-              {user.extra?.[item.field_name]?.value?.length
-                ? user.extra[item.field_name].value.map(
-                    (inner: any, idx: number) => (
-                      <div className="text-group" key={idx}>
-                        <div className="text-key">
-                          <ProFormText
-                            name={[
-                              'extra',
-                              item.field_name,
-                              'value',
-                              idx,
-                              'key',
-                            ]}
-                            fieldProps={{
-                              onChange: (e: any) => {
-                                onChangeExtraTextsField(
-                                  item.field_name,
-                                  idx,
-                                  'key',
-                                  e.target.value,
-                                );
-                              },
-                            }}
-                          />
-                        </div>
-                        <div className="text-value">
-                          <ProFormText
-                            name={[
-                              'extra',
-                              item.field_name,
-                              'value',
-                              idx,
-                              'value',
-                            ]}
-                            fieldProps={{
-                              onChange: (e: any) => {
-                                onChangeExtraTextsField(
-                                  item.field_name,
-                                  idx,
-                                  'value',
-                                  e.target.value,
-                                );
-                              },
-                            }}
-                          />
-                        </div>
-                        <div className="text-action">
-                          <Tag
-                            onClick={() =>
-                              onMoveUpExtraTextsField(item.field_name, idx)
-                            }
-                          >
-                            <UpOutlined />
-                          </Tag>
-                          <Tag
-                            onClick={() =>
-                              onMoveDownExtraTextsField(item.field_name, idx)
-                            }
-                          >
-                            <DownOutlined />
-                          </Tag>
-                          <Tag
-                            color="red"
-                            onClick={() =>
-                              onRemoveExtraTextsField(item.field_name, idx)
-                            }
-                          >
-                            <DeleteOutlined />
-                          </Tag>
-                        </div>
-                      </div>
-                    ),
-                  )
-                : null}
-              <div className="text-group">
-                <div className="text-key">
-                  <Tag
-                    color="blue"
-                    className="add-line"
-                    onClick={() => onAddExtraTextsField(item.field_name)}
-                  >
-                    {intl.formatMessage({
-                      id: 'content.param.add-line',
-                    })}
-                  </Tag>
-                </div>
-              </div>
-            </div>
-          </ProFormText>
+          <CustomFieldTextsEditor
+            field={item}
+            value={user.extra?.[item.field_name]?.value || []}
+            onChange={(list: any[]) =>
+              onChangeExtraTexts(item.field_name, list)
+            }
+          />
         ) : item.type === 'archive' ? (
-          <ProFormText label={item.name}>
-            <ProFormSelect
-              name={['extra', item.field_name, 'value']}
-              showSearch
-              mode="multiple"
-              options={searchArchives.map((a: any) => ({
-                title: a.title,
-                label: a.title,
-                value: a.id,
-              }))}
-              fieldProps={{
-                onSearch: (e) => {
-                  onSearchArchives(e);
-                },
-              }}
-            />
-          </ProFormText>
+          <ProForm.Item
+            label={item.name}
+            name={['extra', item.field_name, 'value']}
+          >
+            <ArchivePicker />
+          </ProForm.Item>
         ) : item.type === 'category' ? (
           <ProFormText label={item.name}>
             <ProFormSelect

@@ -62,6 +62,8 @@ func hourlyTask() {
 	UpdateActivities()
 	// 检查购物车，订单
 	CheckCartAndOrders()
+	// 回查各渠道待完成的退款（PayPal PENDING / 微信 PROCESSING / Stripe pending）
+	SyncPaypalRefunds()
 }
 
 func hourly10MinuteTask() {
@@ -225,6 +227,16 @@ func CheckCartAndOrders() {
 			continue
 		}
 		w.CheckCartAndOrders()
+	}
+}
+
+func SyncPaypalRefunds() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.SyncPendingRefunds()
 	}
 }
 

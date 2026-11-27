@@ -9,24 +9,26 @@ import (
 )
 
 type Attachment struct {
-	Id           uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime  int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
-	UpdatedTime  int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
-	UserId       uint   `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
-	FileName     string `json:"file_name" gorm:"column:file_name;type:varchar(250) not null;default:''"`
-	FileLocation string `json:"file_location" gorm:"column:file_location;type:varchar(250) not null;default:''"`
-	FileSize     int64  `json:"file_size" gorm:"column:file_size;type:bigint(20) unsigned not null;default:0"`
-	FileMd5      string `json:"file_md5" gorm:"column:file_md5;type:varchar(32) not null;default:'';unique"`
-	Width        int    `json:"width" gorm:"column:width;type:int(10) unsigned not null;default:0"`
-	Height       int    `json:"height" gorm:"column:height;type:int(10) unsigned not null;default:0"`
-	CategoryId   uint   `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_id"`
-	IsImage      int    `json:"is_image" gorm:"column:is_image;type:tinyint(1) not null;default:0"` // 1 = 图片， 2 = 视频 其它未定义
-	Status       uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
-	Watermark    uint   `json:"watermark" gorm:"column:watermark;type:tinyint(1) not null;default:0"`
-	IsRemote     int    `json:"is_remote" gorm:"column:is_remote;type:tinyint(1) not null;default:0"`
-	Logo         string `json:"logo" gorm:"column:logo;type:varchar(250) not null;default:''"`
-	Thumb        string `json:"thumb" gorm:"-"`
-	FilePath     string `json:"file_path" gorm:"-"`
+	Id           uint       `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime  int64      `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	UpdatedTime  int64      `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
+	UserId       uint       `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
+	FileName     string     `json:"file_name" gorm:"column:file_name;type:varchar(250) not null;default:''"`
+	FileLocation string     `json:"file_location" gorm:"column:file_location;type:varchar(250) not null;default:''"`
+	FileSize     int64      `json:"file_size" gorm:"column:file_size;type:bigint(20) unsigned not null;default:0"`
+	FileMd5      string     `json:"file_md5" gorm:"column:file_md5;type:varchar(32) not null;default:'';unique"`
+	Width        int        `json:"width" gorm:"column:width;type:int(10) unsigned not null;default:0"`
+	Height       int        `json:"height" gorm:"column:height;type:int(10) unsigned not null;default:0"`
+	CategoryId   uint       `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_id"`
+	IsImage      int        `json:"is_image" gorm:"column:is_image;type:tinyint(1) not null;default:0"` // 1 = 图片， 2 = 视频 其它未定义
+	Status       uint       `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
+	Watermark    uint       `json:"watermark" gorm:"column:watermark;type:tinyint(1) not null;default:0"`
+	IsRemote     int        `json:"is_remote" gorm:"column:is_remote;type:tinyint(1) not null;default:0"`
+	Logo         string     `json:"logo" gorm:"column:logo;type:varchar(250) not null;default:''"`
+	Thumb        string     `json:"thumb" gorm:"-"`
+	FilePath     string     `json:"file_path" gorm:"-"`
+	PlayURL      string     `json:"play_url" gorm:"-"`
+	VideoTask    *VideoTask `json:"video_task,omitempty" gorm:"-"`
 }
 
 func (attachment *Attachment) BeforeSave(tx *gorm.DB) error {
@@ -46,7 +48,11 @@ func (attachment *Attachment) AfterFind(tx *gorm.DB) error {
 }
 
 func (attachment *Attachment) GetThumb(storageUrl string) {
-	attachment.FilePath = storageUrl + "/" + attachment.FileLocation
+	if !strings.HasPrefix(attachment.FileLocation, "http") && !strings.HasPrefix(attachment.FileLocation, "//") {
+		attachment.FilePath = storageUrl + "/" + attachment.FileLocation
+	} else {
+		attachment.FilePath = attachment.FileLocation
+	}
 	// 如果不是图片
 	if attachment.IsImage == 0 && attachment.Logo == "" {
 		attachment.Logo = storageUrl + "/" + attachment.FileLocation

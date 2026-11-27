@@ -7,6 +7,7 @@ import {
   rebuildThumb,
   saveSettingContent,
 } from '@/services/setting';
+import VideoProcessing from './components/videoProcessing';
 import { PlusOutlined } from '@ant-design/icons';
 import {
   ProForm,
@@ -341,6 +342,7 @@ const SettingContentFrom: React.FC<any> = () => {
         />
       </div>
     ),
+    video: <VideoProcessing />,
     image: (
       <div>
         <ProFormRadio.Group
@@ -650,6 +652,10 @@ const SettingContentFrom: React.FC<any> = () => {
             {
               key: 'image',
               label: intl.formatMessage({ id: 'setting.tab.image' }),
+            },
+            {
+              key: 'video',
+              label: intl.formatMessage({ id: 'setting.tab.video' }),
             },
           ]}
         >

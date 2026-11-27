@@ -25,7 +25,10 @@ type BlockIP struct {
 }
 
 type Limiter struct {
-	mu            sync.Mutex
+	// 读多写少：IsIPBlocked/IsWhiteIp 每个请求都会调用（controller.Inspect），
+	// 写成 Mutex 会让同站点的所有请求在这把锁上排队 —— 压测实测吞吐被钉死在
+	// ~360 RPS、p50 随并发线性上涨。改成 RWMutex，读读并发。
+	mu            sync.RWMutex
 	ipVisits      map[string]*VisitInfo
 	blockedIPs    map[string]time.Time
 	blackIPs      []string // 黑名单IP，支持IP段
@@ -59,7 +62,7 @@ func NewLimiter(setting *config.PluginLimiter) *Limiter {
 		ipVisits:   make(map[string]*VisitInfo),
 		blockedIPs: make(map[string]time.Time),
 		MaxTime:    5 * time.Minute,
-		mu:         sync.Mutex{},
+		mu:         sync.RWMutex{},
 	}
 
 	limiter.UpdateLimiter(setting)
@@ -173,9 +176,9 @@ func (l *Limiter) BlockIP(ip string) {
 
 // IsIPBlocked 检查IP是否被封禁
 func (l *Limiter) IsIPBlocked(ip string) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
+	// 读路径只加读锁：这个函数每个请求都会调（controller.Inspect），
+	// 空名单是绝大多数站点的常态，不能因为"可能有黑名单"就让所有请求排队。
+	l.mu.RLock()
 	if len(l.blackIPs) > 0 {
 		parsedIP := net.ParseIP(ip)
 		// 检查是否在黑名单中，黑名单支持IP段
@@ -190,22 +193,30 @@ func (l *Limiter) IsIPBlocked(ip string) bool {
 				// 判断IP是否在IP段中
 				if ipNet.Contains(parsedIP) {
 					// 在IP段内
+					l.mu.RUnlock()
 					return true
 				}
 			} else if blackIP == ip {
+				l.mu.RUnlock()
 				return true
 			}
 		}
 	}
-
 	unblockTime, blocked := l.blockedIPs[ip]
+	l.mu.RUnlock()
+
 	if !blocked {
 		return false
 	}
 
 	// 检查封禁时间是否已过
 	if time.Now().After(unblockTime) {
-		delete(l.blockedIPs, ip) // 解禁
+		// 解禁要写 map，进写锁并重新确认（可能已被别的请求删掉）。
+		l.mu.Lock()
+		if t, ok := l.blockedIPs[ip]; ok && time.Now().After(t) {
+			delete(l.blockedIPs, ip)
+		}
+		l.mu.Unlock()
 		return false
 	}
 
@@ -213,8 +224,9 @@ func (l *Limiter) IsIPBlocked(ip string) bool {
 }
 
 func (l *Limiter) IsWhiteIp(ip string) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	// 同 IsIPBlocked：每请求都调，白名单为空是常态，只读不改，用读锁。
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 
 	if len(l.whiteIPs) == 0 {
 		return false
@@ -258,8 +270,8 @@ func (l *Limiter) GetBlockIPs() []BlockIP {
 	if l == nil {
 		return nil
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 
 	var ips = make([]BlockIP, 0, len(l.blockedIPs))
 	for ip, t := range l.blockedIPs {

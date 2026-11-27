@@ -787,6 +787,42 @@ var domainIntentCatalog = append([]*IntentSpec{
 		}),
 	},
 	{
+		Name: "channel_sms", Title: "短信服务", Domain: DomainChannel, Risk: RiskWrite,
+		Desc: "短信渠道配置、测试发送与发送记录。action: setting_get/setting_save/test/logs。" +
+			"返回统一为标准信封 {code,msg,ok,status,data}。" +
+			"⚠️ setting_save 是**深合并**：顶层字段与嵌套对象都只覆盖 payload 里出现的叶子，" +
+			"未出现的键保留原值；但数组 / 映射类型的字段（如 templates / texts）一旦出现就整段替换，" +
+			"`null` 会清空对应的 map。因此改一个叶子字段只需传该叶子，不必回传整棵子树。" +
+			"⚠️ setting_get 返回的凭据是掩码 ********，表示「未改动」；原样写回即可保持不变。" +
+			"⚠️ 同一时刻只有一家厂商生效；Twilio 只支持国际号码，+86 会被拒发。" +
+			"⚠️ `values.trusted_proxies` 是可信反代/CDN 回源网段数组（IP 或 CIDR，如 [\"203.0.113.0/24\"]，" +
+			"Cloudflare 可填官方回源段）。对端不在其中时，IP 限额一律按 TCP 对端计、忽略 X-Forwarded-For——" +
+			"站点挂 CDN 时必须填，否则全站用户会被算成同一个 IP（限额被少数人吃光后全站发不出码）；" +
+			"直连公网则留空（默认），填了反而会采信可伪造的请求头。保存后立即生效。",
+		DefaultOff: true,
+		Params: map[string]ParamSpec{
+			"action": {Type: "string", Required: true, Enum: []string{
+				"setting_get", "setting_save", "test", "logs"}},
+			"values":     {Type: "object", Desc: "setting_save 传完整配置；test 传 {phone_country, phone}"},
+			"page":       {Type: "integer", Default: 1},
+			"page_size":  {Type: "integer", Default: 20},
+			"scene":      {Type: "string", Desc: "logs 筛选：场景码"},
+			"provider":   {Type: "string", Desc: "logs 筛选：厂商（仅 logs 用；setting_save 要切换生效厂商请传 values.provider）"},
+			"status":     {Type: "integer", Desc: "logs 筛选：0 待发 1 成功 -1 失败"},
+			"phone":      {Type: "string", Desc: "logs 筛选：号码"},
+			"start_time": {Type: "integer", Desc: "logs 筛选：起始时间戳，必须 > 0（传 0 视为非法）"},
+			"end_time":   {Type: "integer", Desc: "logs 筛选：结束时间戳，必须 > 0，且需 >= start_time"},
+		},
+		Required: []string{"action"},
+		Caps:     []string{"api_invoke"},
+		Compose: invokeRoutes("channel_sms", map[string]string{
+			"setting_get":  "GET /plugin/sms/setting",
+			"setting_save": "POST /plugin/sms/setting",
+			"test":         "POST /plugin/sms/test",
+			"logs":         "GET /plugin/sms/logs",
+		}),
+	},
+	{
 		Name: "channel_subscriber", Title: "订阅用户管理", Domain: DomainChannel, Risk: RiskWrite,
 		Desc: "订阅用户与其分组的管理、群发。action: list/detail/save/delete/category_list/category_save/category_delete/send/send_status。" +
 			"⚠️ send 是**异步长任务**（SMTP 单封耗时数秒，收件人多时同步会超时），只返回 job_id；" +
@@ -1086,6 +1122,7 @@ var gatedDomainIntents = map[string]string{
 	"seo_merchant":         "Google 商品同步：配置含 client_secret/refresh_token，且会向外推送商品数据", "channel_wechat": "公众号菜单与消息回复会同步到微信侧，对外可见",
 	"channel_thirdparty": "读写公众号/小程序/Google 授权配置（AppID、Secret）",
 	"channel_sendmail":   "SMTP 配置与测试发信，会真实投递邮件给收件人",
+	"channel_sms":        "短信配置含三家厂商凭据，且 test 会真实付费发短信给任意号码",
 	"channel_subscriber": "订阅用户群发（send），对外触达真实邮箱",
 	"system_security":    "访问限制/封禁/Akismet 等风控配置，误设可把站点或管理员挡在门外",
 	"system_multilang":   "多语言子站的保存、删除与同步，影响其他站点",
@@ -1101,8 +1138,8 @@ var gatedDomainIntents = map[string]string{
 // 常用意图已不打 DefaultOff，留空即可得到这份清单描述的内容/结构/SEO/互动/素材/交易/运维能力。
 // 清单刻意不含备份/升级/迁移/多站点/凭证与资金/对外发信这类高危面。
 //
-// 与留空的差异只在内置主机级工具（shell_exec、fs_*、system_plugin）：它们同为默认可见，
-// 服务的是自我编写 Agent 的场景。纯运营站点显式填入本清单会把它们排除掉——
+// 与留空的差异只在默认可见但不在本清单的工具（当前为 shell_exec、fs_*、skill）：
+// 纯运营站点显式填入本清单会把它们排除掉——
 // 这正是本清单的实际价值：不是"打开能力"，而是"在不重启的前提下收口"。
 func RecommendedExposed() []string {
 	return []string{

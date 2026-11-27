@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
@@ -293,30 +294,7 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 		}
 
 		if req.Like == "keywords" {
-			archives, _, _ = w.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-				if w.Content.MultiCategory == 1 && (categoryId > 0 || len(req.ExcludeCategoryIds) > 0) {
-					tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
-				}
-				if categoryId > 0 {
-					if w.Content.MultiCategory == 1 {
-						tx = tx.Where("archive_categories.category_id = ?", categoryId)
-					} else {
-						tx = tx.Where("`category_id` = ?", categoryId)
-					}
-				}
-				if req.ModuleId > 0 {
-					tx = tx.Where("`module_id` = ?", req.ModuleId)
-				}
-				if len(req.ExcludeCategoryIds) > 0 {
-					if w.Content.MultiCategory == 1 {
-						tx = tx.Where("archive_categories.category_id NOT IN (?)", req.ExcludeCategoryIds)
-					} else {
-						tx = tx.Where("`category_id` NOT IN (?)", req.ExcludeCategoryIds)
-					}
-				}
-				tx = tx.Where("`keywords` like ? AND archives.`id` != ?", "%"+keywords+"%", req.Id)
-				return tx
-			}, "archives.id DESC", 0, req.Limit, req.Offset)
+			archives = w.getRelatedKeywordArchives(req, categoryId, keywords)
 		} else if req.Like == "relation" {
 			if categoryId > 0 || req.ModuleId > 0 || len(req.ExcludeCategoryIds) > 0 {
 				archives, total, _ = w.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
@@ -788,10 +766,11 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 			if len(req.TagIds) > 0 {
 				tx = tx.Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` IN (?)", req.TagIds)
 			}
-			if len(req.Ids) > 0 {
-				tx = tx.Where("archives.`id` IN(?)", req.Ids)
-			} else if len(ids) > 0 {
+			if len(ids) > 0 || fulltextSearch {
+				// 如果使用了全文搜索，则使用ids来查询
 				tx = tx.Where("archives.`id` IN(?)", ids)
+			} else if len(req.Ids) > 0 {
+				tx = tx.Where("archives.`id` IN(?)", req.Ids)
 			} else if req.Q != "" {
 				// 如果文章数量达到10万，则只能匹配开头，否则就模糊搜索
 				var allArchives int64
@@ -1522,9 +1501,7 @@ func (w *Website) ApiGetCategory(req *request.ApiCategoryRequest) (*model.Catego
 						categoryExtra[field.FieldName] = val
 					}
 				} else if field.Type == config.CustomFieldTypeTexts && categoryExtra[field.FieldName] != nil {
-					var texts []config.CustomFieldTexts
-					_ = json.Unmarshal([]byte(fmt.Sprint(categoryExtra[field.FieldName])), &texts)
-					categoryExtra[field.FieldName] = texts
+					categoryExtra[field.FieldName] = w.FormatCustomFieldTexts(categoryExtra[field.FieldName], true)
 				} else if field.Type == config.CustomFieldTypeTimeline && categoryExtra[field.FieldName] != nil {
 					var val config.TimelineField
 					_ = json.Unmarshal([]byte(fmt.Sprint(categoryExtra[field.FieldName])), &val)
@@ -1649,9 +1626,7 @@ func (w *Website) ApiGetTag(req *request.ApiTagRequest) (*model.Tag, error) {
 							tagDetail.Extra[field.FieldName] = val
 						}
 					} else if field.Type == config.CustomFieldTypeTexts && tagDetail.Extra[field.FieldName] != nil {
-						var texts []config.CustomFieldTexts
-						_ = json.Unmarshal([]byte(fmt.Sprint(tagDetail.Extra[field.FieldName])), &texts)
-						tagDetail.Extra[field.FieldName] = texts
+						tagDetail.Extra[field.FieldName] = w.FormatCustomFieldTexts(tagDetail.Extra[field.FieldName], true)
 					} else if field.Type == config.CustomFieldTypeTimeline && tagDetail.Extra[field.FieldName] != nil {
 						var val config.TimelineField
 						_ = json.Unmarshal([]byte(fmt.Sprint(tagDetail.Extra[field.FieldName])), &val)
@@ -1784,8 +1759,38 @@ var (
 	// 排序子句只接受列名（可带表前缀、可带反引号）与 asc/desc。
 	// 引号、括号、注释、|| 只要放行任意一项，ORDER BY 就成了注入面。
 	orderColumnRegex = regexp.MustCompile("^`?[a-zA-Z0-9_]+`?(?:\\.`?[a-zA-Z0-9_]+`?)?$")
-	orderDirRegex    = regexp.MustCompile("^(?i)(asc|desc)$")
+
+	// 列名校验结果缓存。模板里 order 是写死的常量（如 "id desc"），每次渲染都
+	// 重新跑一遍正则是纯浪费；ParseOrderBy 在详情页里占 1% 以上的 CPU。
+	// 键是调用方传入的列名原文，集合很小；给个上限防止异常请求把内存顶起来。
+	orderColumnCacheMu sync.RWMutex
+	orderColumnCache   = make(map[string]bool, 64)
 )
+
+const orderColumnCacheLimit = 1024
+
+// isValidOrderColumn 是 orderColumnRegex 的带缓存版本，判定结果与正则完全一致。
+func isValidOrderColumn(column string) bool {
+	orderColumnCacheMu.RLock()
+	ok, hit := orderColumnCache[column]
+	orderColumnCacheMu.RUnlock()
+	if hit {
+		return ok
+	}
+	ok = orderColumnRegex.MatchString(column)
+	orderColumnCacheMu.Lock()
+	if len(orderColumnCache) < orderColumnCacheLimit {
+		orderColumnCache[column] = ok
+	}
+	orderColumnCacheMu.Unlock()
+	return ok
+}
+
+// isValidOrderDir 只放行 asc/desc（大小写不敏感），与 orderDirRegex 等价。
+// 这里直接比字符串：两种情况穷举即可，没必要为正则付编译机开销。
+func isValidOrderDir(dir string) bool {
+	return strings.EqualFold(dir, "asc") || strings.EqualFold(dir, "desc")
+}
 
 func ParseOrderBy(order string, prefix string) string {
 	if order == "" {
@@ -1816,13 +1821,13 @@ func ParseOrderBy(order string, prefix string) string {
 			}
 			continue
 		}
-		if !orderColumnRegex.MatchString(column) {
+		if !isValidOrderColumn(column) {
 			continue
 		}
 
 		dir := ""
 		if len(fields) == 2 {
-			if !orderDirRegex.MatchString(fields[1]) {
+			if !isValidOrderDir(fields[1]) {
 				continue
 			}
 			dir = " " + fields[1]
@@ -1902,9 +1907,7 @@ func (w *Website) ApiGetDiyFields(render bool) []config.CustomField {
 				field.Value = val
 			}
 		} else if field.Type == config.CustomFieldTypeTexts && field.Value != nil {
-			var texts []config.CustomFieldTexts
-			_ = json.Unmarshal([]byte(fmt.Sprint(field.Value)), &texts)
-			field.Value = texts
+			field.Value = w.FormatCustomFieldTexts(field.Value, true)
 		} else if field.Type == config.CustomFieldTypeTimeline && field.Value != nil {
 			var val config.TimelineField
 			_ = json.Unmarshal([]byte(fmt.Sprint(field.Value)), &val)

@@ -74,7 +74,11 @@ func (w *Website) SaveAiGenerateSetting(req config.AiGenerateConfig, focus bool)
 }
 
 func (w *Website) AiGenerateArticles() {
-	if w.DB == nil {
+	// 与 CollectArticles 同款护栏：注册表里可能存在「DB 已就绪、设置还没加载」的
+	// 半初始化站点（InitWebsite 先 websites.Set(&w) 再 w.InitSetting()）。
+	// crond 每 10 分钟把所有 Initialed 站点扫一遍，裸取 AiGenerateConfig.Open
+	// 就是一次 nil 解引用 —— 2026-11-16 线上 panic 栈：addr=0x1 正是 Open 的偏移。
+	if w.DB == nil || w.AiGenerateConfig == nil {
 		return
 	}
 	if !w.AiGenerateConfig.Open {

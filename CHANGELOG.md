@@ -1,22 +1,175 @@
 # 更新日志
 
-## v3.8.0 `AnQiCMS` `2026-10-31`
+## v3.8.5 `AnQiCMS` `2026-11-19`
 
 ### ⚠️ 破坏性变更
 
-- **`archives` / `archive_drafts` 删除 29 个历史列**（升级时自动执行，不可回滚，升级前请备份）。两类列：① 23 个商城专用列（`brand` `video_url` `need_logistics` `is_free_shipping` `sold_count` `review_count` `average_score` `option_type` `weight` `weight_unit` `length` `width` `height` `volume` `length_unit` `allow_oversold` `order_fields` `min_quantity` `max_quantity` `step_quantity` `product_type` `origin_price` `cost_price`）；② 6 个全仓零引用的死列（`deleted_time` `logo` `sku_type` `rating_count` `is_wholesale` `has_order_fields`）。`price` 与 `stock` 保留在主表——`stock` 有一整套原子表达式写（下单扣减、退单回补、SKU 汇总重算），拆表就无法用一条 UPDATE 完成；`price` 同时承担商品售价与付费阅读门槛两种含义。
-- **商品属性迁到 `archive_products` 侧表**：`archive_id` 为主键，与正式稿/草稿共用同一套 ID，发布或撤回只在主表之间搬行，侧表不用跟着搬。只给"配过属性"的商品建行，文章不留空记录。读取由 GORM 的 `Query().After` 回调一次 IN 查询批量补全，写入由 `Archive.AfterSave` 落侧表，`Archive` 结构体上的字段名与 json tag 全部保留，前端与模板契约不变。
-- **升级顺序有硬约束**：先回填、再删列；回填失败则不删列（标记不写，下次启动重试）。同一次启动完成，不需要分版本灰度。
-- **依赖旧列的裸 SQL 会失效**：`WHERE product_type = ?` 这类条件已改为 `LEFT JOIN archive_products` + `IFNULL(...,1)`（保住"普通商品没有侧表行"的情况）。若自行开发过插件直查这些列，需一并调整。
+- **订单状态流转全面收紧，多处越权路径被堵**：已付款 / 已发货订单不能再调用取消接口，需走退款流程；未付款订单不能再标记完成或申请退款（此前会给没付过钱的订单记佣金 / 加余额 / 退真金白银）；已取消订单不能再生成付款链接。三处状态白名单统一为「可取消 = 待支付、可完成 = 已支付 / 已发货、可退款 = 已支付 / 已发货 / 已完成」，并用条件更新 + `RowsAffected` 做闸门。**依赖越权状态流转的脚本会失败**；重复取消 / 完成 / 退款现在幂等返回，不再重复分账或回补库存。
+- **实物订单缺有效收货地址时下单直接失败**：`address_id` 必须存在且属于下单人，内联地址要求姓名 + 电话 + 详细地址；虚拟 / 服务 / 订阅商品、VIP 订单与关闭交易流程的店铺不受此限。此前省略地址、传 `0`、传不存在的 ID 或其他买家的地址都会建单并扣库存。
+- **购买数量显式传 0 或负数一律拒绝**：省略 `quantity` 仍按 1 件，但显式 `quantity=0` / 负数现在整单拒绝（此前 `0` 被静默改成 1 件、`-1` 会生成负金额订单、库存反向 +1、`sold_count` 报 `Out of range` 但接口仍返回成功）。结算页使用同一套规则。
+- **编辑资料端点不再允许直接修改手机号**：手机号已是登录身份（短信登录按 `(区号, 号码)` 查用户），`POST /api/user/detail` 现在只接受两种写法——原样回传当前号码（值不变）或传空串解绑；传其它号码一律返回保存失败。换绑必须走短信绑定流程 `POST /api/sms/phone/bind`（旧号 + 新号双验证码），否则登录用户可以把手机号改成别人尚未注册的号码，号码真实主人日后走短信登录会登进攻击者的账号。**依赖「在资料页直接改手机号」的前端/脚本需要改为调用绑定接口。**
+
+### ⚠️ 升级与使用须知
+
+- **升级期间站点初始化改为后台异步，启动初期会短暂返回 503**：服务先监听端口，站点迁移在后台执行，未就绪的请求统一返回 `503 + Retry-After`，`GET /__startup` 是唯一放行的探活端点（四态 idle / running / ready / failed）。部署脚本的健康检查需识别 `Retry-After`，不要因启动初期的 503 判定失败重启。
+- **多站点升级按并发闸门执行，可通过环境变量调节**：统一迁移入口 `MigrateSiteSchema`（默认并发 2，`ANQI_MIGRATE_CONCURRENCY` 可调，空转 ALTER 兜底），站点 1 先串行、父子站点等待父站完成。新增离线迁移参数 `-migrate-only` / `-dry-run` / `-sites` / `-from` / `-limit` / `-concurrency`，便于大批量站点预检。数据库连接 DSN 必须带 `timeout=10s`。
+- **分词词典改为全进程共享**：此前每个站点各自加载官方词典（约 5.3MB / 350700 词，单次加载 0.7s、约 +124MB 内存），多站点部署会线性放大内存；现在全站唯一 `segmenter.Shared()`（`sync.Once`，可能返回 nil，调用方需判空）。运行时不再调用 `sego.Close()`。
+- **站点挂了 CDN / 反向代理的，必须配置 `trusted_proxies`（否则 IP 限额形同全站共享）**：短信设置新增 `trusted_proxies`（可信回源网段数组，IP 或 CIDR）。CDN 回源时源站看到的 TCP 对端只能是 CDN 节点，真实客户端地址只能靠 `X-Forwarded-For` 传递；不登记回源网段时系统一律按 TCP 对端计限额，于是**全站用户共用一个 IP 桶**——每小时 10 次 / 每天 30 次的额度被少数人用完后，全站都发不出验证码。请填入 CDN 的官方回源段（Cloudflare 用其公布的 IPv4/IPv6 回源列表，阿里云/腾讯云 CDN 用控制台给出的回源 IP 段），直连公网的站点留空即可（留空 = 不信任任何代理，这是默认也是最安全的一档）。配置方式：后台 **「插件 → 短信 → 基础设置 → 反向代理 / CDN」** 的「可信代理网段」输入框（输入 IP 或 CIDR 后回车，支持整段粘贴），也可通过 MCP `channel_sms` 的 `setting_save` 传 `values.trusted_proxies`，或直接写 `settings` 表里 `sms` 键的 JSON。保存后立即生效，无需重启。
+- **`CDN → 本机 nginx → 源站` 这种两层架构要额外处理（否则仍会按 CDN 节点计限额）**：此时应用看到的 TCP 对端是 `127.0.0.1`（天然可信），但 nginx 默认的 `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for` 追加的是它自己看到的 `$remote_addr`——也就是 **CDN 回源节点**，于是系统取到的仍是 CDN 节点。两条修正路径，任选一条：
+  1. **（推荐）让 nginx 先归一化**：用 `ngx_http_realip_module` 把 `$remote_addr` 改写成真实客户端，之后 `$proxy_add_x_forwarded_for` 的最右一项就是真实地址，应用层不需要配 `trusted_proxies`：
+     ```nginx
+     # 段请换成 CDN 官方回源列表；Cloudflare 用 CF-Connecting-IP，阿里云/腾讯云 CDN 用 X-Forwarded-For
+     set_real_ip_from 173.245.48.0/20;
+     set_real_ip_from 103.21.244.0/22;
+     real_ip_header CF-Connecting-IP;
+     real_ip_recursive on;
+
+     location / {
+         proxy_set_header X-Real-IP $remote_addr;
+         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+         proxy_pass http://127.0.0.1:8001;
+     }
+     ```
+  2. **不改 nginx，把 CDN 回源段填进 `trusted_proxies`**：应用层从右往左剥离时会跳过 CDN 节点，落到真实客户端。
+  **安全前提**：源站必须只允许 CDN 回源段访问（安全组 / 防火墙白名单）。若客户端能绕过 CDN 直连 nginx，它就能自己伪造 `X-Forwarded-For`，第 1 条会失效。判断当前属于哪种情况：看服务端告警日志里有没有「X-Forwarded-For 里有多跳未登记的代理」。
+- **短信登录自动创建的账号，用户名是随机串，不能用用户名登录**：手机号首次验证码登录会在 `RegisterUser` 里自动建号，`user_name` 用 `crypto/rand` 生成 12 位随机字母数字（不取手机号，避免号码在部分模板里被当作昵称公开显示），密码是 32 位随机串、用户不可知。这类账号只能用「手机号 + 验证码」登录；需要常规用户名时，到前台资料页补全即可。
+- **`DefaultMenuGroups` 只在首次安装／重建菜单时写库，已运行站点需触发菜单重新同步**：后台菜单结构由代码常量给出，但管理员分组的权限集合（`admin_groups.setting.permissions`）是建站时写进库的，升级不会自动追加新路径 `/plugin/channel/sms`。而短信四个端点挂在严格鉴权 `AdminPermissionRequired` 上——URI 映射不到菜单时一律拒绝。**未重新同步的站点上，只有 `id=1` 的超级管理员能进短信配置页**，其余分组会直接 403（表现为「新页面进不去」）。到「管理员 → 分组」重新勾选一次并保存即可。
+- **手机号查重依赖 REPEATABLE READ**：同一号码并发注册靠「事务内先按 `(区号, 号码)` 查重、查不到才插入」保证唯一（`createUserWithPhoneGuard`），该保证只在 REPEATABLE READ 下成立。**上线前必须核对生产库 `SELECT @@transaction_isolation`**：若返回 READ COMMITTED，两个并发请求都可能查不到对方未提交的行，最终落下两条同号用户记录，本版本不提供该场景的兜底。开发库实测为 `REPEATABLE-READ`（MariaDB 11.7.2），**生产库的隔离级别未验证**。
+- **默认前台模板 `template/default/login.html` 没有手机号登录入口**：该文件目前只有一个 Google 登录链接，没有手机号 + 验证码表单。后端接口已就绪（`POST /api/sms/send` 发码，`POST /api/login` 传 `phone_country` / `phone` / `code` 走短信登录），**站长需自行修改模板**接入，系统不会自动改模板。
+- **短信表与列会在启动时自动补齐**：`ensureSmsSchema` 每次初始化都幂等执行（不依赖版本号），会自动创建 `sms_codes` / `sms_logs` 并补 `users.phone_country`；`ensureSmsLogTemplateColumn` 会把 `sms_logs.template_id` 从 64 / 500 幂等加宽到 2000。**无需手工迁移**。
+- **存量用户号的区号一律回填 `86`**：加 `phone_country` 列时，库里已有的非空号码全部回填 `86`（中国区号）。**若库里已有国际号码，站长需自行订正区号**，否则这些账号会按国内通道解析、收不到国际短信。回填只发生在加列那一次，后续新增号码按注册时传入的区号写入。
+
+### ✨ 新增功能
+
+- **多站点迁移与启动架构改造**：106 站点升级事故后的架构改造——启动闸门 + 后台并行迁移 + 状态探活端点（见升级须知）；统一迁移入口 `MigrateSiteSchema`（并发闸门 + 空转 ALTER 兜底）、有序站点列表按 id 排序、同容量并行初始化；新增离线迁移工具（`-migrate-only` / `-dry-run` / `-sites` / `-from` / `-limit` / `-concurrency`），可在正式升级前预检。配套护栏测试 20+（迁移 / 启动闸门 / 词典单例 / 金额 / 查询 / 渲染等），全部含反向对照。
+- **前台路由全面支持 HEAD 请求**：此前 iris 对未注册方法直接返回 404，导致探活与 CDN 回源拿不到页面响应头。首页、列表、详情、留言、登录、注册等前台路由改为 `HandleMany("GET HEAD", ...)` 注册，HEAD 与 GET 返回一致的 `Content-Length`，可直接用于探活。
+- **仪表盘首页引导按站点模式分流**：普通内容模式此前误用商城版引导，出现 `/setting/pay`、`/order/shipping` 等隐藏不可达链接。新建 `components/guide.tsx` 按 `shopMode` 分流普通版 / 商城版两份引导，普通版链接换成当前有效路由（发布入口统一走 `contentEditPath()`），12 个静态链接全部命中路由表校验。
+- **短信渠道：三家厂商、两个区域**：阿里云（国内 / 国际）、腾讯云（国内 / 国际）、Twilio（仅国际，`+86` 会被明确拒绝而不是发出去再失败）。同一时刻只有一家厂商生效，厂商对象之间互不干扰；区域解析按区号自动选择国内或国际 profile，缺凭据 / 缺签名 / 缺场景模板分别给出可翻译的具体原因，未开启的场景一律拒发（`test` 场景例外，复用 `login` 模板，但流水里仍记为 `test`，不会污染登录场景统计）。
+- **验证码只存摘要，防刷分五层**：验证码用 `HMAC-SHA256(站点 TokenSecret, code)` 存 64 位 hex 摘要，不存明文、不进日志、不进接口响应，校验通过即一次性消费（`consumed_at`），过期时间独立记录。五层防刷：① IP 双窗口（小时 + 日，`RateLimiter` 单例按 `(站点, 限额)` 分桶，与邮箱枚举探测预算完全隔离，不互相吃额度）；② 号码日限（跨场景合计，读 `sms_logs` 当日起点，不是进程内计数，多实例部署仍有效）；③ 重发间隔；④ 单码验证错误上限（超限锁定，需重新获取）；⑤ 场景白名单。
+- **两张新表**：`sms_codes`（验证码状态机：摘要、尝试次数、上限、过期、消费时间、厂商 / 区域 / 流水号）与 `sms_logs`（发送流水：号码、场景、厂商、模板、签名、平台流水号、状态、错误码 / 错误片段、耗时、IP、用户）。两表都按 `site_id` 做多站点隔离，流水列表恒带站点基底，六个筛选只能叠加、不能绕过。
+- **后台配置页与发送记录**：四个端点——`GET /plugin/sms/setting`、`POST /plugin/sms/setting`、`POST /plugin/sms/test`、`GET /plugin/sms/logs`。设置页六个 tab（基础设置 / 阿里云 / 腾讯云 / Twilio / 发送测试 / 发送记录），配置类 tab 共用一个表单实例且切 tab 不卸载，保存时取全量值；12 个凭据字段读回一律是 `********`，原样写回表示「未改动」，不会把掩码写进库。日志页按场景、厂商、状态、号码、起止时间筛选。基础设置里另有「可信代理网段」（`trusted_proxies`，见升级须知）：标签式录入，支持粘贴多行，格式与 `/0` 在提交前就会拦下——后端对非法项是静默跳过的，不在前端拦会让这类错误变成「限额莫名失效」。
+- **MCP 新增 `channel_sms` 意图**（四个 action：`setting_get` / `setting_save` / `test` / `logs`）：**默认关闭**，需在 MCP 设置里显式暴露——短信配置含三家厂商凭据，且 `test` 会对任意号码真实付费发送。意图描述里写清三件事：`setting_save` 是深合并（顶层与嵌套对象都只覆盖出现的叶子，未出现的键保留；`templates` / `texts` 这类数组/映射字段一旦出现就整段替换，`null` 会清空 map）、读回的 `********` 表示未改动可原样写回、同一时刻只有一家厂商生效且 Twilio 不支持 `+86`。
+- **前台三条链路**：① 短信登录，未注册号码自动建号（验证码校验在建号之前，错码不会触发注册）；② 短信找回密码（`POST /api/sms/password/reset`），重置成功后用新密码走既有密码登录；③ 登录态下换绑手机号（`POST /api/sms/phone/bind`，新旧号码各验证一次、同一事务内完成）。密码注册时若填了手机号，会先做格式化校验并回填规范化后的区号 / 号码，伪造区号在入口就被拒。
+- **`sms_logs.template_id` 列宽 2000**：Twilio 的这一槽承载的是**整段未渲染文案**（含 `{{code}}` 占位符），其 `Body` 上限是 1600 字符；`varchar(64)` 乃至 `varchar(500)` 都会让接近上限的模板在落库时直接报 `1406 Data too long`，整条发码链路失败。新库按 2000 建列；老库（64 或 500）由启动时的 `ensureSmsLogTemplateColumn` 依 `information_schema` 判定宽度幂等加宽（只 `MODIFY COLUMN`，失败只记日志、不 panic、不删列）。
+- **文本列表自定义字段（`texts`）的每个条目可以有自己的类型**：`config.CustomFieldTexts` 新增 `type`，取值与 `CustomField.type` 对齐（`text|number|textarea|radio|checkbox|select|image|images|file|date|time|datetime|color`），由类型决定该条目的**处理、校验与展示**——`number` 归一成规范数字写法、`date/time/datetime` 归一成固定格式、`color` 归一成小写 `#rrggbb`、`image/file` 走存储路径与访问 URL 的双向替换、`images`（组图）用 `values` 承载多张图并逐个替换 URL、`radio/select/checkbox` 按字段配置里「一行一个」的选项校验并多值展示。读写逻辑收敛到 `provider/customFieldTexts.go`（`ParseCustomFieldTexts` / `FormatCustomFieldTexts` / `ValidateCustomFieldTexts` / `StringifyCustomFieldTexts`），后端 10 处读写点全部改走这套函数，不再各页复制一份解析。**历史数据完全兼容**：没有 `type` 的条目按纯文本处理，回写时也不会新增 `type` 字段。
 
 ### ⚡ 功能优化
 
+- **下单链路金额与实例取值加固**：余额支付在生成支付单处加金额闸门拦截非正数，堵住负数扣款变加钱；`archive_products` 回调改为按当前站点实例取值，避免多站点并发时复用到旧的 `ShopMode`。
+- **Sitemap 的 hreflang 不再被后续条目覆写**：`AddLoc` 此前直接保存传入的 `alternates` 切片头，而构建方为省分配用 `alternates[:0]` 复位后复用底层数组，导致同一份 sitemap 里所有 URL 的 hreflang 都变成最后一条的地址（大量文章指向同一个英文地址）。现在 `AddLoc` 内先复制再保存，空入参仍返回 nil 以免 `omitempty` 失效。
+- **短信错误出口统一为「可翻译文案 + 内部错误只进日志」**：前台与后台各自一个出口函数，判定顺序一致——先看 `*WaitError` / `*AttemptsError` 两个类型，再按 `errors.Is` 匹配短信哨兵，然后用「`TplTr(原文) != 原文`」判定它是不是一个真实语言键（白名单由字典自己维护，不再手抄，避免漏键后吞掉业务提示），其余（JSON 解析失败、数据库错误等）一律归约为「短信发送失败」并在服务端留一行原始错误。含 `%` 的错误串在字典判定之前短路归约——`TplTr` 的 `fmt.Sprintf` 兜底会把 `%` 改写成 `%!c(...)`，不短路会把解析器原文当成「可翻译键」放出门。
+- **后台发送记录的筛选参数显式校验**：`status` 只接受 `""` / `0` / `1` / `-1`（用「是否出现」区分未传与传 0），`start_time` / `end_time` 只接受空或正整数秒且 `start <= end`，非法一律回「请求参数格式不正确」。此前非法值会被静默当成「未传」，把结果集放大成整表。
+- **凭据掩码与哨兵回写**：`auth_token` / `account_sid` / `api_key_sid` 三个精确名加入掩码表，后缀补 `_auth_token`；刻意**不加**宽泛的 `_token`——那会把 `url_token` / `link_token` 这类非凭据的 URL 别名也打成掩码，读回再写回会直接把链接写坏。`api_key_secret` 由既有 `_secret` 后缀覆盖，并单独断言锁住「不要为它加宽后缀」。
+- **新增 17 条短信文案，只覆盖三语**：zh-CN / zh-TW / en-US 各 17 条 `Sms*` 键（服务未启用、场景未开、号码非法、区域不支持、凭据 / 签名 / 模板缺失 / 模板缺占位符、IP 限流、号码日限、重发过快、码不存在 / 过期 / 错误 / 锁定、发送失败、参数非法等），并补 `UserNotActive`（账号未激活或已禁用）。`UserNotActive` 是既有缺陷：密码登录与短信登录都在用它，但此前 9 个语言包里一条都没有，前台会直接吐键名。
+- **阿里云 endpoint 入站归一化**：站长按最常见填法写 `https://dysmsapi.aliyuncs.com`，而适配器裸拼 `https://` + endpoint，拼出 `https://https//…` 的畸形 URL，要到发请求才炸（被当成平台抖动、可重试）。现在保存时与解析时各归一化一次（剥 scheme、剥尾斜杠、剥空白，**不剥路径**），库里既有的脏值也会被解析侧的防御性归一化覆盖。
+- **Twilio 文案必须含验证码占位符**：Twilio 没有模板 ID，短信正文就是站长自己写的那段文案。原文案漏写 `{{code}}` 时，系统会发出**一条不含验证码的普通短信**并记「发送成功」（用户收短信却收不到码）。现在缺占位符的场景在发送前就被拒（明确回「该场景的短信模板缺少验证码占位符」）。
+
+### 🐛 问题修复
+
+- **PayPal 付款通知一律 404、退款通知定位不到支付单**：客户实测真实付款通知验签路径写错（用了 PayPal 不存在的 `/v1/notify-webhook/verify-webhook-signature`），一律 404；退款事件 `PAYMENT.CAPTURE.REFUNDED` 的 `resource` 是 refund 对象，ID 既不是订单 ID 也不是 capture ID，三种查法全部落空，报 `record not found` 并被无限重试。现在验签路径改为官方 `/v1/notifications/verify-webhook-signature`，定位顺序追加「`links[rel=up]` 里的 capture ID」与「按退款单 `terrace_id` 反查订单」，退款金额取 `refund.amount.total`，退款单号回写 `terrace_id` 供回查。
+- **重复取消同一订单会重复回补库存**：客户实测库存 98、下单 2 件变 96、首次取消回到 98、再次取消变成 100，接口每次都返回成功。根因是取消动作无条件改状态、无条件回补库存且两者不在同一事务。现在用状态条件更新（仅待支付 / 已支付 / 已发货 / 退款中可取消）做闸门，只有真正把订单推到「已取消」的那次才回补，且状态更新与库存回补同一事务；已取消幂等返回，已完成 / 已退款拒绝取消。顺带修付款成功回调的空指针：`GetOrderAddressById(0)` 返回 `(nil, nil)`，旧代码只判 err 就解引用，会在用户不存在 / 已删除时 panic 成 500、被 PayPal 无限重投。
+- **0 与负数购买数量能下单并反向加库存**：`quantity=0` 被静默改成 1 件、`quantity=-1` 生成负金额订单、明细数量 -1、库存反向 +1、数据库报 `sold_count` 越界但接口仍返回成功。现在请求结构自定义反序列化区分「未传」与「显式传 0」（`QuantityProvided`），算金额 / 写明细 / 扣库存前统一校验，显式 ≤0 整单拒绝，多商品任一非法即拒；库存与销量的 `UpdateColumn(s)` 逐条检查 Error 并回滚，扣减记录 / 优惠券核销 / 报价单回写改走下单事务，并加 AST 护栏防止再写裸调用。
+- **订单状态机存在五类越权流转**：已取消订单仍能生成付款链接（且重复调用会让一笔 payment 对应多个 PayPal 订单）、已付款 / 已发货订单可直接取消（只回补库存不退款）、未付款订单可标记完成 / 申请退款（凭空造钱）、实物订单接受缺失 / 无效 / 他人地址。现在状态白名单集中成三个变量并用条件更新 + `RowsAffected` 做闸门，完成的分账与状态更新放进同一事务；生成付款链接增加归属与状态校验，旧单可复用 PayPal 订单的 approve 链接；下单在扣库存前校验地址，运费按内联 + 已有地址合并计算。
+- **已付款未发货的实物订单可以提前确认收货**：旧完成白名单把「已支付」也算可完成，未发货就确认收货并把待发货订单显示成已完成、提前给卖家结算。现在实物订单完成闸门收窄为「仅已发货」，虚拟 / 服务 / 订阅商品与关闭交易流程的店铺仍可付款即完成（支付回调走这条）。另修结账页同时提交 `address_id` 与地址对象时报「收件地址不正确」：地址判定改为「已有地址优先」，`SaveOrderAddress` 补存 `province_code` / `country_code`（此前按区域代码配置的运费规则永远匹配不上）；下单前先补齐商品 `url_token`，避免生成 url_token 的非事务连接打断下单事务报 errno 1020。
+- **半初始化站点的详情接口与模板路径 panic 成 500**：`InitWebsite` 先注册站点再初始化设置，设置初始化在数据库连不上时直接返回，注册表里留下 `System == nil` 的半初始化站点；列表接口已判空，但详情接口 `GetDBWebsiteInfo` 仍裸取 `System.*`、`GetTemplateDir` 在 `System == nil` 时 panic（备份 / 模板 / 缓存清理的调用方多无 recover）。现在详情与列表共用同一个响应构造函数并统一判空，站点初始化失败补错误日志，造一条连不上库的站点实测旧代码 500、新代码 200。
+- **短信表 `phone_country` 列定义在新装与升级两条路径不一致**：补列写 `varchar(10) DEFAULT ''`，而模型 tag 是 `varchar(8) DEFAULT '86'`，导致按列类型 / 默认值判定的逻辑二义。现统一到 `varchar(8) NOT NULL DEFAULT '86'`（空串与 `'86'` 业务等价，均归一成中国区号）。
+- **llms.txt 构建进度永远显示 `undefined / undefined (undefined%)`**：两个原因叠加——① 构建状态原先挂在 `Website.llmsBuildStatus` 字段上，而后台 handler 拿到的是 `CurrentSubSite` 返回的**请求副本**，副本里 `w.llmsBuildStatus = &LLMsBuildStatus{}` 只改副本自身，主实例始终是 nil，于是 `GET /plugin/llms/status` 永远返回「没有进行中的构建」标记 `{finished:true,building:false}`（不含 `percent/current/total`）；② 前端把该标记直接当进度对象塞进 `Progress`，且三个停止条件都不成立，于是「undefined」常驻 + 每秒轮询不止。现在构建状态改存按站点 id 的包级表（不经副本），状态读写加锁并对外只给快照副本；前端只在 `percent` 是数字时才渲染计数，并用 `finished/building/status` 判断停止轮询。同时 `POST /plugin/llms/build` 改为**异步**触发（同步占位 `status=1` 后立即返回），进度条才真正能看到 1%→100%：原先同步执行，响应回来时构建早已结束。后台 goroutine 自带 `recover`，构建过程中的 panic 落成 `status=-1` + 原因（不再有机会打挂进程或永远卡在「进行中」）。
+- **llms.txt 进度分母不准（写完才 15%）**：分母原先是「全站文章数」（`GetExplainCount` 估算），而循环里每个分类最多只写 `max_post_per_type` 篇、还有页面/模块/分类排除，实测 521 个条目对 3494 的分母，进度条走到十几%就直接跳 100%。现在先按同一份清单（`llmsBuildJobs`，排除项只在这里过滤一次）算总条目，再用一条 `GROUP BY category_id` 的分组查询按 `limit` 截断累加，分母等于实际写入条数（实测 521/521）。生成结果逐字节不变（`llms.txt` / `llms-full.txt` sha256 与改动前一致）。
+- **前台页面响应头没有 `Content-Length`（全部走 `Transfer-Encoding: chunked`）**：两条原因叠加——① 页面为了写 HTML 缓存先 `ctx.Recorder()`，而 iris 的 `ResponseRecorder.FlushResponse` 是「先 `WriteHeader` 再写 body」，响应头一旦发出 net/http 就无法再按长度回填；② body 普遍 10k~25k，超过 net/http 的 2048 字节缓冲阈值，即使不录制也会自动转 chunked。现在前台渲染统一走 `controller.renderView`（按已录制的 body 长度回填）、缓存命中走 `controller.writeCachedHTML`（按文件长度回填），覆盖首页 / 列表 / 详情 / 单页 / 标签 / 城市站 / 搜索 / 留言 / 登录注册 / 会员 / 订单 / 404 / 500 / 闭站页。实测 `/manual-other/3669.html` 从 chunked 变为 `Content-Length: 24655`，body 逐字节不变；HEAD 请求同样带上长度（探活与 CDN 回源可直接取）。
+- **列表页静态缓存除第一页外一页都不生成、手机端第一页存成末页内容**：后台缓存构建把请求 ctx 带进 goroutine，handler 返回后请求 context 被 cancel，模板引擎首行检查到就返回、一个字都不渲染；分页数靠渲染副作用得到于是恒为 0，分页循环整段跳过，错误还被吞掉（零日志）。现在克隆 context 后用 `context.WithoutCancel` 重置并换 buffer writer，module / category / place / tagIndex / tag 五处全部替换，渲染错误写日志不再吞。另一个 bug 是分页链接是函数级变量、被 PC 循环改写成末页，mobile 分支第一页因此缓存了末页内容——四处带分页列表在循环前固存 `firstLink`。实测站点 26：修复前 mobile 缓存 25 个文件、news 与 zixun 第一页缺失，修复后 27 个且分页顺序与 PC 一致。
+- **登录用户可免验证码直接改手机号（安全问题）**：`POST /api/user/detail` 原先允许登录用户把手机号直写成任意未被占用的号码；该号码的真实主人日后走短信登录时，验证码发到他自己手机上却会登进攻击者的账号，号码的注册也被攻击者永久占用。现在编辑资料只接受原样回传或空串解绑，换绑必须走双验证码绑定流程。
+- **匿名下单的号码未归一化导致重复账号**：匿名下单建号时直接使用提交的原始号码，格式字符、区号前导 `+` / `00` 的差异会让同一个号码创建出多个用户。现在与短信链路共用 `sms.NormalizePhone` 归一化，查重与建号同口径；非法号码不落库。
+- **并发发码大面积 1213 死锁**：同一号码并发发码时，「事务内查重 + `FOR UPDATE` + 插入」会互相等锁，实测 8 并发只有 1 个成功、其余 7 个报 `Error 1213`。发码事务改为有界重试（1213 / 1205 / 1020，退避 20ms / 60ms + 抖动，整段事务重跑并清零跨事务变量）；`createUserWithPhoneGuard` 同样接入。
+- **短信 IP 限额既不可伪造、也不会在 CDN 下全站共用一个桶**：旧实现直接用 `ctx.RemoteAddr()`，而它启用了 `iris.WithRemoteAddrHeader`、优先采信 `X-Real-IP`，直连公网时客户端自带一个头就能换一个「IP」继续发码。现在 `provider.SmsClientIP` 按「对端是否可信」分两支：对端落在**可信代理网段**（新增配置 `trusted_proxies`，IP 或 CIDR）或是环回/私有地址时，才从 `X-Forwarded-For` **最右往左**剥离、取第一个既不可信也不私有的地址；对端是公网且未登记时，忽略一切转发头、直接用 TCP 对端。**只按「公网对端就忽略头」是不够的**：站点挂 CDN 后对端永远是 CDN 回源节点，那样会把全站用户算成同一个 IP，额度被少数人吃光后全站发不出码——所以必须能配置可信回源网段。未登记 `trusted_proxies` 而请求又带了指向别处的转发头时，服务端每小时打一条告警日志提示补配置。
+- **后台错误出口判据被 OEM 品牌替换污染**：后台短信端点原先用 `Tr(原文) != 原文` 判断「是否可翻译文案」，OEM 的 `Brandize` 会改写不存在的键，导致普通错误被误判成可翻译文案。现在前后台统一 `provider.SmsBusinessMessage`（固定 `TplTr`）。
+- **密码重置落库失败被误报为「短信发送失败」**：`EncryptPassword` / `DB.Save` 失败时错误被短信错误出口归约成发送失败，掩盖了真正的根因。现在这两步失败回「保存失败」。
+- **旧站升级不建短信表 / 列**：`AutoMigrateDB` 只在版本变化时执行，跑过 3.8.4 的站点升级后不会建 `sms_codes` / `sms_logs`，也不会补 `users.phone_country`（发码报 1146、注册报 1054）。现在 `InitModelData` 每次启动都幂等执行 `ensureSmsSchema`。
+- **MCP 掩码原样写回不再报错**：短信 / 发信这类端点的 GET 自己就会脱敏，回查到的现值也是 `********`；旧逻辑把它当成「拿不到现值」直接报错，导致「读全量 → 改一个 → 整包写回」的标准流程必然失败。现在现值为掩码时从参数中删除该键（等价于未改动），键被删空的子对象一并删除；只有现值缺失或为空串才继续拒绝。
+- **GCP 服务账号 JSON 等凭据纳入掩码**：`google_credentials_json`（内含 `private_key`）、`recaptcha_private_key`、`refresh_token` 此前不在 MCP 出口掩码名单里，`siteops_maintain` 的 `cache_get` / `storage_get` 可原样读出含私钥的完整 JSON。三者已按精确字段名加入，未加宽泛的 `_token` 后缀（`url_token` / `link_token` 是非凭据 URL 别名，掩码后写回会毁链接）。
+- **Twilio 长文案发码必然失败**：`sms_logs.template_id` 原为 `varchar(64)`，而 Twilio 分支存的是含 `{{code}}` 的整段模板文本，严格模式（`STRICT_TRANS_TABLES`）下超长直接 `DataError (1406)`，`SendSmsCode` 事务回滚、用户收不到码；该错误文本还会被错误出口原样回显。列宽加宽到 2000（覆盖 Twilio 的 1600 字符上限）并补老库幂等加宽逻辑，同时补「103 字符文案发码成功且回读逐字相等」与「1200 字符落库成功」的真库回归。
+- **短信发送链路的 `ReadJSON` 失败不再回显解析器原文**：后台测试端点与日志端点的解析失败统一走短信错误出口，回「请求参数格式不正确」而不是 `json: cannot unmarshal ...`；原始错误只写服务端日志。配置保存端点的五个失败分支同样收口（解析失败回「请求参数格式不正确」、落库失败回「保存失败」）。
+- **网络错误不再把整条 URL 写进发送流水**：平台请求失败时 Go 的 `*url.Error` 文本里含完整 URL——阿里云的**验证码就在 query 的 `TemplateParam` 里**、Twilio 的 `AccountSid` 在路径里。这段文本会随 `sms_logs.err_msg` 落库（200 字节截断救不了：验证码正好落在窗口内）。现在三家适配器只保留内层原因（DNS 失败、超时、连接被拒），URL 与凭据一律不出现在错误文本里。
+- **导入第三方模板包不再覆盖本站短信凭据**：模板包「恢复数据」路径对设置行做 `OnConflict{UpdateAll:true}` 写入，此前只排除了存储与导入 API 三个键，短信配置没排——第三方包只要带一条 `sms` 行，就会把本站的 AK/SK/签名/场景模板整体覆盖（把站长的验证码引到别人的账号）。现在导入侧与导出侧对称跳过 `sms` 设置键。
+
+### 已知限制
+
+- **换绑组合路径下，`SceneBindNew` 的错误次数会随外层事务回滚**：换绑在同一个事务里消费 `bind_old` 码、校验 `bind_new` 码、改手机号，为保住两个码 `consumed_at` 的原子性，`bind_new` 的 `attempts++` 仍在外层事务内，失败回滚时计数不落库。即攻击者拿不到「锁定计数累加」这层保护，但该路径需要登录态 + 一个有效的 `bind_old` 码，且每次失败都要先真发一条短信，爆破无收益。**这是有意的原子性权衡，不是已解决。**
+- **`POST /api/sms/password/reset` 未挂 `AccountProbeGuard`**：它对「号码未注册」与「验证码错误」返回同一文案，本身不构成枚举 oracle；发码侧 `POST /api/sms/send` 另有 IP 双窗口与号码日限。该端点与三个邮箱探针共用预算会互相污染，故不挂守卫，最终审查可复议。
+- **短信相关文案仅覆盖 zh-CN / zh-TW / en-US 三语**：其余 6 个语言包（ja-JP / ru-RU / pt-BR / id-ID / fa-IR / bn-BD）没有这 17 条 `Sms*` 键，按项目既有缺键行为回落到默认文案。
+- **并发同号注册 / 发码的 1213 死锁已有界重试，但重试耗尽后仍返回原始错误**：同一号码并发时 InnoDB 间隙锁会互等；现在发码事务与 `createUserWithPhoneGuard` 都走 `smsRunTxWithRetry`（1213 / 1205 / 1020，20ms / 60ms + 抖动，整段重跑），实测 8 并发从 1/8 成功提升到 8/8。重试是**有界**的：耗尽后失败方拿到的仍是 `Error 1213` 原文，而不是「该手机号已注册」这类友好文案。
+- **并发同号发码时，日限 / 重发间隔是事务内快照读**：同一号码的多笔并发请求在各自事务里读到的「当日已发条数 / 上次发送时间」可能是同一份快照，极端并发下会超发。超发量级为并发数，且仍受 IP 与号码两层限额约束；本版本不引入串行化锁。**这是已知限制，不是已解决。**
+- **`UserNotActive` 等少数文案仍只覆盖 zh-CN / zh-TW / en-US 三语**：其余 6 个语言包缺失时按项目既有缺键行为回落到默认文案。补齐需要同步 9 个语言包，另批处理。
+- **不支持 PROXY protocol**：iris 的 listener 不解析 PROXY protocol，只能靠 HTTP 头传递真实地址。若 CDN/负载均衡只提供 PROXY protocol（不开 `X-Forwarded-For`），IP 限额只能按回源节点计，需在前面再套一层支持它的反代（如 nginx `proxy_protocol`）。
+- **`trusted_proxies` 配得过宽等于回到「可伪造」**：填 `0.0.0.0/0` 或公网大网段会让任意来源都被当成可信代理，客户端自己塞 `X-Forwarded-For` 即可绕限。只填 CDN / 反代的**真实回源出口**。前端表单会拦下格式非法的项（与 Go `netip` 同口径：拒绝前导零、`/33`、非法 IPv6）与 `/0`，但**后端不做白名单校验**——通过 MCP `setting_save` 或直接改库写入的非法项会被静默跳过（不报错、不落日志），写入过宽网段也照样生效。
+- **`template_id` 超过 2000 字符仍会失败**：2000 是上限而非无上限；不过它已大于 Twilio 的 1600 字符 `Body` 限制，实践中不可达。
+- **端到端覆盖是「provider 层端到端 + handler 结构护栏」，handler 本身没有行为级覆盖**：`provider` 不能 import `controller`，`manageController` 的测试又不连库，这是既有架构约束。四条完整旅程（登录 / 换绑 / 找回 / 场景交叉重放）都在 provider 层用假 sender 跑真库；handler 层只有源码结构护栏与纯函数表驱动。**不要据此认为 handler 已被行为测试覆盖。**
+- **`sms_logs.template_id` 对 Twilio 存的是未渲染模板文本**：该列对阿里云 / 腾讯云是模板 ID，对 Twilio 是含 `{{code}}` 的文案原文。展示时不得把它当作「已渲染正文」，它也不含验证码明文（占位符保持原样）。
+- **以下四项未能验证，不得视为已通过**：① 真实平台发送成功（没有可用凭据，端到端全部使用假 sender，不触网）；② 模板审核通过率（三家厂商的模板都由站长自行申请）；③ 国际号码到达率；④ 生产库事务隔离级别（仅开发库实测为 REPEATABLE-READ）。
+
+## v3.8.1 `AnQiCMS` `2026-11-10`
+
+### ⚠️ 破坏性变更
+
+- **`archives` / `archive_drafts` 删除 29 个历史列**。两类列：① 23 个商城专用列（`brand` `video_url` `need_logistics` `is_free_shipping` `sold_count` `review_count` `average_score` `option_type` `weight` `weight_unit` `length` `width` `height` `volume` `length_unit` `allow_oversold` `order_fields` `min_quantity` `max_quantity` `step_quantity` `product_type` `origin_price` `cost_price`）；② 6 个全仓零引用的死列（`deleted_time` `logo` `sku_type` `rating_count` `is_wholesale` `has_order_fields`）。`price` 与 `stock` 保留在主表——`stock` 有一整套原子表达式写（下单扣减、退单回补、SKU 汇总重算），拆表就无法用一条 UPDATE 完成；`price` 同时承担商品售价与付费阅读门槛两种含义。
+- **商品属性迁到 `archive_products` 侧表**：`archive_id` 为主键，与正式稿/草稿共用同一套 ID，发布或撤回只在主表之间搬行，侧表不用跟着搬。只给"配过属性"的商品建行，文章不留空记录。读取由 GORM 的 `Query().After` 回调一次 IN 查询批量补全，写入由 `Archive.AfterSave` 落侧表，`Archive` 结构体上的字段名与 json tag 全部保留，前端与模板契约不变。
+- **升级顺序有硬约束**：先回填、再删列；回填失败则不删列（标记不写，下次启动重试）。同一次启动完成，不需要分版本灰度。
+- **依赖旧列的裸 SQL 会失效**：`WHERE product_type = ?` 这类条件已改为 `LEFT JOIN archive_products` + `IFNULL(...,1)`（保住"普通商品没有侧表行"的情况）。若自行开发过插件直查这些列，需一并调整。
+- **附件上传改为扩展名白名单，默认拒绝**：白名单含图片、视频、音频、文档、压缩包与字体（`.ttf` 是标题配图的硬依赖），`.psd` `.ai` `.apk` 等此前能上传的后缀现在会被拒。判定统一走 `normalizeExt`（去空格、转小写、补前导点），`.PHP5`、`php5`、`"php5 "` 按同一规则拒绝。受影响的入口是附件上传、模板设计导入、水印与标题图插件；需要额外后缀请按需补表。详见「安全修复」。
+- **用户组「可投稿栏目」升级后为空，即升级后不能投稿**：授权为空一律 fail closed，没有「空即全部」的兜底，父子栏目也不继承。「全选」由前端勾满所有节点表达。此前能投稿的用户升级后会立即收到权限错误，需在「用户组 → 可投稿栏目」重新勾选后才能继续投稿。
+- **商城功能默认关闭**：`system.shop_mode` 默认 `0`（普通内容模式），38 条商城前台路由在该模式下统一返回 404，后台仍可管理商城数据（仅菜单隐藏）。要在内容站上开启商城，需在系统设置里切换模式并保存。
+
+### ✨ 新增功能
+
+- **商城能力整体并入主干**：新增 24 个数据模型（SKU、购物车、愿望清单、优惠券、营销活动、批发规则、订单服务、物流运费、询盘沟通订单、商品同步、积分、汇率等，11 个 model 文件 / 13 个 provider 文件 / 12 个 controller 文件）。订单结算补上优惠券、运费、会员价、活动价、分销、发票与物流追踪；配套多币种、Google Places、Google Merchant 商品同步、Brevo 邮件服务商、15 套商城邮件模板（订单/发货/完成/退款/发票/弃单召回/沟通订单等）与一套商城模板。模板标签新增 `archiveSku`、`review`，前台接口与 GraphQL 全面支持商城语义。主干 v3.6.7 的 AI 体系、Partial 语义、SQL 注入加固、支付账户体系全部保留。
+- **普通 / 商城模式切换**：新增 `shop_mode` 配置（0 普通内容站 / 1 商城）。普通模式下商城前台路由由 `ShopModeGuard` 统一挡成 404，管理后台不拦截；模板标签在普通模式下不渲染商城元素。守卫清单由源码级测试双向锁定，挂漏与误删都会变红。
+- **商城端点接入 MCP**：新增四个交易域意图——`commerce_marketing`（优惠券 + 营销活动，15 端点）、`commerce_fulfillment`（运费规则 + 询盘/站内消息，12 端点）、`commerce_review`（评价 + 增值服务，8 端点）、`seo_merchant`（Google Merchant 商品同步，9 端点），共 44 个 action。四个意图全部默认关闭（交易动真金白银，需站点显式开放），并同步登记两份并列名单。
+- **消息渠道：飞书 / 钉钉接入**：企业 IM 走长连接（飞书 oapi-sdk / 钉钉 Stream 模式），不需要公网回调地址，也不需要开放入站端口。做两件事：① 网站产生留言、订单等事件时按通知规则推送到指定群或已绑定管理员的私聊；② 管理员在私聊或获授权的群里直接对话管理站点。包含渠道连接管理、一次性 Token 身份绑定、会话目标与通知规则、运行记录、模板化通知正文。
+- **渠道交互细节**：收到消息先回表情确认（飞书 OnIt 表情、钉钉表情回复），减少等模型与工具时的静默感，且只在会被执行的消息上回执；模型回复在飞书/钉钉按 Markdown 渲染（分段兼容 CRLF，钉钉标题跳过代码围栏并按 CommonMark 剥标记）；组织标识改为调平台接口自动获取并支持首条事件锚定，不再要求站长手填平台后台看不到的值，手工配置始终优先。
+- **新增两个支付渠道**：虎皮椒（MD5 签名按官方 V3 文档实现，回调校验签名 + appid 归属 + `status=OD` + `total_fee` 元→分四舍五入，退款仅支持整单，网关地址可配以便主站故障时切备用域名）、NOWPayments（加密货币，发票模式，`order_id` 固定传 `payment.PaymentId`，IPN 用 HMAC-SHA512 验签，只认 finished/confirmed/sending，无退款 API 时显式报错而不是假装退款成功）。两个渠道均覆盖下单、异步回调、主动查单、退款四条链路。
+- **用户组可投稿栏目授权**：新增关系表 `user_group_categories`（多对多落关系表而非塞进 `user_groups.setting` 的 JSON，否则删除栏目时无法清理授权、也无法按栏目反查），用户组编辑弹窗增加栏目多选（全选/半选状态由 value 推导，不另存 state）。前台投稿按栏目鉴权，未授权整单拒绝并点名栏目；更新已有文档且未传栏目时按库内现有栏目校验，堵住「先投到授权栏目、再原地改内容」绕过后来被撤销的授权。
+- **编辑器与内容录入**：链接对话框支持填写站内相对路径（`input[type=url]` 的浏览器原生校验只认绝对地址，`/about.html`、`../tag/seo` 直接提交不了，改成 text 后 `setLink` 仍会校验协议，不会放进 `javascript:`）；关联文档改用统一选择器（受控组件，支持模块筛选、跨页多选保留、已选按 id 批量回显），六个调用点统一，不再一换页就丢已选。
+- **全文检索增强**：状态接口返回引擎内实际索引文档数（此前只有「重建进度 current/total」，中断、写入被拒、索引被外部清空表现成同一个样子），Elasticsearch / Meilisearch / Zinc / 悟空四个引擎各自实现计数；关键词关联文档优先走全文索引（先按索引取 ID，再用栏目、模块、排除条件回表，按索引排名重排，被过滤太多时继续翻索引页），LIKE 降级路径额外去重、文档量超 10 万改前缀匹配。
+
+### ⚡ 功能优化
+
+- **零值保存改指针语义**：保存类端点普遍用 `if req.X > 0` / `!= ""` 判断「要不要写这个字段」，造成两类静默失效——一是零值写不进去（库存改 0 表示售罄、价格改 0 表示免费、会员状态改待审核或禁用、清空 SEO 标题，接口回 ok 但库里没变）；二是局部更新反向清空（AI/MCP 只传一个字段时其余被零值覆盖，实测只改会员用户名，status 从 1 变 0、手机号与邀请码一并被清空）。`Archive`、`Category`、`ModuleRequest`、`NavConfig`、`PluginTag`、`UserRequest`、`UserGroupRequest` 的零值敏感字段全部改为指针（nil = 未传保持原值，非 nil = 显式写入含 0/false/空串），新增 `library.Assign` 统一「全量覆盖 / 局部更新」，清空相册、标签、关联统一用「传空数组」表达并删掉四个隐式推断字段。顺带修掉一批硬编码导致的不可达状态：标签与导航永远无法隐藏、改用户组名会清空等级与价格并把停用组强制启用、改模型关键词永不生效。
+- **索引补齐与列长收缩**：给标签双向关联与标题查询补索引；`utf8mb4` 下单列索引前缀上限 767 字节，`varchar(250)` 建索引会直接失败（`Specified key was too long`），带索引的字符串列统一收缩到仓库既有约定 190 字符，`coupon_code.code` 收到 128（足够放兑换码）。
+- **列表性能**：标签列表 `list` 模式跳过 `count(*)`——16 万行的 `tags` 表上，慢日志 974 条里 950 条是同一句全表扫描（0.6~2.0s，并发下 CPU 打满），而 4 个调用方里 3 个从头到尾没读过 total；count 改走 300 秒进程缓存加估算，行数 ≥10 万不再真扫全表。商品批量加载调整回调顺序消除逐条补查，空 AI 配置进缓存并同步失效，避免重复查库与并发回填旧值。
+- **城市站路由与模板兜底收口**：`place` 的 `/{filename}` 规则不再当通用兜底（此前任何未命中的 URL 都被判成城市站详情页，分类页、列表页整站 404），子域名解析不再拿空 token 查库；城市站页面模板缺失时按 404 处理，不再渲染错误页然后把错误页写进缓存（切到商城模板后访问城市站页面的现场问题）。两条都补了护栏。
+- **后端写端点统一入参护栏**：抽出 `payload_guard.go`，对空载荷（`""` / `{}` / `null`）、缺目标、目标不存在统一拒绝并回明确文案，替掉 50 多处重复的 `if` 判断；删除与更新命中 0 行不再静默成功（`RowsAffected` 为 0 报 `ErrRecordNotFound`，但 update 需回查一次，否则「重复设置成同一个值」会被误判成不存在）。
+- **邮件链路**：管理员通知改走 `SendMail` 自动判定格式（此前把已渲染的 HTML 硬编码成纯文本发送，收件箱里全是 `<p>`、`<br>`）；附件不再被丢弃，发票与定时邮件可正常送达；模板注入 `priceFormat`、`stampToDate`，语法错误返回 error 而不是 panic；多收件人错误用 `errors.Join` 聚合，前面收件人的失败不再被后面覆盖；弃单召回邮件改到实际存在的 `/order/checkout` 付款链接。
+- **前端并入主仓**：`anqicms-admin/` 随主仓跟踪（508 个源文件，不含依赖与构建产物），前后端仍只通过 HTTP 契约耦合。新增 `make admin` 目标，`yarn build` 后自动把 `dist` 同步到 `system/`——此前只能靠人手工拷贝，对 OEM 是致命的静默错误（界面照常工作，只有客户截图时才发现品牌没换）。交叉编译时构建期工具显式用宿主平台运行：`make build GOOS=...` 的命令行变量会被 make 自动导出到 recipe 环境，`go run ./cmd/oemgen` 会编出目标平台的可执行文件而在本机执行报 `exec format error`。
+- **依赖升级**：Go 1.26.0 → 1.26.10；eino 0.9.23、MCP go-sdk 1.8.0、goquery 1.13、gopay 1.5.123、meilisearch-go 0.36.3、gomarkdown 等同步升级；随商城与渠道功能引入飞书 oapi-sdk、钉钉 stream-sdk、Brevo SDK 与 google/uuid；mysql 驱动转为直接依赖；清理全仓已无引用的 `go-nowpayments` 与 `eris`（NOWPayments 改为自行实现 IPN 验签，不再依赖第三方 SDK）。
+- **杂项**：重新生成 API 目录（后台端点 482 条，`apicatalog -check` 与源码一致）；补齐 25 个商城写端点摘要与 59 个 URLParam 参数说明（端点表当时 458 条全部有描述）；菜单去掉 `google`、`llms` 的旧顶级入口（两页已分别归入 `/plugin/channel/google` 与 `/plugin/seo/llms`）；后台帮助与模板标签链接迁到 `docs.anqicms.com`；新增 `AGENTS.md` 协作规范与 `.graphifyignore`。
 - **`archives` 清理 4 个冗余索引**：`idx_articles_url_token`（与 `idx_archives_url_token` 同列）、`idx_fixed_link`（与 `idx_archives_fixed_link` 同列）、`idx_category_id`（被 `idx_category_archive_id` 的最左前缀覆盖）、`idx_updated_time`（索引错的列是 `created_time`，与 `idx_created_time` 完全重复）。最后一个不只是删：删掉后在 `updated_time` 列上重建同名索引，因为草稿定时清理与 `timefactor` 都按 `updated_time` 过滤。判断依据是实际索引列而非索引名——`archive_drafts` 的 `idx_updated_time` 索引的正是 `updated_time`，不能一起删。
 - **`apicatalog` 生成器识别取参包装函数**：`readJSONPayload(ctx, &req)` 这类包级函数此前不被识别（只认 `ctx.Xxx()` 形式），重新生成端点清单会把 53 个端点的参数 schema 静默清空，而 MCP 的 `api_invoke` 与意图层参数门禁都读这份数据。
+
+### 🔒 安全修复
+
+- **四个支付渠道的异步回调此前全部静默失效**：微信以为 `VerifySign` 首参是 appId（实际是商户 apiKey），且验签算法写死 MD5，而通知报文不带 `sign_type`、下单用的是 HMAC-SHA256——所有微信支付通知都验签不过；Stripe 用 `evt_` 事件 ID 去查 `payment_id`，必然查不到后直接 return，Iris 默认 200 空响应让 Stripe 认为投递成功不再重试；PayPal 处理函数要求 `?token=`（那是同步 `return_url` 的参数），而注册的 webhook 地址不带参数，回调全被挡在门口；支付宝验签本身正常，但完全不校验 `trade_status`，`WAIT_BUYER_PAY` 也会把订单标成已支付。四条均按根因修复（Stripe 改按 `terrace_id` 定位、`metadata.payment_id` 兜底；PayPal 改由 `VerifyWebhookSignature` 鉴权、验签失败返 400；支付宝补 `trade_status` / `app_id` / `total_amount` 校验），并修掉解析错误被忽略（伪装成 payment-not-found）、`result_code` 非 SUCCESS 仍改单、`total_fee` 与订单金额不一致、`pay_way` 被一律改写成 wechat 等问题。
+- **支付记账加并发闸门**：抽出 `Website.MarkPaymentPaid`（已支付落库 + 财务流水 + 推进订单），用 `paid_time = 0` 的条件更新做闸门——通知重试与模板轮询 `/api/payment/check` 会并发进来，不设闸门就重复记财务流水。
+- **找回密码可被邮箱劫持**：重置凭据原由 `Md5(email + password)` 派生，空密码账号（Google / 公众号 / 验证码注册）会退化成 `Md5(email)`，知道邮箱即可改密登录。改为用站点 `TokenSecret` 共同派生，且发信端与校验端必须调用同一函数（否则正常用户的重置会失败）；同时修掉 `state=reset` 提前清空验证码导致跳转后提交必然失败的问题。
+- **邮箱枚举可轮换绕过限流**：注册、`GET/POST verify/email` 三个端点都能探测「某邮箱是否已注册」，原先各自无限流，攻击者轮换探针即可绕过。三个探针统一挂 `AccountProbeGuard`（20 次 / 10 分钟 / IP，超限 429，9 个语言包同步补文案）；`state=exist` 不再回 `{id, email}`（id 可拼 `/api/comment/list` 反查匿名评论者），只回 `{"exist": true}`，`code` 语义保持不变以免模板分支失效。
+- **附件上传可落地脚本木马**：线上 `public/uploads` 出现 `shell.php5`、`s2.phtml`，根因是只拦 `.php` 与 `.jsp`，而 filetype 认不出的内容还会回落到用户文件名，其余可执行后缀原样落盘。改为默认拒绝的扩展名白名单；水印与标题图上传不再取用户文件名后缀，改由 `image.Decode` 结果决定（挡掉「合法 GIF 尾部追加 PHP 代码、按原名存成 .phtml」这条落地路径）；模板包导入的 `static/` 目录走独立白名单，并修掉整包导入的 Zip Slip（zip 内 `static/../../x.phtml` 不再能写到 `public/` 之外）。
+- **`/aigenerate` 缺鉴权中间件**：`manage` 子组本身只挂了 `ParseAdminUrl`，整组 7 个端点不带 token 即可读取 AI 配置、触发批量生成（实测回「AI生成任务已触发」但计划表、日志表均无变化）。补 `ParseAdminToken` + `AdminPermission`，改后不带 token 统一回 `code=1001`。
+- **MCP 出口泄露明文凭据**：站点库密码与各类 token 此前可随工具结果返回。出口统一脱敏、站点列表改安全视图；写侧用同路径回查还原真值，还原不到就拒绝写入（否则会把哨兵值真的写进库）。同时给 `page_size` 补上限 200——此前一次能吐 6.7MB。
+- **用户名可被串号登录**：`user_name` 同时是「按用户名登录」的凭据，两个同名账号会让人登进别人那里（线上已有 3 条空用户名历史记录）。改为双策略：后台与 AI 创建时空名或重名直接报错（改名撞别人同样拒绝，排除自身）；第三方自动注册（昵称取自平台、用户改不了）走 `uniqueUserName` 加数字后缀，空昵称退化为「用户」并按 rune 截断——拒绝注册等于把第三方登录堵死。
+- **根治搜索与文档列表的 SQL 注入漏洞**：GORM 的 ToSQL 会把绑定参数内联成字面量，其对单引号只做双写转义、不处理反斜杠；MySQL 默认以反斜杠为转义符，导致 ' 击穿引号边界，OR 1=1# 逃逸为 SQL 条件。改用参数化查询。
 
 ### 🐛 问题修复
 
 - **端点参数 schema 可能被一次性清空**：同上。已补白名单与两条护栏（一条断言具体 handler 解析出结构体，一条扫描控制器源码，凡"首参是 ctx、名字带 payload/json/bind 却未登记"的调用直接报错）。
+- **锚文本批量更新几乎全部失败**：`CurrentSite` 返回的是摘了请求 ctx 的副本，而 `go currentSite.ReplaceAnchor(nil)` 把这个副本带进了 goroutine，handler 一返回请求 ctx 立刻被 cancel，之后每篇文章都返回 `context canceled`，错误又被 `ReplaceContent` 直接吞掉。实测 3557 篇文章失败 3557 篇（287ms「跑完」），表现为「点了批量更新，只有极少数文章有变化」。新增 `Website.Async()`（摘掉请求 ctx）后 0 失败（3.065 秒），并补「处理 / 失败 / 耗时」汇总日志，任务失败不再是静默的。
+- **锚文本另外三处「设了却没效果」**：新建锚文本后不清 1 小时缓存（预热缓存后新增再发布，正文里没有链接）；密度上限用预填了正文原有 `<a>` 与 markdown 链接文本的 map 计数，链接多的文章配额先被吃光，整篇一个锚文本都加不上；markdown 正文替换后靠 `data-anchor` 正则回填，而 markdown 分支生成的是 `[词](链接)`，导致「替换次数」长期为空。另修默认密度与设置页、配置注释不一致（`<20→200` vs 默认 100），以及批量替换把图片地址改写成本地绝对地址。
+- **优惠券批量发码吞插入错误**：`userId==0` 分支在循环里完全不看 `Create` 的错误，几十张全部插入失败也照样返回成功，后台拿到回执、刷新列表却是空的；绑定会员的三条分支同样忽略错误，会把从没写进库的券码当成领取成功返回给用户。改为逐张检查、整批走事务（要么全落库、要么一张不留，避免半批孤儿码导致管理员重试时重复发放），`count` 小于 1 按 1 处理。
+- **写端点空载荷、缺目标、目标不存在仍回成功**：51 个写端点在请求体为空时照样回「已保存 / 已删除」，24 个在 id 不存在时照样回成功，另有 5 个是 provider 吞了 `RowsAffected`（gorm 删除不存在的行返回的是 nil error）。已按上文入参护栏统一收口。
+- **三个 handler 缺响应或漏 return**：`MakeCouponCode` 成功路径完全不写响应体（前端弹空白成功提示，MCP 侧 `endpointFailure("")` 连失败也判成成功）；`SettingCacheForm` 的 `if req.Update` 分支同样不写响应；`CommunicationOrderSaveImages` 的 `ReadJSON` 失败分支漏 return，弹完 `Invalid Params` 还继续用零值 req 去保存。
+- **全文检索结果被请求里的 `ids` 覆盖**：`req.Ids` 的判断排在检索结果之前，带 ids 参数（列表页翻页、按 id 批量取）的请求一旦开了全文检索，命中的是请求自带的 id 列表而不是检索结果，排序也被打乱。
+- **升级出现「备份再备份」式假成功**：主程序被 rename 成 `xxx.old` 后进程仍跑在旧 inode 上，Linux 会把 `/proc/self/exe` 同步改成 `xxx.old`（备份被删还追加 ` (deleted)`），而旧实现直接拿 `os.Executable()` 当主程序——升级完没重启又点一次升级，就把 `xxx.old` 再备份成 `xxx.old.old`，真正的 `xxx` 一次都没被换，界面却提示成功。新增 `NormalizeExecPath` 折叠 `.old` / `.old.old` / ` (deleted)`，升级前先判定是否跑在备份程序上（是则要求先重启），换主程序失败必返回错误并回滚，前端 `code !== 0` 明确提示失败；升级包里找不到主程序不再静默「成功」。
+- **`ModuleId == 2` 判断「是不是产品」会静默错位**：模块 id 是自增的，删了模型重建或迁移站点后 id 未必是 2——商品页照样能打开，但价格区块、SKU 筛选、Product 结构化数据会一起消失且没有任何报错；反过来把 1 号模型改名成「产品」也不生效；统计里的 `module_id = 2` 更直接让「上新」图表恒为 0。改为读 `modules.kind`，并单独维护这份判定缓存（不能复用只含启用栏目的那份）。
+- **后台菜单与死路由**：插件菜单迁到三级分组后，仪表盘引导、附件替换、素材入口、关键词、留言邮件设置等处仍指向旧的扁平路径，点击落到无匹配路由的空白页；`google`、`llms` 在 `/plugin` 下留了重复入口。
+- **商城端点的两处路由与覆盖缺陷**：`googlemerchant` 的 `account/select` 少了前导斜杠，实际注册成 `/plugin/googlemerchantaccount/select`——清单里能看到该路径，真实调用必然 404；`coupon/detail`、`activity/detail` 的「保存即全量覆盖」补齐保护，避免只改一个字段把其余配置清空。
+- **列表失败结果被缓存、后台任务重复查询**：失败缓存会让一次抖动持续生效，后台任务在每次调度时重复查同一批数据。
 
 ## v3.6.7 `AnQiCMS` `2026-10-20`
 
@@ -885,7 +1038,6 @@
 
 - \[新增] 文档详情支持图片 lazyload
 - \[新增] 支持将AnQiCMS安装到二级目录，部分功能受限
-- \[新增] 支持对接安企盒子，自动发布文章
 - \[新增] 后台支持对指定文章一键翻译、伪原创操作
 - \[界面] 更好功能图标
 - \[修复] 修复网站迁移后，root目录不更新的问题

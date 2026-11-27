@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/kataras/iris/v12"
-	"github.com/kataras/iris/v12/context"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
@@ -17,8 +16,7 @@ func ArchiveDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
 	if ok {
-		ctx.ContentType(context.ContentHTMLHeaderValue)
-		ctx.Write(cacheFile)
+		writeCachedHTML(ctx, cacheFile)
 		return
 	}
 	preview := ctx.URLParam("preview")
@@ -260,7 +258,7 @@ func ArchiveDetail(ctx iris.Context) {
 	}
 
 	recorder := ctx.Recorder()
-	err = ctx.View(GetViewPath(ctx, tplName))
+	err = renderView(ctx, GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
 	} else {
@@ -276,8 +274,7 @@ func ArchiveIndex(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
 	if ok {
-		ctx.ContentType(context.ContentHTMLHeaderValue)
-		ctx.Write(cacheFile)
+		writeCachedHTML(ctx, cacheFile)
 		return
 	}
 	urlToken := ctx.Params().GetString("module")
@@ -317,7 +314,7 @@ func ArchiveIndex(ctx iris.Context) {
 		return
 	}
 	recorder := ctx.Recorder()
-	err := ctx.View(GetViewPath(ctx, tplName))
+	err := renderView(ctx, GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
 	} else {

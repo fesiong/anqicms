@@ -166,8 +166,11 @@ func (w *Website) SavePlace(req *request.PlaceRequest) (place *model.Place, err 
 						place.Extra[field.FieldName] = val
 					}
 				} else if field.Type == config.CustomFieldTypeTexts && place.Extra[field.FieldName] != nil {
-					buf, _ := json.Marshal(place.Extra[field.FieldName])
-					place.Extra[field.FieldName] = string(buf)
+					// 条目可能带自己的 type：先校验，再规整后存 JSON。
+					if err := w.ValidateCustomFieldTexts(place.Extra[field.FieldName], &field); err != nil {
+						return nil, err
+					}
+					place.Extra[field.FieldName] = w.StringifyCustomFieldTexts(place.Extra[field.FieldName])
 				} else if field.Type == config.CustomFieldTypeTimeline {
 					// 存 json
 					buf, _ := json.Marshal(place.Extra[field.FieldName])
@@ -436,17 +439,20 @@ func (w *Website) GetCachePlaces() []*model.Place {
 	if w.DB == nil {
 		return nil
 	}
-	mu.Lock()
-	defer mu.Unlock()
 	var places []*model.Place
-
-	err := w.Cache.Get("places", &places)
-
-	if err == nil && len(places) > 0 {
+	// 快路径同 GetCacheCategories：缓存命中不拿锁，避免所有请求串行。
+	if err := w.Cache.Get("places", &places); err == nil && len(places) > 0 {
 		return places
 	}
 
-	err = w.DB.Model(model.Place{}).Order("sort asc").Find(&places).Error
+	// 慢路径：加锁防击穿 + 双重检查。
+	mu.Lock()
+	defer mu.Unlock()
+	if err := w.Cache.Get("places", &places); err == nil && len(places) > 0 {
+		return places
+	}
+
+	err := w.DB.Model(model.Place{}).Order("sort asc").Find(&places).Error
 	if err != nil {
 		return nil
 	}
@@ -467,12 +473,16 @@ func (w *Website) GetCachePlacesByIds(ids []uint) []*model.Place {
 	places := w.GetCachePlaces()
 	var tmpPlaces = make([]*model.Place, 0, len(ids))
 	for _, place := range places {
-		if place.Link == "" {
-			place.Link = w.GetUrl("place", place, 0)
+		link := place.Link
+		if link == "" {
+			link = w.GetUrl("place", place, 0)
 		}
 		for _, id := range ids {
 			if place.Id == id {
-				tmpPlaces = append(tmpPlaces, place)
+				// 值拷贝：避免并发写共享的缓存对象。
+				item := *place
+				item.Link = link
+				tmpPlaces = append(tmpPlaces, &item)
 			}
 		}
 	}

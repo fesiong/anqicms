@@ -14,7 +14,7 @@ import (
 // contentops_import setting_get、site_anqi 的 JWT 密钥。
 func TestMaskSecrets(t *testing.T) {
 	in := map[string]any{
-		"storage_type": "r2",
+		"storage_type":  "r2",
 		"s3_access_key": "AKIA123",
 		"s3_secret_key": "s3cr3t",
 		"app_secret":    "wechat-secret",
@@ -94,5 +94,44 @@ func TestContainsMaskedSecret(t *testing.T) {
 	}
 	if !ContainsMaskedSecret([]any{MaskedSecret}) {
 		t.Error("数组内掩码应被识别")
+	}
+}
+
+// TestMaskSecretsExtendedCredentials 锁住三条既有欠账字段，并反向锁住
+// 「不要把 _token 加宽成后缀」——url_token / link_token 是 URL 别名，
+// 掩码后写回会直接毁链接。
+//
+// 反向对照：从 secretFieldNames 删掉 google_credentials_json → 本用例红。
+func TestMaskSecretsExtendedCredentials(t *testing.T) {
+	in := map[string]any{
+		// GCP 服务账号 JSON：里面含 private_key，但整段是一个字符串，
+		// 按 map key 递归永远看不到 private_key 这个键。
+		"google_credentials_json": `{"type":"service_account","private_key":"-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----\n"}`,
+		"recaptcha_private_key":   "recaptcha-secret",
+		"refresh_token":           "1//refresh-token",
+		// 非凭据的 URL 别名：不能被误掩码。
+		"url_token":  "about",
+		"link_token": "news",
+	}
+
+	got, ok := MaskSecrets(in).(map[string]any)
+	if !ok {
+		t.Fatal("MaskSecrets 应返回 map")
+	}
+	for _, k := range []string{"google_credentials_json", "recaptcha_private_key", "refresh_token"} {
+		if got[k] != MaskedSecret {
+			t.Errorf("%s = %#v，期望掩码（否则含私钥的 JSON 会原样出站）", k, got[k])
+		}
+	}
+	for _, k := range []string{"url_token", "link_token"} {
+		if got[k] == MaskedSecret {
+			t.Errorf("%s 是非凭据 URL 别名，掩码后写回会毁链接", k)
+		}
+	}
+
+	// 掩码后的 JSON 文本里不得残留私钥原文。
+	raw := MaskSecretsInJSON(`{"data":{"google_credentials_json":"-----BEGIN PRIVATE KEY-----MIIB"}}`)
+	if strings.Contains(raw, "BEGIN PRIVATE KEY") {
+		t.Errorf("纯文本通道仍泄露 GCP 私钥: %s", raw)
 	}
 }

@@ -62,8 +62,8 @@ func (w *Website) CommunicationOrderCreate(req *request.CommunicationOrderReques
 		"\n" + w.Tr("EventDate") + ": " + order.EventDate +
 		"\n" + w.Tr("Phone") + ": " + order.Phone +
 		"\n" + w.Tr("CreatedTime") + ": " + time.Unix(order.CreatedTime, 0).Format("2006-01-02 15:04:05") +
-		"\n" + w.Tr("Description") + ": " + order.Content
-	go w.sendMail(subject, content, nil, nil, false, false)
+		"\n" + w.Tr("Description") + ": " + library.StripTags(order.Content)
+	go w.sendMail(subject, content, nil, nil, false, true)
 
 	// send email to customer
 	_ = w.SendCommunicationSummitedEmail(&order)
@@ -190,8 +190,8 @@ func (w *Website) CommunicationAcceptQuote(id int64) error {
 		"\n" + w.Tr("Phone") + ": " + communicationOrder.Phone +
 		"\n" + w.Tr("QuotePrice") + ": " + fmt.Sprintf("%.2f", float64(communicationOrder.QuotePrice)/100) +
 		"\n" + w.Tr("CreatedTime") + ": " + time.Unix(communicationOrder.CreatedTime, 0).Format("2006-01-02 15:04:05") +
-		"\n" + w.Tr("Description") + ": " + communicationOrder.Content
-	go w.sendMail(subject, content, nil, nil, false, false)
+		"\n" + w.Tr("Description") + ": " + library.StripTags(communicationOrder.Content)
+	go w.sendMail(subject, content, nil, nil, false, true)
 
 	return err
 }
@@ -226,8 +226,8 @@ func (w *Website) CommunicationMessageSend(req *request.CommunicationMessageRequ
 		content := w.Tr("NewCommunicationOrderMessage") + ": \n" +
 			"\n" + w.Tr("CreatedTime") + ": " + time.Unix(msg1.CreatedTime, 0).Format("2006-01-02 15:04:05") +
 			"\n" + w.Tr("SenderName") + ": " + msg1.SenderName +
-			"\n" + w.Tr("Content") + ": " + msg1.Content
-		go w.sendMail(subject, content, nil, nil, false, false)
+			"\n" + w.Tr("Content") + ": " + library.StripTags(msg1.Content)
+		go w.sendMail(subject, content, nil, nil, false, true)
 
 	} else {
 		// send email to user

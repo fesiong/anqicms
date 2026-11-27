@@ -134,6 +134,7 @@ func CommentPraise(ctx iris.Context) {
 		})
 		return
 	}
+	comment = provider.SanitizePublicComment(comment)
 	// 检查是否点赞过
 	_, err = currentSite.AddCommentPraise(uint(userId), int64(comment.Id), comment.ArchiveId)
 	if err != nil {
@@ -194,7 +195,7 @@ func CommentList(ctx iris.Context) {
 		NotFound(ctx)
 		return
 	}
-	err = ctx.View(GetViewPath(ctx, tplName))
+	err = renderView(ctx, GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
 	}

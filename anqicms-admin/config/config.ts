@@ -4,6 +4,7 @@ const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 
 import defaultSettings from './defaultSettings';
 import routes from './routes';
+import { brand } from '../src/oem/brand';
 
 let publicPath = '/system/';
 
@@ -95,7 +96,11 @@ export default defineConfig({
     // 只有设置为 variable， 才能使用 configProvide 动态设置主色调
     'root-entry-name': 'variable',
   },
-  title: 'AnQiCMS',
+  // 标题在构建期写入 index.html 与 umi 生成的 layout 兜底值，因此必须在这里
+  // 就取品牌名 —— 它决定了浏览器标签页上写的是谁。
+  title: brand.name,
+  // 品牌提供了 favicon 才覆盖，否则保持官方图标。
+  ...(brand.favicon ? { favicons: [brand.favicon] } : {}),
   /**
    * @name moment 的国际化配置
    * @description 如果对国际化没有要求，打开之后能减少js的包大小

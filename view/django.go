@@ -348,6 +348,8 @@ func (s *DjangoEngine) LoadTemplates(siteId uint, site *provider.Website) error 
 			site.TplI18n = tplI18n
 		}
 	}
+	// 模板语言包可能刚被换过，模板翻译缓存里的旧译文全部作废
+	provider.ResetTplTrCache()
 	return firstErr
 }
 

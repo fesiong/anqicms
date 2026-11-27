@@ -48,8 +48,33 @@ const PluginLLMs: React.FC<any> = () => {
     });
   };
 
+  const stopPolling = () => {
+    if (intervalXhr) {
+      clearInterval(intervalXhr);
+      intervalXhr = null;
+    }
+  };
+
+  /**
+   * 该不该停止轮询。
+   *
+   * status 端点在"当前没有进行中的构建"时返回 { finished: true, building: false }，
+   * 不带 percent/current/total。以前前端直接把它当进度对象渲染，
+   * 于是出现 "undefined / undefined (undefined%)"，并且因为三个停止条件都不成立而永远轮询下去。
+   */
+  const shouldStopPolling = (data: any) =>
+    !data ||
+    data.finished === true ||
+    data.building === false ||
+    typeof data.percent !== 'number' ||
+    data.status === 2 ||
+    data.status < 0;
+
   useEffect(() => {
     getSetting();
+    return () => {
+      stopPolling();
+    };
   }, []);
 
   const handleChangeField = (value: any, field: string) => {
@@ -83,22 +108,28 @@ const PluginLLMs: React.FC<any> = () => {
       intl.formatMessage({ id: 'setting.system.submitting' }),
       0,
     );
+    setBuildStatus(null);
     pluginBuildLLMs(values)
       .then((res) => {
         message.info(res.msg);
         if (res.code === 0) {
+          stopPolling();
           intervalXhr = setInterval(() => {
-            pluginGetLLMsBuildStatus().then((res) => {
-              setBuildStatus(res.data || null);
-              if (
-                !res.data ||
-                res.data?.status === 2 ||
-                res.data?.percent === 100
-              ) {
-                clearInterval(intervalXhr);
-                setBuildStatus(null);
-              }
-            });
+            pluginGetLLMsBuildStatus()
+              .then((res) => {
+                const data = res?.data;
+                // 只有带 percent 才是真正的进度快照，否则是"无进行中构建"的标记，
+                // 不能塞给 Progress，否则又会渲染出 undefined。
+                if (typeof data?.percent === 'number') {
+                  setBuildStatus(data);
+                }
+                if (shouldStopPolling(data)) {
+                  stopPolling();
+                }
+              })
+              .catch(() => {
+                stopPolling();
+              });
           }, 1000);
         }
       })
@@ -106,6 +137,9 @@ const PluginLLMs: React.FC<any> = () => {
         hide();
       });
   };
+
+  // 进度百分比归一化：后端在 Total 未算出时可能给 0，越界的值 Progress 会报错
+  const progressPercent = Math.min(Math.max(buildStatus?.percent ?? 0, 0), 100);
 
   return (
     <NewContainer onTabChange={(key) => onTabChange(key)}>
@@ -173,7 +207,7 @@ const PluginLLMs: React.FC<any> = () => {
                     >
                       <>
                         <ProFormRadio.Group
-                          name="auto_build"
+                          name="update_frequency"
                           label={intl.formatMessage({
                             id: 'plugin.llms.update-frequency',
                           })}
@@ -439,13 +473,31 @@ const PluginLLMs: React.FC<any> = () => {
                     {buildStatus && (
                       <div className="mt-normal">
                         <Progress
-                          percent={buildStatus.percent}
+                          percent={progressPercent}
                           percentPosition={{ align: 'center', type: 'outer' }}
-                          format={() =>
-                            `${buildStatus.current} / ${buildStatus.total} (${buildStatus.percent}%)`
+                          status={
+                            buildStatus.status === -1 ? 'exception' : 'normal'
                           }
+                          format={() => {
+                            // 计数只在这两字段都是数字时才展示，否则只报百分比，
+                            // 避免再出现 "undefined / undefined" 这类输出。
+                            const hasCounts =
+                              typeof buildStatus.current === 'number' &&
+                              typeof buildStatus.total === 'number' &&
+                              buildStatus.total > 0;
+                            return hasCounts && buildStatus.status !== 2
+                              ? `${buildStatus.current} / ${buildStatus.total} (${progressPercent}%)`
+                              : `${progressPercent}%`;
+                          }}
                           size="small"
                         />
+                        {buildStatus.msg ? (
+                          <Alert
+                            className="mt-small"
+                            type="error"
+                            message={buildStatus.msg}
+                          />
+                        ) : null}
                       </div>
                     )}
                   </Card>

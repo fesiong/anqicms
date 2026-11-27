@@ -331,7 +331,7 @@ const PluginImportApi: React.FC<any> = () => {
                       message={
                         <pre>
                           <code>
-                            {`{\n    "code": 200,\n    "msg": "发布成功",\n    "data": {\n        "url":"https://www.anqicms.com/..."\n    }\n}`}
+                            {`{\n    "code": 200,\n    "msg": "发布成功",\n    "data": {\n        "url":"https://www.example.com/..."\n    }\n}`}
                           </code>
                         </pre>
                       }

@@ -69,10 +69,16 @@ type CustomField struct {
 	Items       []string    `json:"-"`                    // radio|select|checkbox 的选项配置解析值
 }
 
+// CustomFieldTexts 是 texts 类型自定义字段里的一个条目。
+//
+// Type 与 CustomField.Type 对齐（见 CustomFieldTextsTypes），决定该条目的
+// 数据处理、校验和展示方式；历史数据没有该字段，读取时按 text 处理，
+// 写回时也只有在调用方显式设置后才会带上，因此旧数据格式保持兼容。
 type CustomFieldTexts struct {
 	Key    string   `json:"key"`
 	Value  string   `json:"value"`
-	Values []string `json:"values"` // 更多的字段
+	Values []string `json:"values"`         // 更多的字段
+	Type   string   `json:"type,omitempty"` // 条目类型：text|number|textarea|radio|checkbox|select|image|images|file|date|time|datetime|color
 }
 
 type TimelineField struct {

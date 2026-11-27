@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/kataras/iris/v12"
-	"github.com/kataras/iris/v12/context"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
@@ -19,8 +18,7 @@ func PlacePage(ctx iris.Context) {
 	}
 	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
 	if ok {
-		ctx.ContentType(context.ContentHTMLHeaderValue)
-		ctx.Write(cacheFile)
+		writeCachedHTML(ctx, cacheFile)
 		return
 	}
 
@@ -73,7 +71,7 @@ func PlacePage(ctx iris.Context) {
 	}
 
 	recorder := ctx.Recorder()
-	err := ctx.View(GetViewPath(ctx, tplName))
+	err := renderView(ctx, GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
 	} else {
@@ -104,7 +102,7 @@ func PlaceIndex(ctx iris.Context) {
 		return
 	}
 
-	err := ctx.View(GetViewPath(ctx, tplName))
+	err := renderView(ctx, GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
 	}

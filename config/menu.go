@@ -28,6 +28,7 @@ var DefaultMenuGroups = []*MenuGroup{
 				Path:     "/setting/content",
 				GroupKey: "setting",
 				Name:     "内容设置",
+				Backend:  "/setting/content",
 			},
 			{
 				Path:     "/setting/safe",
@@ -234,10 +235,25 @@ var DefaultMenuGroups = []*MenuGroup{
 				Backend:  "/plugin/sendmail",
 			},
 			{
+				Path:     "/plugin/channel/sms",
+				GroupKey: "plugin",
+				Name:     "短信服务",
+				Backend:  "/plugin/sms",
+			},
+			{
 				Path:     "/plugin/channel/subscription",
 				GroupKey: "plugin",
 				Name:     "邮件订阅",
 				Backend:  "/plugin/subscription",
+			},
+			{
+				// 企业 IM 渠道（飞书长连接 / 钉钉 Stream）的连接配置与策略。
+				// Backend 指向 /channels：middleware.AdminPermissionRequired 用它做
+				// 「URI → 菜单权限」映射，未映射一律拒绝（渠道端点不沿用后台的默认放行）。
+				Path:     "/plugin/channel/channels",
+				GroupKey: "plugin",
+				Name:     "消息渠道",
+				Backend:  "/channels",
 			},
 			{
 				Path:     "/plugin/contentops/collector",
@@ -467,6 +483,11 @@ var DefaultMenuGroups = []*MenuGroup{
 		Name: "数据统计",
 		Menus: []*Menu{
 			{
+				Path:     "/statistic/archive",
+				GroupKey: "statistic",
+				Name:     "数据统计",
+			},
+			{
 				Path:     "/statistic/spider",
 				GroupKey: "statistic",
 				Name:     "蜘蛛统计",
@@ -565,4 +586,35 @@ var DefaultMenuGroups = []*MenuGroup{
 			},
 		},
 	},
+}
+
+// MenuGroups 返回当前品牌下后台可见的菜单分组。
+//
+// 设计市场（/design/market）是官方模板市场的入口：它的页面用 iframe 嵌入
+// https://www.anqicms.com/design，本身带有官方品牌属性。对 OEM 品牌展示它
+// 等于把官方市场漏给客户，所以只在官方品牌（IsOfficial）下出现，其余一律
+// 从菜单中剔除。前端路由（anqicms-admin/config/routes.ts）用 hideInMenu
+// 做同样的构建期判定，这里负责让后端 AdminMenus 接口与权限映射保持一致。
+func MenuGroups() []*MenuGroup {
+	if IsOfficial() {
+		return DefaultMenuGroups
+	}
+	out := make([]*MenuGroup, 0, len(DefaultMenuGroups))
+	for _, g := range DefaultMenuGroups {
+		if g.Key != "design" {
+			out = append(out, g)
+			continue
+		}
+		menus := make([]*Menu, 0, len(g.Menus))
+		for _, m := range g.Menus {
+			if m.Path == "/design/market" {
+				continue
+			}
+			menus = append(menus, m)
+		}
+		ng := *g
+		ng.Menus = menus
+		out = append(out, &ng)
+	}
+	return out
 }

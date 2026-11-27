@@ -3,8 +3,11 @@ package response
 import "kandaoni.com/anqicms/model"
 
 type ModuleCount struct {
-	Id    uint   `json:"id"`
-	Name  string `json:"name"`
+	Id   uint   `json:"id"`
+	Name string `json:"name"`
+	// Kind 模型类型（article/product），来自 modules.kind。
+	// 前端按它决定「快捷操作」跳文章列表还是商品列表，不再靠硬编码 module_id=2 猜。
+	Kind  string `json:"kind"`
 	Total int64  `json:"total"`
 }
 type ArchiveCount struct {

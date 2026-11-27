@@ -5,6 +5,15 @@ type AnqiLoginRequest struct {
 	Password string `json:"password"`  // 安企云账号密码
 }
 
+// AnqiRegisterRequest 后台内嵌注册安企云账号。
+// 邮箱与手机号至少填一个，这是官网 RegisterUser 的硬性要求。
+type AnqiRegisterRequest struct {
+	UserName string `json:"user_name"` // 安企云账号用户名
+	Password string `json:"password"`  // 安企云账号密码
+	Email    string `json:"email"`     // 邮箱，与手机号至少填一个
+	Phone    string `json:"phone"`     // 手机号，与邮箱至少填一个
+}
+
 type AnqiTemplateRequest struct {
 	TemplateId    uint     `json:"template_id" ast:"-"`   // 模板 ID
 	OnlyTemplate  bool     `json:"only_template"`         // 是否只分享模板（不含数据）
@@ -27,6 +36,15 @@ type AnqiTemplateRequest struct {
 
 type AnqiDownloadTemplateRequest struct {
 	TemplateId uint `json:"template_id"` // 模板 ID
+}
+
+// AnqiRechargeRequest 后台内嵌购买 VIP / 充值积分。
+// 金额与套餐由官网决定，这里只传选择项。
+type AnqiRechargeRequest struct {
+	Type     string `json:"type"`     // vip=续期用户组，integral=充积分
+	GoodsId  uint   `json:"goods_id"` // 套餐 ID；vip 时对应用户组 ID
+	Quantity int64  `json:"quantity"` // VIP 年数 / 积分份数，<=0 按 1 处理
+	PayWay   string `json:"pay_way"`  // wechat|alipay，留空默认微信
 }
 
 // AnqiFeedbackRequest 向安企云提交使用反馈的结构体

@@ -380,3 +380,38 @@ func GetStatisticLive(ctx iris.Context) {
 		"data": result,
 	})
 }
+
+// GetStatisticArchive 统计文档数量，支持按年、按月两个时间维度，以及按模型、按栏目两种分组粒度。
+//
+// 统计口径：只统计 `archives`（已发布文档），草稿/待发布/回收站（`archive_drafts`）不计入，
+// 与后台「文档列表」默认筛选一致。返回的 periods 覆盖整个区间，没有文档的周期补 0，
+// 没有任何文档时也会返回完整的行骨架与 period 列表（前端据此渲染空表，而不是白屏）。
+//
+// 参数说明：
+//   - 查询参数 "dimension": 时间维度，year=按年、month=按月，默认 month。
+//   - 查询参数 "group": 分组粒度，module=按内容模型、category=按栏目，默认 module。
+//   - 查询参数 "start": 起始周期，按年传 2023，按月传 2023-06；为空或格式错误时按年取 5 年前、按月取 12 个月前。
+//   - 查询参数 "end": 结束周期，格式同上；为空或格式错误时取当前年/月。
+func GetStatisticArchive(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	dimension := ctx.URLParam("dimension")
+	group := ctx.URLParam("group")
+	start := ctx.URLParam("start")
+	end := ctx.URLParam("end")
+
+	result, err := currentSite.StatisticArchive(dimension, group, start, end)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+			"data": nil,
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": result,
+	})
+}

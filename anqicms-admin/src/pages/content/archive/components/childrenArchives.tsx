@@ -1,16 +1,11 @@
+import ArchiveSearch from '@/components/archiveSearch';
 import {
   getArchives,
   updateArchiveParent,
   updateArchivesSort,
 } from '@/services';
 import { PlusOutlined } from '@ant-design/icons';
-import {
-  ActionType,
-  ModalForm,
-  ProColumns,
-  ProFormSelect,
-  ProTable,
-} from '@ant-design/pro-components';
+import { ActionType, ProColumns, ProTable } from '@ant-design/pro-components';
 import { FormattedMessage, useIntl } from '@umijs/max';
 import { Button, Input, Modal, Space, message } from 'antd';
 import React, { useRef, useState } from 'react';
@@ -29,30 +24,6 @@ const ChildrenArchivesModal: React.FC<ChildrenArchivesProps> = (props) => {
   const actionRef = useRef<ActionType>();
   const [addOpen, setAddOpen] = useState<boolean>(false);
   const [selectedRowKeys, setSelectedRowKeys] = useState<any[]>([]);
-  const [searchArchives, setSearchArchives] = useState<any[]>([
-    {
-      id: 0,
-      title: intl.formatMessage({
-        id: 'content.parent_id.empty',
-      }),
-    },
-  ]);
-
-  const onSearchArchives = (e: any) => {
-    getArchives({ title: e, pageSize: 10 }).then((res) => {
-      // 如果是已经有选择的 ParentId,则把它加入到开头
-      const searchItems: any[] = [
-        {
-          id: 0,
-          title: intl.formatMessage({
-            id: 'content.parent_id.empty',
-          }),
-        },
-      ];
-      setSearchArchives(searchItems.concat(res.data || []));
-    });
-  };
-
   const updateSort = (index: number, record: any, value: any) => {
     if (updating) {
       return;
@@ -115,15 +86,11 @@ const ChildrenArchivesModal: React.FC<ChildrenArchivesProps> = (props) => {
     });
   };
 
-  const handleAddChildren = async (values: any) => {
-    const ids = values.ids || 0;
+  const handleAddChildren = async (rows: any[]) => {
+    const ids = rows.map((row) => row.id);
     if (ids.length > 0) {
-      updateArchiveParent({
-        ids: ids,
-        parent_id: props.parent.id,
-      }).then((res) => {
-        actionRef.current?.reload();
-      });
+      await updateArchiveParent({ ids, parent_id: props.parent.id });
+      actionRef.current?.reload();
     }
     setAddOpen(false);
   };
@@ -293,29 +260,12 @@ const ChildrenArchivesModal: React.FC<ChildrenArchivesProps> = (props) => {
         />
       </Modal>
       {addOpen && (
-        <ModalForm
-          title={intl.formatMessage({ id: 'content.children.btn' })}
+        <ArchiveSearch
           open={addOpen}
-          onOpenChange={(flag) => setAddOpen(flag)}
-          onFinish={handleAddChildren}
-        >
-          <ProFormSelect
-            name="ids"
-            showSearch
-            mode="multiple"
-            options={searchArchives.map((a: any) => ({
-              title: a.title,
-              label: a.title,
-              value: a.id,
-              disabled: a.id === props.parent.id,
-            }))}
-            fieldProps={{
-              onSearch: (e) => {
-                onSearchArchives(e);
-              },
-            }}
-          />
-        </ModalForm>
+          onCancel={() => setAddOpen(false)}
+          onSubmit={handleAddChildren}
+          disabledIds={[props.parent.id]}
+        />
       )}
     </>
   );

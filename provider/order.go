@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/jinzhu/now"
@@ -15,14 +15,13 @@ import (
 	"github.com/go-pay/gopay"
 	"github.com/go-pay/gopay/alipay"
 	"github.com/go-pay/gopay/paypal"
-	"github.com/go-pay/gopay/wechat"
-	_ "github.com/matm/go-nowpayments/payments"
 	"github.com/stripe/stripe-go/v82"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider/sms"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
 )
@@ -219,6 +218,13 @@ func (w *Website) GetPaymentInfoByOrderId(orderId string) (*model.Payment, error
 }
 
 func (w *Website) GeneratePayment(order *model.Order, req *request.PaymentRequest) (*model.Payment, error) {
+	// ⚠️ 金额闸门：付款单的金额必须为正。数量侧已在 CreateOrder 堵死负数量，
+	// 这里是第二道防线——若订单金额从别的路径变负（历史脏数据、后台改单等），
+	// 余额支付 `user.Balance < payment.Amount` 对负数恒 false，`balance - (-N)` 会给攻击者加钱。
+	// 必须排在「复用已有 payment」之前：负金额订单连旧付款单都不能复用。
+	if order.Amount <= 0 {
+		return nil, fmt.Errorf("%s (amount=%d)", w.Tr("UnableToCreatePaymentOrder"), order.Amount)
+	}
 	payment, err := w.GetPaymentInfoByOrderId(order.OrderId)
 	if err == nil {
 		return payment, nil
@@ -287,14 +293,52 @@ func (w *Website) SetOrderDeliver(req *request.OrderDeliveryRequest) error {
 }
 
 func (w *Website) SetOrderFinished(order *model.Order) error {
-	tx := w.DB.Begin()
-	order.Status = config.OrderStatusCompleted
-	order.FinishedTime = time.Now().Unix()
-	err := tx.Save(order).Error
-	if err != nil {
-		tx.Rollback()
-		return err
+	if order == nil {
+		return errors.New("order is nil")
 	}
+	if order.Status == config.OrderStatusCompleted {
+		// 已完成：幂等返回，绝不再走一遍分钱，否则每次点「完成」都给卖家加一次余额
+		return nil
+	}
+	finishedTime := time.Now().Unix()
+	tx := w.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	// 实物订单必须已发货才能完成：已付款只是钱到了，货还在仓库里。
+	// 客户实测在「已付款、未发货」的实物订单上调用 /api/order/finish 会直接变已完成，
+	// 后台因此把待发货订单显示成已完成，运营漏发货、客服误判，还会提前给卖家结算。
+	allowedStatuses := finishedOrderStatuses
+	if w.orderNeedsDelivery(order) {
+		allowedStatuses = []int{config.OrderStatusDelivering}
+	}
+	// 状态闸门与分钱同一事务：只有真正把订单推到「已完成」的那一次才记账。
+	res := tx.Model(&model.Order{}).
+		Where("`id` = ? AND `status` IN ?", order.Id, allowedStatuses).
+		UpdateColumns(map[string]interface{}{
+			"status":        config.OrderStatusCompleted,
+			"finished_time": finishedTime,
+		})
+	if res.Error != nil {
+		tx.Rollback()
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		// 并发/重复调用：状态已经不是可完成态，核对真实状态后收场
+		tx.Rollback()
+		if cur, err := w.GetOrderInfoByOrderId(order.OrderId); err == nil {
+			if cur.Status == config.OrderStatusCompleted {
+				order.Status = config.OrderStatusCompleted
+				order.FinishedTime = cur.FinishedTime
+				return nil
+			}
+			return errors.New(w.Tr("TheOrderIsNotOperational"))
+		}
+		return errors.New(w.Tr("TheOrderIsNotOperational"))
+	}
+	order.Status = config.OrderStatusCompleted
+	order.FinishedTime = finishedTime
+	var err error
 	// 处理订单完成，并开始分钱
 	// seller
 	if order.SellerAmount > 0 {
@@ -465,128 +509,158 @@ func (w *Website) SetOrderFinished(order *model.Order) error {
 	return nil
 }
 
+// cancelableOrderStatuses 允许被「取消」的订单状态，只有待支付。
+//
+// ⚠️ 已付款(1)/已发货(2)/退款中(8) 都不能靠「取消」收场：取消只回补库存、不退款，
+// 客户实测已付款订单调用 /api/order/cancel 返回成功，订单变已取消、库存 96→97，
+// 钱却还留在网关里。这类订单必须走 SetOrderRefund 原路退款。
+// 已取消(-1)/已完成(3)/已退款(9) 也不在内：否则重复点「取消」会一遍遍回补库存。
+var cancelableOrderStatuses = []int{
+	config.OrderStatusWaiting,
+}
+
+// finishedOrderStatuses 允许被「完成」的订单状态（不需要物流的订单）。
+//
+// 已支付在此列：PluginOrder.NoProcess 与 VIP 订单在支付成功回调里直接完成（order.go 的
+// SuccessPaidOrder）；已发货在此列：用户确认收货与超时自动完成都从 2 出发。
+// ⚠️ 这只是「无物流订单」的白名单：实物订单在 SetOrderFinished 里会被
+// orderNeedsDelivery 收窄成「仅已发货(2)」，否则未发货就能确认收货。
+// ⚠️ 待支付(0)/已取消(-1)/已退款(9) 一律拒绝——完成会给卖家记佣金、加余额，
+// 允许未付款订单完成等于凭空造钱（客户实测：未付款、已取消订单调用 /api/order/finish
+// 均返回成功，状态直接变已完成）。
+var finishedOrderStatuses = []int{
+	config.OrderStatusPaid,
+	config.OrderStatusDelivering,
+}
+
+// refundableOrderStatuses 允许申请退款的订单状态，本质是「钱已经收到了」。
+var refundableOrderStatuses = []int{
+	config.OrderStatusPaid,
+	config.OrderStatusDelivering,
+	config.OrderStatusCompleted,
+}
+
+func intInSlice(v int, list []int) bool {
+	for _, item := range list {
+		if v == item {
+			return true
+		}
+	}
+	return false
+}
+
+// SetOrderCanceled 取消订单并回补库存。
+//
+// 幂等：状态更新用 `status IN (可取消状态)` 条件更新抢闸门，只有把订单真正推到
+// 「已取消」的那一次（RowsAffected > 0）才回补库存，且回补与状态更新在同一个事务里。
+// 原来是无条件 UpdateColumns + 无条件回补，用户对同一单点两次取消，库存就加两遍
+// （实测 98 → 96 → 98 → 100），并发请求更严重。
 func (w *Website) SetOrderCanceled(order *model.Order) error {
+	if order == nil {
+		return errors.New("order is nil")
+	}
+	if order.Status == config.OrderStatusCanceled {
+		// 已经是取消状态：直接成功返回，不再碰库存
+		return nil
+	}
+	finishedTime := time.Now().Unix()
+	tx := w.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	res := tx.Model(&model.Order{}).
+		Where("`id` = ? AND `status` IN ?", order.Id, cancelableOrderStatuses).
+		UpdateColumns(map[string]interface{}{
+			"status":        config.OrderStatusCanceled,
+			"finished_time": finishedTime,
+		})
+	if res.Error != nil {
+		tx.Rollback()
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		// 并发/重复取消：别人已经改过状态，这里只核对结果，绝不重复回补库存
+		tx.Rollback()
+		if cur, err := w.GetOrderInfoByOrderId(order.OrderId); err == nil {
+			if cur.Status == config.OrderStatusCanceled {
+				order.Status = config.OrderStatusCanceled
+				order.FinishedTime = cur.FinishedTime
+				return nil
+			}
+		}
+		// 已付款/已发货/已完成/已退款：取消不是它们该走的出口，让调用方改用退款流程
+		return errors.New(w.Tr("TheOrderIsNotOperational"))
+	}
 	order.Status = config.OrderStatusCanceled
-	order.FinishedTime = time.Now().Unix()
-	w.DB.Model(order).UpdateColumns(map[string]interface{}{
-		"status":        order.Status,
-		"finished_time": order.FinishedTime,
-	})
-	w.DB.Model(&model.Payment{}).Where("order_id = ?", order.OrderId).Update("status", config.OrderStatusCanceled)
-	// 退还库存
+	order.FinishedTime = finishedTime
+	tx.Model(&model.Payment{}).Where("order_id = ?", order.OrderId).Update("status", config.OrderStatusCanceled)
+	// 退还库存（与状态更新同一事务，失败一起回滚）
 	if order.Type != config.OrderTypeVip {
 		var details []*model.OrderDetail
-		w.DB.Where("order_id = ?", order.OrderId).Find(&details)
+		tx.Where("order_id = ?", order.OrderId).Find(&details)
 		for _, detail := range details {
 			if detail.GoodsSkuId > 0 {
-				w.DB.Model(&model.ArchiveSku{}).Where("id = ?", detail.GoodsSkuId).UpdateColumn("stock", gorm.Expr("stock + ?", detail.Quantity))
+				tx.Model(&model.ArchiveSku{}).Where("id = ?", detail.GoodsSkuId).UpdateColumn("stock", gorm.Expr("stock + ?", detail.Quantity))
 			}
 			if detail.GoodsId > 0 {
-				w.DB.Model(&model.Archive{}).Where("id = ?", detail.GoodsId).UpdateColumn("stock", gorm.Expr("stock + ?", detail.Quantity))
+				tx.Model(&model.Archive{}).Where("id = ?", detail.GoodsId).UpdateColumn("stock", gorm.Expr("stock + ?", detail.Quantity))
 			}
 			// 退回属性值扣减的库存
 			var records []*model.OrderOptionStock
-			w.DB.Where("order_detail_id = ?", detail.Id).Find(&records)
+			tx.Where("order_detail_id = ?", detail.Id).Find(&records)
 			for _, record := range records {
-				w.DB.Model(&model.ArchiveOptionValue{}).Where("id = ?", record.OptionValueId).UpdateColumn("stock", gorm.Expr("stock + ?", record.Quantity))
+				tx.Model(&model.ArchiveOptionValue{}).Where("id = ?", record.OptionValueId).UpdateColumn("stock", gorm.Expr("stock + ?", record.Quantity))
 			}
 		}
 	}
 
-	return nil
+	return tx.Commit().Error
 }
 
 func (w *Website) SetOrderRefund(order *model.Order, status int) error {
-	refund, err := w.GetOrderRefundByOrderId(order.OrderId)
+	// 后台可能在没有「用户申请」的情况下直接退款（PayPal 后台发起退款再回站点操作也一样），
+	// 缺申请单就补一张，别在第一步就 record not found。
+	refund, err := w.ensureOrderRefund(order, order.Amount)
 	if err != nil {
 		return err
 	}
+	// refundSettled 表示某个渠道分支已经自己完成了订单/流水的收尾，跳过公共收尾，
+	// 否则会给同一笔退款再记一次账。
+	refundSettled := false
 	// todo 金钱原路退回
 	if status == 1 {
 		payment, err := w.GetPaymentInfoByPaymentId(order.PaymentId)
 		if err != nil {
 			return err
 		}
-		if payment.PayWay == config.PayWayWechat {
-			// 公众号支付
-			account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
-			if err != nil {
-				return err
-			}
-			client := wechat.NewClient(account.PayConfig.AppId, account.PayConfig.Account, account.PayConfig.ApiKey, !account.PayConfig.Sandbox)
-			err = client.AddCertPemFilePath(w.DataPath+"cert/"+account.PayConfig.CertPath, w.DataPath+"cert/"+account.PayConfig.PublicCertPath)
-			if err != nil {
-				log.Println("微信证书错误：", err.Error())
-				return err
-			}
-
-			bm := make(gopay.BodyMap)
-			bm.Set("nonce_str", config.GenerateRandString(32)).
-				Set("out_trade_no", order.PaymentId).
-				Set("out_refund_no", refund.RefundId).
-				Set("total_fee", order.Amount).
-				Set("refund_fee", refund.Amount).
-				Set("sign_type", wechat.SignType_HMAC_SHA256)
-
-			wxRsp, _, err := client.Refund(context.Background(), bm)
-			if err != nil {
-				refund.Remark = err.Error()
-				w.DB.Model(refund).UpdateColumn("remark", refund.Remark)
-				return err
-			}
-
-			refund.Remark = wxRsp.ErrCodeDes
-			w.DB.Model(refund).UpdateColumn("remark", refund.Remark)
-
-			if wxRsp.ReturnCode == gopay.FAIL {
-				return errors.New(wxRsp.ReturnMsg)
-			}
-			if wxRsp.ResultCode == gopay.FAIL {
+		if payment.PayWay == config.PayWayWechat || payment.PayWay == config.PayWayWeapp {
+			// 公众号/小程序支付共用一条退款链路：微信 V2 退款是**异步**的，
+			// 接口返回 SUCCESS 只代表受理，真实结果要回查 refund_status / 退款通知。
+			// RefundWechatPayment 内部用 out_refund_no=refund.RefundId 保证重试幂等，
+			// total_fee 用实付金额（不是 order.Amount，订单改价后两者不等会报金额不符）。
+			state, rErr := w.RefundWechatPayment(context.Background(), payment, refund)
+			if rErr != nil {
 				refund.Status = config.OrderRefundStatusFailed
-				w.DB.Model(refund).UpdateColumn("status", refund.Status)
-				return errors.New(wxRsp.ErrCodeDes)
+				refund.Remark = truncateRunes(rErr.Error(), 255)
+				w.DB.Model(refund).UpdateColumns(map[string]interface{}{
+					"status": refund.Status,
+					"remark": refund.Remark,
+				})
+				return rErr
 			}
-		} else if payment.PayWay == config.PayWayWeapp {
-			// 小程序支付
-			account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
-			if err != nil {
-				return err
+			refundSettled = true
+			if aErr := w.ApplyRefundGatewayState(refund, order, state, refund.TerraceId, wxRefundRemark(state)); aErr != nil {
+				return aErr
 			}
-			client := wechat.NewClient(account.PayConfig.AppId, account.PayConfig.Account, account.PayConfig.ApiKey, !account.PayConfig.Sandbox)
-			err = client.AddCertPemFilePath(w.DataPath+"cert/"+account.PayConfig.CertPath, w.DataPath+"cert/"+account.PayConfig.PublicCertPath)
-			if err != nil {
-				log.Println("微信证书错误：", err.Error())
-				return err
-			}
-
-			bm := make(gopay.BodyMap)
-			bm.Set("nonce_str", config.GenerateRandString(32)).
-				Set("out_trade_no", order.PaymentId).
-				Set("out_refund_no", refund.RefundId).
-				Set("total_fee", order.Amount).
-				Set("refund_fee", refund.Amount).
-				Set("sign_type", wechat.SignType_HMAC_SHA256)
-
-			wxRsp, _, err := client.Refund(context.Background(), bm)
-			if err != nil {
-				refund.Remark = err.Error()
-				w.DB.Model(refund).UpdateColumn("remark", refund.Remark)
-				return err
-			}
-
-			refund.Remark = wxRsp.ErrCodeDes
-			w.DB.Model(refund).UpdateColumn("remark", refund.Remark)
-
-			if wxRsp.ReturnCode == gopay.FAIL {
-				return errors.New(wxRsp.ReturnMsg)
-			}
-			if wxRsp.ResultCode == gopay.FAIL {
-				refund.Status = config.OrderRefundStatusFailed
-				w.DB.Model(refund).UpdateColumn("status", refund.Status)
-				return errors.New(wxRsp.ErrCodeDes)
+			if state != refundSettleDone {
+				// 受理成功但还在退：保持待处理，等通知或 SyncPendingRefunds 收尾
+				return nil
 			}
 		} else if payment.PayWay == config.PayWayAlipay {
 			// 支付宝支付
+			if refund.Amount <= 0 || refund.Amount > payment.Amount {
+				return fmt.Errorf("退款金额 %d 非法（支付金额 %d）", refund.Amount, payment.Amount)
+			}
 			account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
 			if err != nil {
 				return err
@@ -623,7 +697,10 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 			}
 			//请求参数
 			bm := make(gopay.BodyMap)
-			bm.Set("out_trade_no", order.PaymentId)
+			// out_trade_no 必须是下单时传给支付宝的那个号（= payment.PaymentId），
+			// 不是 order.PaymentId：两者在「支付单已建、订单还没回写」的窗口里不相等。
+			bm.Set("out_trade_no", payment.PaymentId)
+			// out_request_no 是支付宝的退款幂等键：同一次重试必须传同一个值，否则会重复出金
 			bm.Set("out_request_no", refund.RefundId)
 			bm.Set("refund_amount", fmt.Sprintf("%.2f", float64(refund.Amount)/100))
 
@@ -646,69 +723,95 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 				w.DB.Model(refund).UpdateColumn("status", refund.Status)
 				return errors.New(refund.Remark)
 			}
+			// fund_change=N 表示本次没有资金变动（同一个 out_request_no 重试时的正常返回），
+			// 对本地来说就是「已退款」，不用当成失败。
 		} else if payment.PayWay == config.PayWayPaypal {
-			// paypal refund
-			account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
-			if err != nil {
+			// PayPal 退款：/v2/payments/captures/{capture_id}/refund 只认 capture id，
+			// 而 payment.terrace_id 存的是下单时的 order id（createPaypalPayment 写入）。
+			// 直接把它当 capture id 传过去，PayPal 会报 404 "The specified resource does not exist"。
+			// capture id 的解析、幂等键、PENDING 状态都收在 RefundPaypalPayment 里。
+			completed, pErr := w.RefundPaypalPayment(context.Background(), payment, refund)
+			if pErr != nil {
+				refund.Status = config.OrderRefundStatusFailed
+				w.DB.Model(refund).UpdateColumn("status", refund.Status)
+				refund.Remark = truncateRunes(pErr.Error(), 255)
+				w.DB.Model(refund).UpdateColumn("remark", refund.Remark)
+				return pErr
+			}
+			if !completed {
+				// PayPal 已受理但仍在 PENDING：保持「待处理」，等 PAYMENT.CAPTURE.REFUNDED
+				// 通知或下次重试来收尾。这里绝不能往下走标成已退款。
+				return nil
+			}
+			// 已完成：走统一入口（内部有条件更新闸门，通知同时到达也只记一笔流水）
+			refund.Status = config.OrderRefundStatusDone
+			if err = w.SuccessRefundOrder(refund, order); err != nil {
 				return err
 			}
-			client, err := paypal.NewClient(account.PayConfig.AppId, account.PayConfig.AppSecret, !account.PayConfig.Sandbox)
-			if err != nil {
-				return err
-			}
-			bm := make(gopay.BodyMap)
-			if payment.Amount > refund.Amount {
-				// refund amount is less than capture amount
-				bm.Set("note_to_payer", refund.Remark).
-					SetBodyMap("amount", func(bm gopay.BodyMap) {
-						bm.Set("currency_code", "USD"). // the same as capture
-										Set("value", fmt.Sprintf("%.2f", float32(refund.Amount)/100))
-					})
-			}
-			ppRsp, err := client.PaymentCaptureRefund(context.Background(), payment.TerraceId, bm)
-			if err != nil {
-				return err
-			}
-			if ppRsp.Code != http.StatusOK && ppRsp.Code != http.StatusCreated {
-				return errors.New(ppRsp.ErrorResponse.Message)
-			}
-
-			// refund success
+			refundSettled = true
 		} else if payment.PayWay == config.PayWayStripe {
-			// stripe refund
-			// todo stripe
+			// Stripe 退款：部分退款必须显式带 amount、必须用幂等键、必须落退款单 id。
+			// 原来 Amount 是注释掉的（永远全额退）、没有幂等键（超时重试退第二笔）、
+			// 也没有回写 refund.TerraceId（事后无法对账）。
+			state, sErr := w.RefundStripePayment(context.Background(), payment, refund)
+			if sErr != nil {
+				refund.Status = config.OrderRefundStatusFailed
+				refund.Remark = truncateRunes(sErr.Error(), 255)
+				w.DB.Model(refund).UpdateColumns(map[string]interface{}{
+					"status": refund.Status,
+					"remark": refund.Remark,
+				})
+				return sErr
+			}
+			refundSettled = true
+			if aErr := w.ApplyRefundGatewayState(refund, order, state, refund.TerraceId, stripeRefundRemark(state)); aErr != nil {
+				return aErr
+			}
+			if state != refundSettleDone {
+				return nil
+			}
+		} else if payment.PayWay == config.PayWayXunhupay {
 			account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
 			if err != nil {
 				return err
 			}
-			client := stripe.NewClient(account.PayConfig.AppId)
-
-			params := &stripe.RefundCreateParams{
-				//Amount: stripe.Int64(payment.Amount),
-				//Currency: stripe.String(string(stripe.CurrencyUSD)),
-				PaymentIntent: stripe.String(payment.TerraceId),
+			if refund.Amount <= 0 || refund.Amount > payment.Amount {
+				return fmt.Errorf("退款金额 %d 非法（支付金额 %d）", refund.Amount, payment.Amount)
 			}
-			r, err := client.V1Refunds.Create(context.Background(), params)
-			if err != nil {
-				return fmt.Errorf("stripe create refund payment error: %v", err)
+			state, xErr := w.RefundXunhupayPayment(payment, account, refund.Amount, refund.Remark)
+			if xErr != nil {
+				refund.Status = config.OrderRefundStatusFailed
+				refund.Remark = truncateRunes(xErr.Error(), 255)
+				w.DB.Model(refund).UpdateColumns(map[string]interface{}{
+					"status": refund.Status,
+					"remark": refund.Remark,
+				})
+				return xErr
 			}
-			if r.Status == "failed" {
-				return errors.New("stripe create refund payment error")
+			refundSettled = true
+			if aErr := w.ApplyRefundGatewayState(refund, order, state, refund.TerraceId, ""); aErr != nil {
+				return aErr
 			}
-			// 更新id
-			// refund success
+			if state != refundSettleDone {
+				// RD 退款中：保持待处理，等虎皮椒的退款通知
+				return nil
+			}
 		} else if payment.PayWay == config.PayWayNowpayment {
-			// nowpayment refund
-			// todo nowpayment
+			// NOWPayments 没有退款 API（退款只能走 payout 手动出金），这里**不能**静默通过：
+			// 空分支会一路把 refund 标成「已退款」、订单算成退款完成，实际一分钱没退。
+			return errors.New("nowpayment does not support automatic refund, please refund manually in NOWPayments dashboard")
 		} else {
 			// 线下支付，的退款流程
 			// 不用处理
 		}
 
-		refund.Status = config.OrderRefundStatusDone
-		err = w.SuccessRefundOrder(refund, order)
-		if err != nil {
-			return err
+		if !refundSettled {
+			// PayPal 分支已完成自己的收尾（见上），其余渠道走公共收尾
+			refund.Status = config.OrderRefundStatusDone
+			err = w.SuccessRefundOrder(refund, order)
+			if err != nil {
+				return err
+			}
 		}
 	} else {
 		// 不同意
@@ -732,6 +835,15 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 }
 
 func (w *Website) ApplyOrderRefund(order *model.Order) error {
+	if order == nil {
+		return errors.New("order is nil")
+	}
+	// ⚠️ 只有「钱已经收到」的订单能申请退款。待支付/已取消/已退款一律拒绝：
+	// 客户实测未付款、已取消、已退款订单调用 /api/order/refund 都能建出退款申请，
+	// 后续一旦有人点「同意」，就会给没付过钱的订单退出一笔真金白银。
+	if !intInSlice(order.Status, refundableOrderStatuses) {
+		return errors.New(w.Tr("TheOrderIsNotOperational"))
+	}
 	// 用户申请退款
 	refund, err := w.GetOrderRefundByOrderId(order.OrderId)
 	if err == nil {
@@ -826,18 +938,46 @@ func (w *Website) SuccessPaidOrder(order *model.Order, payment *model.Payment) e
 		//支付成功
 		return nil
 	}
+	if order.Status == config.OrderStatusRefunded || order.RefundStatus == config.OrderStatusRefunded {
+		// 已退款的订单不允许被任何渠道的迟到通知改回「已付款」
+		return nil
+	}
 	originStatus := order.Status
 
 	order.PaidTime = time.Now().Unix()
 	order.Status = config.OrderStatusPaid
 
-	db := w.DB.Begin()
-	if err := w.DB.Model(order).Where("status  = ?", originStatus).Select("paid_time", "status").Updates(order).Error; err != nil {
-		db.Rollback()
+	// 状态迁移赢家才产生事件等副作用（R70）：
+	// 用条件 UPDATE 的 RowsAffected 判断并发/重复回调里的唯一赢家。
+	tx := w.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	res := tx.Model(&model.Order{}).
+		Where("id = ? AND status = ?", order.Id, originStatus).
+		Select("paid_time", "status").Updates(order)
+	if res.Error != nil {
+		tx.Rollback()
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		// 已有赢家完成迁移：直接返回，不再执行邮件/推送/计费等副作用。
+		tx.Rollback()
+		return nil
+	}
+	paidAddress := order.OrderAddress
+	if paidAddress == nil && order.AddressId > 0 {
+		if loaded, loadErr := w.GetOrderAddressById(order.AddressId); loadErr == nil {
+			paidAddress = loaded
+		}
+	}
+	if _, err := w.emitNotificationEvent(tx, NotifyEventOrderPaid, order.OrderId, order.PaidTime, orderNotificationPayload(order, paidAddress, "paid"), NotifyEventStatusReady); err != nil {
+		tx.Rollback()
 		return err
 	}
-
-	db.Commit()
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
 	// 更新用户字段
 	w.DB.Model(model.User{}).Where("id = ?", order.UserId).UpdateColumn("order_count", gorm.Expr("`order_count` + 1"))
 	// 支付成功
@@ -858,7 +998,9 @@ func (w *Website) SuccessPaidOrder(order *model.Order, payment *model.Payment) e
 	if err != nil {
 		user = &model.User{Id: uint(order.UserId)}
 		orderAddress, err := w.GetOrderAddressById(order.AddressId)
-		if err == nil {
+		// GetOrderAddressById(0) 返回的是 (nil, nil)：访客订单/用户被删时 AddressId 就是 0，
+		// 只判 err 会直接空指针 panic —— 已付款的回调反而回 500，PayPal 于是无限重投。
+		if err == nil && orderAddress != nil {
 			user.Email = orderAddress.Email
 			user.Phone = orderAddress.Phone
 			user.UserName = orderAddress.Name
@@ -895,7 +1037,6 @@ func (w *Website) SuccessPaidOrder(order *model.Order, payment *model.Payment) e
 			w.DB.Model(communicationOrder).UpdateColumn("status", config.CommunicationStatusFinished)
 		}
 	}
-	w.SendPayOrderEmail(user, order)
 
 	if w.PluginOrder.NoProcess || order.Type == config.OrderTypeVip {
 		// 如果订单自动完成，则在这里处理
@@ -905,7 +1046,36 @@ func (w *Website) SuccessPaidOrder(order *model.Order, payment *model.Payment) e
 	return nil
 }
 
+// markRefundRecordSettled 只收尾退款单（状态/时间），不写财务流水。
+// 并发里落败的那一次用它，保证退款单最终也是「已完成」，但不会重复记账。
+func (w *Website) markRefundRecordSettled(refund *model.OrderRefund) {
+	if refund == nil || refund.Id == 0 {
+		return
+	}
+	updates := map[string]interface{}{"status": config.OrderRefundStatusDone}
+	if refund.RefundTime == 0 {
+		refund.RefundTime = time.Now().Unix()
+		updates["refund_time"] = refund.RefundTime
+	}
+	refund.Status = config.OrderRefundStatusDone
+	w.DB.Model(&model.OrderRefund{}).Where("id = ?", refund.Id).Updates(updates)
+}
+
+// SuccessRefundOrder 把订单推进到「已退款」并写退款流水。
+//
+// 幂等：后台退款（SetOrderRefund）与 PAYMENT.CAPTURE.REFUNDED 通知会并发调用这里，
+// 原来用 `if order.Status == 已退款 { return }` 做检查，两次调用都能读到「未退款」而都往下写，
+// 结果同一笔退款记两条 finance。这里改成条件 UPDATE 抢闸门：只有把 status 真正推到
+// 「已退款」的那一次（RowsAffected > 0）才写流水，另一次只把退款单收尾。
 func (w *Website) SuccessRefundOrder(refund *model.OrderRefund, order *model.Order) error {
+	if refund == nil {
+		return errors.New("refund is nil")
+	}
+	if refund.Status == config.OrderRefundStatusFailed {
+		// 网关明确拒绝/关闭了退款：绝不能因为「调用方忘了判断」就把订单算成已退款。
+		// 虎皮椒 UD、Stripe failed 都曾经直接落到这里，一笔没退成功的单也记了退款流水。
+		return fmt.Errorf("refund %s status failed, refuse to mark order refunded", refund.RefundId)
+	}
 	var err error
 	if order == nil {
 		order, err = w.GetOrderInfoByOrderId(refund.OrderId)
@@ -913,15 +1083,26 @@ func (w *Website) SuccessRefundOrder(refund *model.OrderRefund, order *model.Ord
 			return err
 		}
 	}
-	if order.Status == config.OrderStatusRefunded {
-		// already refunded
-		return nil
-	}
 
 	tx := w.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
 	//退款成功，则标记订单完成
+	res := tx.Model(&model.Order{}).
+		Where("`id` = ? AND `status` <> ?", order.Id, config.OrderStatusRefunded).
+		UpdateColumn("status", config.OrderStatusRefunded)
+	if res.Error != nil {
+		tx.Rollback()
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		// 已经有人完成了这次迁移：不再记流水、不再退库存，只把退款单状态收尾（幂等）
+		tx.Rollback()
+		w.markRefundRecordSettled(refund)
+		return nil
+	}
 	order.Status = config.OrderStatusRefunded
-	tx.Model(order).UpdateColumn("status", order.Status)
 	//refund
 	if refund.Status == config.OrderRefundStatusWaiting {
 		refund.Status = config.OrderRefundStatusDone
@@ -929,7 +1110,7 @@ func (w *Website) SuccessRefundOrder(refund *model.OrderRefund, order *model.Ord
 	if refund.RefundTime == 0 {
 		refund.RefundTime = time.Now().Unix()
 	}
-	w.DB.Updates(refund)
+	tx.Updates(refund)
 	// todo 如果订单已成功的退款，需要额外处理佣金问题
 	// 退款后，如果有赠送佣金，要扣除
 	var userCommission model.Commission
@@ -1009,6 +1190,148 @@ func (w *Website) SuccessRefundOrder(refund *model.OrderRefund, order *model.Ord
 	return err
 }
 
+// checkCreateOrderAddress 校验实物订单的收货地址。
+//
+// 只有需要发货的订单才要求地址：系统关闭了交易流程（NoProcess）、VIP 订单、以及对账
+// 明细里全是虚拟/服务/订阅商品时不校验。其余订单一律要求「能解析出一个属于下单人的地址」
+// ——下单会立刻扣库存，地址不合法等于先锁货再永远发不出去。
+//
+// ⚠️ 结账页会同时提交 address_id 和保存接口返回的完整 address 对象。判断顺序必须
+// 「已有地址优先」：只按内联对象是否填全来判，会把这些本来有效的请求判成
+// 「收件地址不正确」（v3.8.4 实测：同一地址只传 address_id 能下单，两个都传就失败）。
+func (w *Website) checkCreateOrderAddress(userId uint, req *request.OrderRequest) error {
+	if !w.orderNeedsShipping(req) {
+		return nil
+	}
+	if addressId := createOrderAddressId(req); addressId > 0 {
+		// 地址必须存在且属于下单人：否则可以拿别人的地址下单，还能读到对方姓名电话
+		addr, err := w.GetOrderAddressById(addressId)
+		if err != nil || addr == nil || addr.UserId != userId {
+			return errors.New(w.Tr("AddressDoesNotExist"))
+		}
+		return nil
+	}
+	// 没有可复用的已有地址：内联地址必须填全，否则会存出一条无法投递的半成品地址
+	if !addressIsDeliverable(req.Address) {
+		return errors.New(w.Tr("IncorrectRecipientAddress"))
+	}
+
+	return nil
+}
+
+// createOrderAddressId 取出结账请求里「已有地址」的 id。
+//
+// 三种传法都要支持：只传 address_id、只传带 id 的地址对象、两个都传。
+// 两者同时出现时以内联对象的 id 为准，因为落库走的是 SaveOrderAddress（按 id 更新）。
+func createOrderAddressId(req *request.OrderRequest) uint {
+	if req.Address != nil && req.Address.Id > 0 {
+		return req.Address.Id
+	}
+	return req.AddressId
+}
+
+// addressIsDeliverable 判断内联地址是否填全：至少能联系到人、能投递。
+func addressIsDeliverable(addr *request.OrderAddressRequest) bool {
+	if addr == nil {
+		return false
+	}
+	if strings.TrimSpace(addr.Name) == "" && strings.TrimSpace(addr.LastName) == "" {
+		return false
+	}
+	if strings.TrimSpace(addr.Phone) == "" || strings.TrimSpace(addr.AddressInfo) == "" {
+		return false
+	}
+	return true
+}
+
+// orderNeedsShipping 判断这笔订单是否需要收货地址。
+//
+// 虚拟(4)/服务(5)/订阅(6) 商品不需要物流；只要订单里有一件实物就要地址。
+// 侧表没有行的商品按普通实物处理（3.8.0 之后商品属性都在 archive_products）。
+func (w *Website) orderNeedsShipping(req *request.OrderRequest) bool {
+	if w.PluginOrder == nil || w.PluginOrder.NoProcess {
+		return false
+	}
+	if req.Type == config.OrderTypeVip || req.Type == config.OrderTypeCommunication {
+		return false
+	}
+	goodsIds := make([]int64, 0, len(req.Details))
+	for _, detail := range req.Details {
+		if detail.GoodsId > 0 {
+			goodsIds = append(goodsIds, detail.GoodsId)
+		}
+	}
+
+	return w.goodsNeedShipping(goodsIds)
+}
+
+// orderNeedsDelivery 判断已落库的订单是否需要物流（发货）。
+//
+// 与 orderNeedsShipping 的区别是数据来源：这里读 order_details，用于状态流转时
+// 判断「能不能直接完成」——实物订单只有已发货(2)才能确认收货。
+func (w *Website) orderNeedsDelivery(order *model.Order) bool {
+	if order == nil {
+		return false
+	}
+	if w.PluginOrder == nil || w.PluginOrder.NoProcess {
+		return false
+	}
+	if order.Type == config.OrderTypeVip || order.Type == config.OrderTypeCommunication {
+		return false
+	}
+	var details []*model.OrderDetail
+	w.DB.Where("`order_id` = ?", order.OrderId).Find(&details)
+	goodsIds := make([]int64, 0, len(details))
+	seen := make(map[int64]bool, len(details))
+	for _, detail := range details {
+		if detail.GoodsId > 0 && !seen[detail.GoodsId] {
+			seen[detail.GoodsId] = true
+			goodsIds = append(goodsIds, detail.GoodsId)
+		}
+	}
+
+	return w.goodsNeedShipping(goodsIds)
+}
+
+// preheatOrderArchiveUrlToken 在开事务前补齐订单商品的 url_token。
+//
+// GetUrl(PatternArchive, ...) 发现商品 url_token 为空时会写一次 archives，而那次写走的
+// 是非事务连接。如果它发生在下单事务中途（订单通知要用商品链接），MariaDB 会把事务后续
+// 的库存更新判成「Record has changed since last read in table 'archives'」(errno 1020)，
+// 整单失败——刚导入、还没生成 url_token 的商品，下单时必然踩到。
+func (w *Website) preheatOrderArchiveUrlToken(req *request.OrderRequest) {
+	for _, detail := range req.Details {
+		if detail.GoodsId <= 0 {
+			continue
+		}
+		var archive model.Archive
+		if err := w.DB.Where("`id` = ?", detail.GoodsId).Take(&archive).Error; err != nil {
+			continue
+		}
+		if archive.UrlToken == "" {
+			_ = w.UpdateArchiveUrlToken(&archive)
+		}
+	}
+}
+
+// goodsNeedShipping 判断一组商品里是否含需要物流的实物。
+// 虚拟(4)/服务(5)/订阅(6) 不需要；侧表没有行的商品按实物处理（保守：宁可要求发货）。
+func (w *Website) goodsNeedShipping(goodsIds []int64) bool {
+	if len(goodsIds) == 0 {
+		return false
+	}
+	var noShipping int64
+	w.DB.Model(&model.ArchiveProduct{}).
+		Where("`archive_id` IN ? AND `product_type` IN ?", goodsIds, []int{
+			config.ProductTypeVirtual,
+			config.ProductTypeService,
+			config.ProductTypeSubscription,
+		}).
+		Count(&noShipping)
+
+	return noShipping < int64(len(goodsIds))
+}
+
 func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Order, error) {
 	user, err := w.GetUserInfoById(userId)
 	if err != nil && w.PluginOrder.NoNeedLogin == false {
@@ -1019,8 +1342,24 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		user = &model.User{}
 		if req.Address != nil {
 			user.UserName = req.Address.Name + " " + req.Address.LastName
-			user.Email = req.Address.Email
-			user.Phone = req.Address.Phone
+			user.Email = normalizeEmail(req.Address.Email)
+			// 匿名下单的号码必须先归一化再用于「按手机号复用用户」与建号：
+			// 直接写回原始串会落出 phone_country='' 的重复账号（该账号既不能短信
+			// 登录，也进不了换绑流程），带分隔符/全角数字的输入还会查重查不到。
+			//
+			// 归一化失败（号码非法或为空）不因此拒绝整单：但绝不把原始号码写进
+			// user.Phone（会污染用户数据）；跳过错号复用，建号时 Phone 留空，
+			// 让用户后续自己走绑定流程。区号仍取默认值，避免出现 phone_country='' 的行。
+			if p, perr := sms.NormalizePhone("", req.Address.Phone); perr == nil {
+				user.Phone = p.Local
+				user.PhoneCountry = p.Country
+			} else {
+				user.Phone = ""
+				user.PhoneCountry = normalizePhoneCountry("")
+				if req.Address.Phone != "" {
+					log.Println("匿名下单手机号归一化失败，跳过按号码复用用户：", perr)
+				}
+			}
 			if user.Email != "" {
 				existUser, err := w.GetUserInfoByEmail(user.Email)
 				if err == nil {
@@ -1028,7 +1367,7 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 				}
 			}
 			if user.Phone != "" {
-				existUser, err := w.GetUserInfoByPhone(user.Phone)
+				existUser, err := w.GetUserInfoByPhoneCountry(user.PhoneCountry, user.Phone)
 				if err == nil {
 					user = existUser
 				}
@@ -1044,7 +1383,9 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 					user.Subscribed = true
 				}
 
-				w.DB.Save(user)
+				if e := w.DB.Save(user).Error; e != nil {
+					return nil, e
+				}
 			}
 			userId = user.Id
 		}
@@ -1053,7 +1394,23 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		return nil, errors.New(w.Tr("PleaseSelectTheProduct"))
 	}
 	if len(req.Details) == 0 {
-		req.Details = []request.OrderDetail{{GoodsId: req.GoodsId, GoodsSkuId: req.GoodsSkuId, Quantity: req.Quantity}}
+		req.Details = []request.OrderDetail{{
+			GoodsId:          req.GoodsId,
+			GoodsSkuId:       req.GoodsSkuId,
+			Quantity:         req.Quantity,
+			QuantityProvided: req.QuantityProvided,
+		}}
+	}
+	// ⚠️ 数量必须在算金额、写明细、扣库存之前统一校验：负数会让 detailAmount 变负
+	// （生成 -US$0.50 的订单），`stock - (-1)` 反而给库存 +1，sold_count 还会溢出报错。
+	for i := range req.Details {
+		if req.Details[i].Quantity == 0 && !req.Details[i].QuantityProvided {
+			req.Details[i].Quantity = 1
+		}
+		if req.Details[i].Quantity <= 0 {
+			return nil, fmt.Errorf("%s (goods_id=%d, quantity=%d)",
+				w.Tr("InvalidQuantity"), req.Details[i].GoodsId, req.Details[i].Quantity)
+		}
 	}
 	var couponCode *model.CouponCode
 	// 使用优惠券
@@ -1096,9 +1453,19 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 			return nil, errors.New(w.Tr("CouponCannotBeUsed"))
 		}
 	}
+	// ⚠️ 实物订单必须有可用的收货地址，且在扣库存/建单之前校验：
+	// 客户实测省略地址（address_id 缺省或传 0）、传不存在的 ID、传其他买家的地址，
+	// 接口都会建单并扣库存，订单 address_id 落成 0；内联只填姓名也能建单，
+	// 保存出一条没有电话和详细地址的「半成品地址」，发货时才发现无法投递。
+	if err = w.checkCreateOrderAddress(userId, req); err != nil {
+		return nil, err
+	}
+	w.preheatOrderArchiveUrlToken(req)
 	tx := w.DB.Begin()
 	var orderAddress *model.OrderAddress
-	if w.PluginOrder.NoProcess == false && req.Address != nil {
+	// ⚠️ 内联地址不完整时绝不能保存：SaveOrderAddress 是全字段覆盖写，
+	// 结账页把「id + 部分字段」回传过来时，会把用户已保存的地址清成空姓名/空电话。
+	if w.PluginOrder.NoProcess == false && addressIsDeliverable(req.Address) {
 		//保存订单地址
 		orderAddress, err = w.SaveOrderAddress(tx, userId, req.Address)
 		if err != nil {
@@ -1170,8 +1537,13 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 	}
 	if orderAddress != nil {
 		order.AddressId = orderAddress.Id
-	} else if req.AddressId > 0 {
-		orderAddress, _ = w.GetOrderAddressById(req.AddressId)
+	} else if addressId := createOrderAddressId(req); addressId > 0 {
+		// 只传 address_id、或内联对象不完整（跳过保存）时，订单仍要挂上已有地址，
+		// 否则会落成 address_id=0 的「无地址订单」，发货时无从下手。
+		if loaded, loadErr := w.GetOrderAddressById(addressId); loadErr == nil && loaded != nil {
+			orderAddress = loaded
+			order.AddressId = loaded.Id
+		}
 	}
 	err = tx.Save(&order).Error
 	if err != nil {
@@ -1191,9 +1563,6 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		if err != nil {
 			tx.Rollback()
 			return nil, err
-		}
-		if req.Details[0].Quantity == 0 {
-			req.Details[0].Quantity = 1
 		}
 		//计算价格
 		price := group.Price
@@ -1242,9 +1611,9 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 			tx.Rollback()
 			return nil, err
 		}
-		w.DB.Model(&model.CommunicationOrder{}).Where("id = ?", communicationOrder.Id).UpdateColumn("order_id", order.OrderId)
-		if req.Details[0].Quantity == 0 {
-			req.Details[0].Quantity = 1
+		if uErr := tx.Model(&model.CommunicationOrder{}).Where("id = ?", communicationOrder.Id).UpdateColumn("order_id", order.OrderId).Error; uErr != nil {
+			tx.Rollback()
+			return nil, uErr
 		}
 		//计算价格
 		price := communicationOrder.QuotePrice
@@ -1295,9 +1664,6 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 				tx.Rollback()
 				return nil, err
 			}
-			if v.Quantity == 0 {
-				v.Quantity = 1
-			}
 			if archive.MinQuantity > 0 && v.Quantity < archive.MinQuantity {
 				v.Quantity = archive.MinQuantity
 			}
@@ -1331,17 +1697,25 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 					if err == nil {
 						price = activitySku.Price
 						// 减库存
-						tx.Model(&model.ActivitySku{}).Where("id = ?", activitySku.Id).UpdateColumns(map[string]interface{}{
+						if uErr := tx.Model(&model.ActivitySku{}).Where("id = ?", activitySku.Id).UpdateColumns(map[string]interface{}{
 							"stock":      gorm.Expr("stock - ?", v.Quantity),
 							"sold_count": gorm.Expr("sold_count + ?", v.Quantity),
-						})
+						}).Error; uErr != nil {
+							tx.Rollback()
+							return nil, uErr
+						}
 					}
 				}
 				// 减库存
-				tx.Model(&model.ArchiveSku{}).Where("id = ?", archiveSku.Id).UpdateColumns(map[string]interface{}{
+				// ⚠️ 必须检查 Error：sold_count 是无符号列，数量非法时这条 UPDATE 会在
+				// 数据库层报 Out of range，以前忽略返回值就变成「库报错、接口成功」。
+				if uErr := tx.Model(&model.ArchiveSku{}).Where("id = ?", archiveSku.Id).UpdateColumns(map[string]interface{}{
 					"stock":      gorm.Expr("stock - ?", v.Quantity),
 					"sold_count": gorm.Expr("sold_count + ?", v.Quantity),
-				})
+				}).Error; uErr != nil {
+					tx.Rollback()
+					return nil, uErr
+				}
 				skuValues = archiveSku.Values
 			} else {
 				// 如果数量超了,则不允许下单
@@ -1441,12 +1815,19 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 						originOptionPrice += optionValue.Price
 					}
 					// 减库存
-					tx.Model(&model.ArchiveOptionValue{}).Where("id = ?", optionValue.Id).UpdateColumns(map[string]interface{}{
+					if uErr := tx.Model(&model.ArchiveOptionValue{}).Where("id = ?", optionValue.Id).UpdateColumns(map[string]interface{}{
 						"stock":      gorm.Expr("stock - ?", v.Quantity),
 						"sold_count": gorm.Expr("sold_count + ?", v.Quantity),
-					})
-					// 3. 记录扣减记录（用于退款恢复）
-					w.CreateOrderOptionStockRecords(order.OrderId, orderDetail.Id, optionValue.Id, v.Quantity)
+					}).Error; uErr != nil {
+						tx.Rollback()
+						return nil, uErr
+					}
+					// 3. 记录扣减记录（用于退款恢复）—— 必须跟着同一个事务走，
+					// 否则订单回滚了扣减记录还在，退款时会多回补一次库存
+					if rErr := w.createOrderOptionStockRecords(tx, order.OrderId, orderDetail.Id, optionValue.Id, v.Quantity); rErr != nil {
+						tx.Rollback()
+						return nil, rErr
+					}
 				}
 				// 更新价格
 				price += optionPrice
@@ -1454,23 +1835,32 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 			}
 			// 减库存：stock 留在主表、sold_count 已迁到 archive_products，
 			// 一条 UPDATE 跨不了两张表，所以拆成两步（同一事务）。
-			tx.Model(&model.Archive{}).Where("id = ?", archive.Id).
-				UpdateColumn("stock", gorm.Expr("stock - ?", v.Quantity))
+			if uErr := tx.Model(&model.Archive{}).Where("id = ?", archive.Id).
+				UpdateColumn("stock", gorm.Expr("stock - ?", v.Quantity)).Error; uErr != nil {
+				tx.Rollback()
+				return nil, uErr
+			}
 			// 用 upsert：侧表没有行时（商品没配任何属性）也要能记销量，
 			// 直接 Update 会命中 0 行，销量永远不动。
-			tx.Clauses(clause.OnConflict{
+			if uErr := tx.Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "archive_id"}},
 				DoUpdates: clause.Assignments(map[string]interface{}{"sold_count": gorm.Expr("sold_count + ?", v.Quantity)}),
 			}).Create(&model.ArchiveProduct{
 				ArchiveId:   archive.Id,
 				SoldCount:   int64(v.Quantity),
 				ProductType: config.ProductTypeNormal,
-			})
+			}).Error; uErr != nil {
+				tx.Rollback()
+				return nil, uErr
+			}
 			if activity != nil {
-				tx.Model(&model.Activity{}).Where("id = ?", activity.Id).UpdateColumns(map[string]interface{}{
+				if uErr := tx.Model(&model.Activity{}).Where("id = ?", activity.Id).UpdateColumns(map[string]interface{}{
 					"stock":      gorm.Expr("stock - ?", v.Quantity),
 					"sold_count": gorm.Expr("sold_count + ?", v.Quantity),
-				})
+				}).Error; uErr != nil {
+					tx.Rollback()
+					return nil, uErr
+				}
 			}
 			// 优惠
 			// 批发价格设置
@@ -1526,8 +1916,9 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 	order.UserDiscount = userDiscountAmount
 	if couponCode != nil {
 		if couponCode.Status != 0 {
+			// 返回 (nil, nil) 会让上层把 null 当成功订单返回（code=0 但没订单）
 			tx.Rollback()
-			return nil, err
+			return nil, errors.New(w.Tr("CouponCodeCanNotUse"))
 		}
 		couponMoney := couponCode.GetMoney(order.Amount)
 		order.CouponCodeId = couponCode.Code
@@ -1536,28 +1927,43 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		// 使用coupon Code
 		couponCode.OrderId = order.OrderId
 		couponCode.UserId = int64(userId)
-		_ = w.UseCouponCode(couponCode)
+		if err = w.UseCouponCode(tx, couponCode); err != nil {
+			tx.Rollback()
+			return nil, err
+		}
 	}
 
 	if calcQuantity > 0 {
 		order.ShippingQuantity = calcQuantity
 		order.ShippingWeight = calcWeight
 		order.ShippingVolume = calcVolume
-		// 计算运费
-		var orderAddress *model.OrderAddress
-		if req.Address != nil {
-			orderAddress = &model.OrderAddress{
-				CountryCode:  req.Address.CountryCode,
-				Country:      req.Address.Country,
-				ProvinceCode: req.Address.ProvinceCode,
-				Province:     req.Address.Province,
-				City:         req.Address.City,
-				Postcode:     req.Address.Postcode,
-			}
-		} else if req.AddressId > 0 {
-			orderAddress, _ = w.GetOrderAddressById(req.AddressId)
+		// 计算运费：内联地址的省市区优先（结账页刚选的），缺的字段用已解析地址补齐。
+		// 不能因为「内联对象不完整但仍然传了」就按空地址算运费。
+		feeAddress := &model.OrderAddress{}
+		if orderAddress != nil {
+			*feeAddress = *orderAddress
 		}
-		order.ShippingFee = w.CalculateShippingFee(orderAddress, order.Amount, calcQuantity, calcWeight, calcVolume)
+		if req.Address != nil {
+			if req.Address.CountryCode != "" {
+				feeAddress.CountryCode = req.Address.CountryCode
+			}
+			if req.Address.Country != "" {
+				feeAddress.Country = req.Address.Country
+			}
+			if req.Address.ProvinceCode != "" {
+				feeAddress.ProvinceCode = req.Address.ProvinceCode
+			}
+			if req.Address.Province != "" {
+				feeAddress.Province = req.Address.Province
+			}
+			if req.Address.City != "" {
+				feeAddress.City = req.Address.City
+			}
+			if req.Address.Postcode != "" {
+				feeAddress.Postcode = req.Address.Postcode
+			}
+		}
+		order.ShippingFee = w.CalculateShippingFee(feeAddress, order.Amount, calcQuantity, calcWeight, calcVolume)
 		if shippingDiscount > 0 {
 			originShippingFee := order.ShippingFee
 			order.ShippingFee = int64(float64(originShippingFee) * (float64(shippingDiscount) / 100))
@@ -1622,9 +2028,20 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		order.SellerAmount = sellerAmount
 	}
 
-	tx.Save(&order)
+	if err := tx.Save(&order).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	// 通知事件与订单同事务（R69）：数据库错误让业务回滚；通知侧的非数据库问题
+	// 在扇出内部消化，不会让已完成的下单失败。匿名订单同样产生事件。
+	if _, err := w.emitNotificationEvent(tx, NotifyEventOrderCreated, order.OrderId, order.CreatedTime, orderNotificationPayload(&order, orderAddress, "pending"), NotifyEventStatusReady); err != nil {
+		tx.Rollback()
+		return nil, err
+	}
 
-	tx.Commit()
+	if err := tx.Commit().Error; err != nil {
+		return nil, err
+	}
 	// 清空购物车
 	if userId > 0 {
 		w.DB.Where("user_id = ?", userId).Delete(&model.Cart{})
@@ -1700,9 +2117,11 @@ func (w *Website) SaveOrderAddress(tx *gorm.DB, userId uint, req *request.OrderA
 	orderAddress.LastName = req.LastName
 	orderAddress.Phone = req.Phone
 	orderAddress.Email = req.Email
+	orderAddress.ProvinceCode = req.ProvinceCode
 	orderAddress.Province = req.Province
 	orderAddress.City = req.City
 	orderAddress.Town = req.Town
+	orderAddress.CountryCode = req.CountryCode
 	orderAddress.Country = req.Country
 	orderAddress.AddressInfo = req.AddressInfo
 	orderAddress.Company = req.Company
@@ -2085,37 +2504,14 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 		}
 
 		if aliRsp.Response.TradeStatus == "TRADE_SUCCESS" {
-			// this is a pay order
-			payment.PaidTime = time.Now().Unix()
-			payment.TerraceId = aliRsp.Response.TradeNo
-			payment.BuyerId = aliRsp.Response.BuyerUserId
+			buyerId := aliRsp.Response.BuyerUserId
 			if aliRsp.Response.BuyerOpenId != "" {
-				payment.BuyerId = aliRsp.Response.BuyerOpenId
+				buyerId = aliRsp.Response.BuyerOpenId
 			}
-			payment.BuyerInfo = aliRsp.Response.BuyerLogonId
-			w.DB.Save(payment)
-			order, err2 := w.GetOrderInfoByOrderId(payment.OrderId)
-			if err2 != nil {
-				return err2
-			}
-			order.PaymentId = payment.PaymentId
-			w.DB.Model(order).UpdateColumn("payment_id", payment.PaymentId)
-			//生成用户支付记录
-			var userBalance int64
-			err = w.DB.Model(&model.User{}).Where("`id` = ?", payment.UserId).Pluck("balance", &userBalance).Error
-			//状态更改了，增加一条记录到用户
-			finance := model.Finance{
-				UserId:      payment.UserId,
-				Direction:   config.FinanceOutput,
-				Amount:      payment.Amount,
-				AfterAmount: userBalance,
-				Action:      config.FinanceActionBuy,
-				OrderId:     payment.OrderId,
-				Status:      1,
-			}
-			w.DB.Create(&finance)
-			//支付成功逻辑处理
-			_ = w.SuccessPaidOrder(order, payment)
+			// 统一走 MarkPaymentPaid：它的 paid_time = 0 条件更新是「只记一笔付款流水」的闸门。
+			// 原来这里是直接 Save + Create(finance)，和支付宝重发的通知并发时会记两条。
+			payment.PayWay = config.PayWayAlipay
+			return w.MarkPaymentPaid(payment, aliRsp.Response.TradeNo, buyerId, aliRsp.Response.BuyerLogonId)
 		}
 	} else if payment.PayWay == config.PayWayWechat {
 		// 微信就不管了
@@ -2126,63 +2522,49 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 		if err != nil {
 			return err
 		}
-		client, err := paypal.NewClient(account.PayConfig.AppId, account.PayConfig.AppSecret, !account.PayConfig.Sandbox)
+		client, err := newPaypalClient(account)
 		if err != nil {
 			log.Println("client err", err)
 			return err
 		}
-		bm := make(gopay.BodyMap)
-		ppRsp, err := client.OrderDetail(context.Background(), payment.TerraceId, bm)
+		ppRsp, err := client.OrderDetail(context.Background(), payment.TerraceId, make(gopay.BodyMap))
 		if err != nil {
 			return err
 		}
-		if ppRsp.Code == 0 {
-			status := ppRsp.Response.Status
-			if ppRsp.Response.Status == "APPROVED" {
-				// 需要 capture
-				captureRes, err := client.OrderCapture(context.Background(), payment.TerraceId, nil)
-				if err != nil {
-					log.Println("capture err", err)
-					return err
-				}
-				library.DebugLog(w.CachePath, "paypalCapture", captureRes.Response)
-				if captureRes.Code == 0 {
-					status = captureRes.Response.Status
-				} else {
-					log.Println("captureRes err", captureRes.Error)
-				}
+		if ppRsp.Code != paypal.Success || ppRsp.Response == nil {
+			return fmt.Errorf("查询 PayPal 订单失败（order_id=%s）：%s", payment.TerraceId, ppRsp.Error)
+		}
+		detail := ppRsp.Response
+		status := detail.Status
+		if status == "APPROVED" {
+			// 需要 capture
+			captureRes, cErr := client.OrderCapture(context.Background(), payment.TerraceId, nil)
+			if cErr != nil {
+				log.Println("capture err", cErr)
+				return cErr
 			}
-			if status == "COMPLETED" && payment.PaidTime == 0 {
-				// 更新payment
-				payment.PayWay = config.PayWayPaypal
-				payment.PaidTime = time.Now().Unix()
-				payment.BuyerId = ppRsp.Response.Payer.PayerId
-				buf, _ := json.Marshal(ppRsp.Response.PaymentSource)
-				payment.BuyerInfo = string(buf)
-				w.DB.Save(payment)
-				order, err2 := w.GetOrderInfoByOrderId(payment.OrderId)
-				if err2 != nil {
-					return err2
-				}
-				order.PaymentId = payment.PaymentId
-				w.DB.Model(order).UpdateColumn("payment_id", payment.PaymentId)
-				//生成用户支付记录
-				var userBalance int64
-				err = w.DB.Model(&model.User{}).Where("`id` = ?", payment.UserId).Pluck("balance", &userBalance).Error
-				//状态更改了，增加一条记录到用户
-				finance := model.Finance{
-					UserId:      payment.UserId,
-					Direction:   config.FinanceOutput,
-					Amount:      payment.Amount,
-					AfterAmount: userBalance,
-					Action:      config.FinanceActionBuy,
-					OrderId:     payment.OrderId,
-					Status:      1,
-				}
-				w.DB.Create(&finance)
-				//支付成功逻辑处理
-				_ = w.SuccessPaidOrder(order, payment)
+			library.DebugLog(w.CachePath, "paypalCapture", captureRes.Response)
+			if captureRes.Code == paypal.Success && captureRes.Response != nil {
+				detail = captureRes.Response
+				status = detail.Status
+			} else {
+				log.Println("captureRes err", captureRes.Error)
 			}
+		}
+		if status == "COMPLETED" {
+			// 记录 capture id（退款只认它）与买家信息
+			w.savePaypalCaptureId(payment, firstPaypalCaptureId(detail))
+			buyerId := ""
+			if detail.Payer != nil {
+				buyerId = detail.Payer.PayerId
+			}
+			buf, _ := json.Marshal(detail.PaymentSource)
+			// buyer_info 是 varchar(255)，超长会让整条更新失败
+			buyerInfo := truncateRunes(string(buf), 255)
+			payment.PayWay = config.PayWayPaypal
+			// 统一走 MarkPaymentPaid：它的 paid_time = 0 条件更新是「只记一笔付款流水」的闸门，
+			// 也会拒掉「订单已退款」的迟到通知。
+			return w.MarkPaymentPaid(payment, payment.TerraceId, buyerId, buyerInfo)
 		}
 	} else if payment.PayWay == config.PayWayStripe {
 		// 从Stripe获取最新状态
@@ -2201,40 +2583,38 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 		buf, _ := json.Marshal(pi)
 		library.DebugLog(w.CachePath, "stripe", string(buf))
 		if pi.Status == stripe.PaymentIntentStatusSucceeded {
-			// 已完成
-			// 更新payment
+			// 同上：Stripe webhook 与前台轮询都会走到这里，必须用同一个记账闸门
 			payment.PayWay = config.PayWayStripe
-			payment.PaidTime = time.Now().Unix()
-			payment.BuyerId = pi.PaymentMethod.ID
-			payment.BuyerInfo = "" // todo
-			w.DB.Model(payment).UpdateColumns(map[string]interface{}{
-				"paid_time":  payment.PaidTime,
-				"buyer_id":   payment.BuyerId,
-				"buyer_info": payment.BuyerInfo,
-				"pay_way":    payment.PayWay,
-			})
-			order, err2 := w.GetOrderInfoByOrderId(payment.OrderId)
-			if err2 != nil {
-				return err2
+			buyerId := ""
+			if pi.PaymentMethod != nil {
+				buyerId = pi.PaymentMethod.ID
 			}
-			order.PaymentId = payment.PaymentId
-			w.DB.Model(order).UpdateColumn("payment_id", payment.PaymentId)
-			//生成用户支付记录
-			var userBalance int64
-			err = w.DB.Model(&model.User{}).Where("`id` = ?", payment.UserId).Pluck("balance", &userBalance).Error
-			//状态更改了，增加一条记录到用户
-			finance := model.Finance{
-				UserId:      payment.UserId,
-				Direction:   config.FinanceOutput,
-				Amount:      payment.Amount,
-				AfterAmount: userBalance,
-				Action:      config.FinanceActionBuy,
-				OrderId:     payment.OrderId,
-				Status:      1,
-			}
-			w.DB.Create(&finance)
-			//支付成功逻辑处理
-			_ = w.SuccessPaidOrder(order, payment)
+			return w.MarkPaymentPaid(payment, "", buyerId, "")
+		}
+	} else if payment.PayWay == config.PayWayXunhupay {
+		account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
+		if err != nil {
+			return err
+		}
+		status, err := w.QueryXunhupayPayment(payment, account)
+		if err != nil {
+			return err
+		}
+		if status == XunhupayStatusPaid {
+			return w.MarkPaymentPaid(payment, "", "", "")
+		}
+	} else if payment.PayWay == config.PayWayNowpayment {
+		account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
+		if err != nil {
+			return err
+		}
+		invoice, err := w.GetNowpaymentInvoice(account, payment.TerraceId)
+		if err != nil {
+			return err
+		}
+		// payment_status 只在发票详情里返回，创建发票时不带
+		if NowpaymentIsPaid(string(invoice.PaymentStatus)) {
+			return w.MarkPaymentPaid(payment, "", "", "")
 		}
 	}
 
@@ -2404,8 +2784,16 @@ func (w *Website) getOrderStatus(status int) string {
 
 // CreateOrderOptionStockRecords 记录属性值库存扣减记录（用于退款恢复）
 func (w *Website) CreateOrderOptionStockRecords(orderId string, detailId uint, optionValueId int64, quantity int) error {
+	return w.createOrderOptionStockRecords(w.DB, orderId, detailId, optionValueId, quantity)
+}
+
+// createOrderOptionStockRecords 事务内版本：下单时必须和库存扣减一起提交/回滚。
+func (w *Website) createOrderOptionStockRecords(tx *gorm.DB, orderId string, detailId uint, optionValueId int64, quantity int) error {
 	if orderId == "" || optionValueId == 0 || quantity <= 0 {
 		return nil
+	}
+	if tx == nil {
+		tx = w.DB
 	}
 
 	record := model.OrderOptionStock{
@@ -2415,5 +2803,5 @@ func (w *Website) CreateOrderOptionStockRecords(orderId string, detailId uint, o
 		Quantity:      quantity,
 	}
 
-	return w.DB.Create(&record).Error
+	return tx.Create(&record).Error
 }

@@ -16,10 +16,9 @@ import {
   ProFormText,
   ProFormTextArea,
 } from '@ant-design/pro-components';
-import { FormattedMessage } from '@umijs/max';
+import { FormattedMessage, useIntl } from '@umijs/max';
 import { Col, Image, Input, Row, Space, Tag, message } from 'antd';
 import React, { useEffect, useState } from 'react';
-import { useIntl } from 'react-intl';
 import './index.less';
 
 export type CollectorSettingProps = {

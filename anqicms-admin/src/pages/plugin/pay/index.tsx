@@ -42,6 +42,14 @@ const PluginPay: React.FC = () => {
       label: intl.formatMessage({ id: 'plugin.pay.stripe' }),
     },
     {
+      value: 'xunhupay',
+      label: intl.formatMessage({ id: 'plugin.pay.xunhupay' }),
+    },
+    {
+      value: 'nowpayment',
+      label: intl.formatMessage({ id: 'plugin.pay.nowpayment' }),
+    },
+    {
       value: 'balance',
       label: intl.formatMessage({ id: 'plugin.pay.balance' }),
     },

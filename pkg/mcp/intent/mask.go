@@ -16,27 +16,36 @@ const MaskedSecret = "********"
 // 只收**确凿是凭据**的名字，不做宽泛的子串匹配：
 // 误掩码会把 token_expire / token_type 这类普通字段也打成 ********，
 // 反而让调用方误判配置状态。新增资源时按实际字段名补进来。
+//
+// 回写保护：这些字段出现在可写端点上时，掩码原样写回由 MCP 的
+// api_invoke 兜底（用同路径 GET 回查真值）；端点自身不一定有哨兵判断。
 var secretFieldNames = map[string]bool{
-	"password":           true,
-	"passwd":             true,
-	"pwd":                true,
-	"secret":             true,
-	"app_secret":         true,
-	"client_secret":      true,
-	"secret_id":          true,
-	"secret_key":         true,
-	"access_key":         true,
-	"access_key_id":      true,
-	"access_key_secret":  true,
-	"private_key":        true,
-	"api_key":            true,
-	"apikey":             true,
-	"token":              true,
-	"token_secret":       true,
-	"encoding_aes_key":   true,
-	"verify_key":         true,
-	"license":            true,
-	"mcp_token":          true,
+	"password":          true,
+	"passwd":            true,
+	"pwd":               true,
+	"secret":            true,
+	"app_secret":        true,
+	"client_secret":     true,
+	"secret_id":         true,
+	"secret_key":        true,
+	"access_key":        true,
+	"access_key_id":     true,
+	"access_key_secret": true,
+	"private_key":       true,
+	"api_key":           true,
+	"apikey":            true,
+	"token":             true,
+	"token_secret":      true,
+	// 短信（Twilio）：account_sid / api_key_sid 是 Basic auth 的用户名侧，
+	// 与密码侧成对构成完整凭据；仓库已把 access_key_id / secret_id 当凭据处理，
+	// 口径一致。auth_token 是账号令牌，后缀形式见 _auth_token。
+	"auth_token":               true,
+	"account_sid":              true,
+	"api_key_sid":              true,
+	"encoding_aes_key":         true,
+	"verify_key":               true,
+	"license":                  true,
+	"mcp_token":                true,
 	"aliyun_access_key_id":     true,
 	"aliyun_access_key_secret": true,
 	"tencent_secret_id":        true,
@@ -46,6 +55,14 @@ var secretFieldNames = map[string]bool{
 	"qiniu_access_key":         true,
 	"qiniu_secret_key":         true,
 	"upai_token":               true,
+	// GCP 服务账号 JSON（内含 private_key）与 reCAPTCHA 通信密钥：
+	// 前者整段是一个字符串，字段名不叫 private_key，必须按整字段名匹配；
+	// 后者以 _key 结尾而不是 _private_key，宽泛后缀救不了（也不该加宽）。
+	"google_credentials_json": true,
+	"recaptcha_private_key":   true,
+	// OAuth 刷新令牌（Google Merchant 的 token 对象与扁平副本都用这个键名）。
+	// 只收精确名，绝不加宽泛的 _token 后缀（见下方说明）。
+	"refresh_token": true,
 }
 
 // IsSecretField 判断字段名是否为凭据类字段。
@@ -54,9 +71,13 @@ func IsSecretField(name string) bool {
 	if secretFieldNames[n] {
 		return true
 	}
-	// 资源前缀形式：mysql_password / smtp_password / auth_secret …
+	// 资源前缀形式：mysql_password / smtp_password / auth_secret …；twilio_auth_token 同理。
+	// 刻意不加宽泛的 _token：真正的受害者是 url_token / link_token 这类**非凭据**的
+	// URL 别名（request/api.go、config/plugin.go），掩码后写回会直接毁链接。
+	// 注意 token_expire / token_type 以 _expire / _type 结尾，_token 后缀命中不了。
 	return strings.HasSuffix(n, "_password") || strings.HasSuffix(n, "_secret") ||
-		strings.HasSuffix(n, "_access_key") || strings.HasSuffix(n, "_api_key")
+		strings.HasSuffix(n, "_access_key") || strings.HasSuffix(n, "_api_key") ||
+		strings.HasSuffix(n, "_auth_token")
 }
 
 // MaskSecrets 递归把凭据字段的值替换成掩码，返回新对象（不修改入参）。

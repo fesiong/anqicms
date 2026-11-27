@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/kataras/iris/v12"
-	"github.com/kataras/iris/v12/context"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -16,8 +15,7 @@ func PagePage(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
 	if ok {
-		ctx.ContentType(context.ContentHTMLHeaderValue)
-		ctx.Write(cacheFile)
+		writeCachedHTML(ctx, cacheFile)
 		return
 	}
 	categoryId := ctx.Params().GetUintDefault("id", 0)
@@ -81,7 +79,7 @@ func PagePage(ctx iris.Context) {
 		return
 	}
 	recorder := ctx.Recorder()
-	err = ctx.View(GetViewPath(ctx, tplName))
+	err = renderView(ctx, GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
 	} else {

@@ -86,15 +86,74 @@ func (w *Website) GetUserInfoByUserName(userName string) (*model.User, error) {
 	})
 }
 
+// normalizeEmail 统一邮箱的存储与查重口径：去首尾空格 + 转小写。
+// 邮箱本身大小写不敏感；不归一化会让 " A@x.com " 与 "a@x.com" 落成两个账号。
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
 func (w *Website) GetUserInfoByEmail(email string) (*model.User, error) {
 	return w.GetUserByFunc(func(tx *gorm.DB) *gorm.DB {
-		return tx.Where("`email` = ?", email)
+		return tx.Where("`email` = ?", normalizeEmail(email))
 	})
 }
 
-func (w *Website) GetUserInfoByPhone(phone string) (*model.User, error) {
+// defaultPhoneCountry 是手机号默认区号，与 model.User.PhoneCountry 的列默认值一致。
+const defaultPhoneCountry = "86"
+
+// normalizePhoneCountry 把空区号按默认区号 86 处理。
+// GetUserInfoByPhoneCountry 与 createUserWithPhoneGuard 共用，避免两处各自硬编码 86。
+func normalizePhoneCountry(country string) string {
+	if country == "" {
+		return defaultPhoneCountry
+	}
+	return country
+}
+
+// GetUserInfoByPhoneCountry 按 (区号, 手机号) 查用户（规格 §6.6）。
+// country == "" 按默认区号 86 处理，兼容未带区号的旧调用与存量数据。
+func (w *Website) GetUserInfoByPhoneCountry(country, phone string) (*model.User, error) {
+	country = normalizePhoneCountry(country)
 	return w.GetUserByFunc(func(tx *gorm.DB) *gorm.DB {
-		return tx.Where("`phone` = ?", phone)
+		return tx.Where("`phone_country` = ? AND `phone` = ?", country, phone)
+	})
+}
+
+// createUserWithPhoneGuard 把「查重 + 插入用户」收进同一事务，堵住并发双写（规格 §4.4）。
+//
+// 依赖 REPEATABLE READ：RR 下 InnoDB 对非唯一二级索引 idx_users_phone 的
+// FOR UPDATE 取 next-key / gap lock，即使没命中行也锁住间隙，能挡住并发插同号。
+// 若生产库是 READ COMMITTED，这个保证不成立（无间隙锁，两个事务都查不到、都插入），
+// 上线前必须核对生产库隔离级别；若是 RC 需另行决策，不得默认已解决。
+//
+// 三条不可改的约束：
+//  1. WHERE 只用 phone 单列——写成双列会用不上 idx_users_phone、退化成锁全表；区号在应用层比对。
+//  2. phone == "" 跳过查重——66 行空串若参与 FOR UPDATE 会锁住一大片间隙，把无关注册串行化。
+//  3. 仅此函数内持锁；extra 字段、ProcessNewUser、发验证邮件一律留在事务外，不能把 SMTP 圈进事务。
+func (w *Website) createUserWithPhoneGuard(user *model.User) error {
+	// 规格 §4.4 的代码块默认「调用方已给区号」，但这不是所有调用方的事实：
+	// ApiRegisterRequest 虽已新增 PhoneCountry（任务 10），历史注册路径（用户名/
+	// 邮箱注册）仍不传，空区号若不规范化，会与库里回填的 86 永远比对不等，
+	// 同号可无限重复注册。
+	// 规范化发生在比对之前并写回 user，保证 tx.Save 落库的区号与比对所用一致。
+	user.PhoneCountry = normalizePhoneCountry(user.PhoneCountry)
+	// 与发码事务同源：并发注册同一号码时，FOR UPDATE 的 next-key lock 与插入
+	// 也可能互等出 1213。业务错误（查重命中）不是 *mysql.MySQLError，重试助手
+	// 会立即原样返回，不会被重试包成通用错误。
+	return smsRunTxWithRetry(w.DB, "createUserWithPhoneGuard", func(tx *gorm.DB) error {
+		if user.Phone != "" {
+			var existing []model.User
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+				Where("phone = ?", user.Phone).Find(&existing).Error; err != nil {
+				return err
+			}
+			for _, u := range existing {
+				if normalizePhoneCountry(u.PhoneCountry) == user.PhoneCountry {
+					return errors.New(w.Tr("TheMobilePhoneNumberHasBeenRegistered"))
+				}
+			}
+		}
+		return tx.Save(user).Error
 	})
 }
 
@@ -215,7 +274,13 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) (*model.User, error) {
 					} else if v.Type == config.CustomFieldTypeNumber || v.Type == config.CustomFieldTypeCategory {
 						//只有这个类型的数据是数字，转成数字
 						extraFields[v.FieldName], _ = strconv.ParseInt(fmt.Sprint(extraValue["value"]), 10, 64)
-					} else if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeTexts || v.Type == config.CustomFieldTypeArchive {
+					} else if v.Type == config.CustomFieldTypeTexts {
+						// 条目可能带自己的 type：先校验，再规整后存 JSON。
+						if err := w.ValidateCustomFieldTexts(extraValue["value"], v); err != nil {
+							return nil, err
+						}
+						extraFields[v.FieldName] = w.StringifyCustomFieldTexts(extraValue["value"])
+					} else if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeArchive {
 						// 存 json
 						if val, ok := extraValue["value"].([]interface{}); ok {
 							for j, v2 := range val {
@@ -401,6 +466,8 @@ func (w *Website) GetUserGroups() []*model.UserGroup {
 	var groups []*model.UserGroup
 
 	w.DB.Order("level asc,id asc").Find(&groups)
+	// 后台用户组列表就是编辑弹窗的数据源，授权栏目必须一起带出来才能回显。
+	w.AttachUserGroupPublishCategories(groups...)
 
 	return groups
 }
@@ -464,8 +531,37 @@ func (w *Website) SaveUserGroupInfo(req *request.UserGroupRequest) (*model.UserG
 		group.Setting = *req.Setting
 	}
 
-	if err := w.DB.Save(group).Error; err != nil {
+	// 可投稿栏目（关系表 user_group_categories）：
+	//   nil      —— 不动现有授权（PATCH / AI 调用）
+	//   空数组    —— 清空授权，该用户组从此不能在前台投稿
+	//   非空数组  —— 全量替换
+	// 先校验再落库：栏目非法时连 user_groups 那一行都不该被改。
+	var publishCategoryIds []uint
+	if req.PublishCategoryIds != nil {
+		publishCategoryIds = NormalizePublishCategoryIds(*req.PublishCategoryIds)
+		if err := w.validatePublishCategories(publishCategoryIds); err != nil {
+			return nil, err
+		}
+	}
+
+	err := w.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(group).Error; err != nil {
+			return err
+		}
+		if req.PublishCategoryIds != nil {
+			return w.replaceUserGroupPublishCategories(tx, group.Id, publishCategoryIds)
+		}
+		return nil
+	})
+	if err != nil {
 		return nil, err
+	}
+
+	// 回填授权，保存接口直接把 group 返回给前端，前端据此确认落库结果。
+	if req.PublishCategoryIds != nil {
+		group.PublishCategoryIds = publishCategoryIds
+	} else {
+		group.PublishCategoryIds = w.GetUserGroupPublishCategoryIds(group.Id)
 	}
 
 	return group, nil
@@ -510,7 +606,13 @@ func (w *Website) DeleteUserGroup(groupId uint) error {
 		return err
 	}
 
-	err = w.DB.Delete(&group).Error
+	err = w.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Delete(&group).Error; err != nil {
+			return err
+		}
+		// 授权关系跟着用户组一起消失，别留孤儿行（重新建组时会拿到旧授权）。
+		return tx.Where("`group_id` = ?", groupId).Delete(&model.UserGroupCategory{}).Error
+	})
 
 	return err
 }
@@ -522,6 +624,8 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 	if len(req.Password) < 6 {
 		return nil, errors.New(w.Tr("PleaseEnterAPasswordOfMoreThan6Digits"))
 	}
+	// 邮箱查重与落库统一口径：去空格 + 小写，避免同一邮箱的不同写法绕过唯一性。
+	req.Email = normalizeEmail(req.Email)
 	template, tplExist := w.GetEmailTemplateInfo("register")
 	exist, err := w.GetUserInfoByUserName(req.UserName)
 	if err == nil {
@@ -532,14 +636,15 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 		}
 		return nil, errors.New(w.Tr("TheUsernameHasBeenRegistered"))
 	}
-	if req.Phone != "" {
+	// 老正则 VerifyCellphoneFormat 只服务于历史邮箱/密码注册路径（宽匹配中国号），
+	// 会误拒国际本地号。短信登录自动注册（LoginViaSms）已由 sms.NormalizePhone
+	// 按规格 §6.2 六道闸门严格校验，并以 PhoneNormalized=true 标记，故此处跳过
+	// 老正则（R85）。该标记是 json:"-" 内部字段，前台无法伪造。
+	if req.Phone != "" && !req.PhoneNormalized {
 		if !w.VerifyCellphoneFormat(req.Phone) {
 			return nil, errors.New(w.Tr("IncorrectMobilePhoneNumber"))
 		}
-		_, err := w.GetUserInfoByPhone(req.Phone)
-		if err == nil {
-			return nil, errors.New(w.Tr("TheMobilePhoneNumberHasBeenRegistered"))
-		}
+		// 手机号查重不再在这里裸读：收进 createUserWithPhoneGuard 的事务内（规格 §4.4）。
 	}
 	if req.Email != "" {
 		if !w.VerifyEmailFormat(req.Email) {
@@ -559,24 +664,30 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 		return nil, errors.New(w.Tr("FillInAtLeastOneOfTheEmailAndMobilePhoneNumber"))
 	}
 
+	// R86：把 req.PhoneCountry 写进 model.User，让 createUserWithPhoneGuard 在事务内
+	// 用真实区号比对/落库，而不是留空回落 86。空值路径（邮箱注册）由 GORM
+	// default:'86' + R55 规范化保持既有行为一字不变。
 	user := model.User{
-		UserName:  req.UserName,
-		RealName:  req.RealName,
-		AvatarURL: req.AvatarURL,
-		ParentId:  req.InviteId,
-		FirstName: req.FirstName,
-		LastName:  req.LastName,
-		Birthday:  req.Birthday,
-		Introduce: req.Introduce,
-		Phone:     req.Phone,
-		Email:     req.Email,
-		GroupId:   w.PluginUser.DefaultGroupId,
-		Status:    w.PluginUser.GetDefaultStatus(),
+		UserName:     req.UserName,
+		RealName:     req.RealName,
+		AvatarURL:    req.AvatarURL,
+		ParentId:     req.InviteId,
+		FirstName:    req.FirstName,
+		LastName:     req.LastName,
+		Birthday:     req.Birthday,
+		Introduce:    req.Introduce,
+		Phone:        req.Phone,
+		PhoneCountry: req.PhoneCountry,
+		Email:        req.Email,
+		GroupId:      w.PluginUser.DefaultGroupId,
+		Status:       w.PluginUser.GetDefaultStatus(),
 	}
 	user.AvatarURL = strings.TrimPrefix(user.AvatarURL, w.PluginStorage.StorageUrl)
 	req.Password = strings.TrimSpace(req.Password)
 	user.EncryptPassword(req.Password)
-	w.DB.Save(&user)
+	if err := w.createUserWithPhoneGuard(&user); err != nil {
+		return nil, err
+	}
 
 	//extra
 	extraFields := map[string]interface{}{}
@@ -602,7 +713,13 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 					} else if v.Type == config.CustomFieldTypeNumber || v.Type == config.CustomFieldTypeCategory {
 						//只有这个类型的数据是数字，转成数字
 						extraFields[v.FieldName], _ = strconv.ParseInt(fmt.Sprint(extraValue), 10, 64)
-					} else if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeTexts || v.Type == config.CustomFieldTypeArchive {
+					} else if v.Type == config.CustomFieldTypeTexts {
+						// 条目可能带自己的 type：先校验，再规整后存 JSON。
+						if err := w.ValidateCustomFieldTexts(extraValue, v); err != nil {
+							return nil, err
+						}
+						extraFields[v.FieldName] = w.StringifyCustomFieldTexts(extraValue)
+					} else if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeArchive {
 						// 存 json
 						if val, ok := extraValue.([]interface{}); ok {
 							for j, v2 := range val {
@@ -828,7 +945,8 @@ func (w *Website) LoginViaGoogle(req *request.ApiLoginRequest) (*model.User, err
 		log.Println(err)
 		return nil, err
 	}
-	// 直接对接 users 表的 email
+	// 直接对接 users 表的 email；与注册共用同一套归一化口径。
+	googleUser.Email = normalizeEmail(googleUser.Email)
 	user, err := w.GetUserInfoByEmail(googleUser.Email)
 	if err != nil {
 		// 用户不存在，新建
@@ -1003,29 +1121,43 @@ func (w *Website) UpdateUserInfo(userId uint, req *request.UserRequest) error {
 	// if user.Email != "" {
 	// 	req.Email = ""
 	// }
+	// 手机号在本分支已升级为登录身份（短信登录按 (phone_country, phone) 查用户），
+	// 因此「编辑资料」不允许直接改号：登录用户若能把手机号改成别人尚未注册的号码，
+	// 该号码的真实主人日后走短信登录时，验证码发到他自己手机上，却会登进攻击者的
+	// 账号；同时这个号码的注册也被攻击者永久占用。换绑必须走短信绑定流程
+	// （校验旧号 + 新号双验证码），不能靠这里直写。
+	//
+	// 允许两种无安全影响的写法：原样回传（值未变，前端编辑资料会带上）与传空串
+	// 主动解绑。传空串之后区号可以顺带更新（此时已无手机身份）。
+	//
+	// 语言键：locales 里没有「请通过手机号绑定流程更换」的既有键，本批又不改
+	// locales（新增键需同步 9 个语言包，另批处理），故语义借用 SaveFailed。
 	if req.Phone != nil {
-		// if !w.VerifyCellphoneFormat(*req.Phone) {
-		// 	return errors.New(w.Tr("IncorrectMobilePhoneNumber"))
-		// }
-		if *req.Phone != "" {
-			exist, err := w.GetUserInfoByPhone(*req.Phone)
-			if err == nil && exist.Id != user.Id {
-				return errors.New(w.Tr("TheMobilePhoneNumberHasBeenRegistered"))
-			}
+		newPhone := *req.Phone
+		if newPhone != "" && newPhone != user.Phone {
+			return errors.New(w.Tr("SaveFailed"))
 		}
-		user.Phone = *req.Phone
+		user.Phone = newPhone
+	}
+	if req.PhoneCountry != nil {
+		// 空区号与 86 视为同值（兼容未回填的旧数据），避免编辑资料原样回传被误拒。
+		if user.Phone != "" && normalizePhoneCountry(*req.PhoneCountry) != normalizePhoneCountry(user.PhoneCountry) {
+			return errors.New(w.Tr("SaveFailed"))
+		}
+		user.PhoneCountry = *req.PhoneCountry
 	}
 	if req.Email != nil {
-		if *req.Email != "" {
-			if !w.VerifyEmailFormat(*req.Email) {
+		email := normalizeEmail(*req.Email)
+		if email != "" {
+			if !w.VerifyEmailFormat(email) {
 				return errors.New(w.Tr("IncorrectEmail"))
 			}
-			exist, err := w.GetUserInfoByEmail(*req.Email)
+			exist, err := w.GetUserInfoByEmail(email)
 			if err == nil && exist.Id != user.Id {
 				return errors.New(w.Tr("TheEmailHasBeenRegistered"))
 			}
 		}
-		user.Email = *req.Email
+		user.Email = email
 	}
 	if req.UserName != "" {
 		user.UserName = req.UserName
@@ -1051,7 +1183,9 @@ func (w *Website) UpdateUserInfo(userId uint, req *request.UserRequest) error {
 		user.GroupId = w.PluginUser.DefaultGroupId
 	}
 
-	w.DB.Save(user)
+	if err := w.DB.Save(user).Error; err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -1168,11 +1302,8 @@ func (w *Website) GetUserExtra(id uint) map[string]*config.CustomField {
 						result[v.FieldName] = images
 					}
 				} else if v.Type == config.CustomFieldTypeTexts {
-					var texts []config.CustomFieldTexts
-					err := json.Unmarshal([]byte(value), &texts)
-					if err == nil {
-						result[v.FieldName] = texts
-					}
+					// 条目可能带自己的 type，解析与规整统一走 FormatCustomFieldTexts
+					result[v.FieldName] = w.FormatCustomFieldTexts(value, true)
 				} else if v.Type == config.CustomFieldTypeTimeline {
 					var val config.TimelineField
 					_ = json.Unmarshal([]byte(value), &val)
@@ -1192,6 +1323,8 @@ func (w *Website) GetUserExtra(id uint) map[string]*config.CustomField {
 				Value:       result[v.FieldName],
 				Default:     v.Content,
 				FollowLevel: v.FollowLevel,
+				Type:        v.Type,
+				FieldName:   v.FieldName,
 			}
 		}
 	}

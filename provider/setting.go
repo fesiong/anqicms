@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -20,6 +21,7 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/pkg/ai/eino"
+	"kandaoni.com/anqicms/provider/sms"
 	"kandaoni.com/anqicms/response"
 )
 
@@ -43,6 +45,7 @@ const (
 	GuestbookSettingKey      = "guestbook"
 	UploadFilesSettingKey    = "upload_file"
 	SendmailSettingKey       = "sendmail"
+	SmsSettingKey            = "sms"
 	ImportApiSettingKey      = "import_api"
 	StorageSettingKey        = "storage"
 	PaySettingKey            = "pay"
@@ -78,11 +81,21 @@ const (
 	LastRunVersionKey   = "last_run_version"
 )
 
+// Share AI settings synchronization across request and async clones of a site.
+var aiSettingLocks sync.Map
+
+func (w *Website) aiSettingLock() *sync.Mutex {
+	lock, _ := aiSettingLocks.LoadOrStore(w.Id, &sync.Mutex{})
+	return lock.(*sync.Mutex)
+}
+
 // I18n 来自运行中设置的I18n 对象
 var I18n *i18n.I18n
 
 func SetI18n(i *i18n.I18n) {
 	I18n = i
+	// 全局语言包换了，模板翻译缓存里的结果全部作废
+	ResetTplTrCache()
 }
 
 func (w *Website) InitSetting() {
@@ -112,6 +125,7 @@ func (w *Website) InitSetting() {
 	w.LoadGuestbookSetting(settingMap[GuestbookSettingKey])
 	w.LoadUploadFilesSetting(settingMap[UploadFilesSettingKey])
 	w.LoadSendmailSetting(settingMap[SendmailSettingKey])
+	w.LoadSmsSetting(settingMap[SmsSettingKey])
 	w.LoadImportApiSetting(settingMap[ImportApiSettingKey])
 	w.LoadStorageSetting(settingMap[StorageSettingKey])
 	w.LoadWeappSetting(settingMap[WeappSettingKey])
@@ -158,10 +172,11 @@ func (w *Website) LoadSystemSetting(value string) {
 }
 
 func (w *Website) LoadContentSetting(value string) {
-	w.Content = &config.ContentConfig{}
+	w.Content = &config.ContentConfig{Video: config.DefaultVideoProcessingConfig()}
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), w.Content)
 	}
+	w.Content.Video.Normalize()
 	if w.Content.MaxPage < 1 {
 		w.Content.MaxPage = 1000
 	}
@@ -436,6 +451,18 @@ func (w *Website) LoadSendmailSetting(value string) {
 	// if len(w.PluginSendmail.SendType) == 0 {
 	// 	w.PluginSendmail.SendType = []int{SendTypeGuestbook}
 	// }
+}
+
+// LoadSmsSetting 读取短信渠道配置，与 LoadSendmailSetting 同形：先建空对象再解 JSON。
+// 解完必须跑 sms.ApplyDefaults：8 个验证码参数与区域默认值要在运行期真被填上，
+// 不能只停在 config/sms.go 的字段注释里（任务 8 的发码流程直接吃这些值）。
+// 这里读的是库里真值，不做掩码——掩码与回写保护属后台读端点（规格 §3.4）。
+func (w *Website) LoadSmsSetting(value string) {
+	w.PluginSms = &config.PluginSmsConfig{}
+	if value != "" {
+		_ = json.Unmarshal([]byte(value), w.PluginSms)
+	}
+	sms.ApplyDefaults(w.PluginSms)
 }
 
 func (w *Website) LoadImportApiSetting(value string) {
@@ -871,6 +898,11 @@ func (w *Website) LoadAiSetting(value string) *eino.Configs {
 		return &settings
 	}
 
+	// Serialize cache fills with saves so an older read cannot undo invalidation.
+	lock := w.aiSettingLock()
+	lock.Lock()
+	defer lock.Unlock()
+
 	// Cache 是接口，站点未完成初始化时它是 nil（createDefaultWebsite 不建缓存，
 	// 测试里手工构造的 Website 也不会建）。原样调用会 nil 解引用直接 panic 进程
 	// ——这条路径挂在 Agent 调度器的 30 秒 tick 上，等于「跑够 30 秒就崩」。
@@ -882,7 +914,19 @@ func (w *Website) LoadAiSetting(value string) *eino.Configs {
 	}
 
 	if value == "" {
-		value = w.GetSettingValue(AiSettingKey)
+		if w.DB == nil {
+			return &settings
+		}
+		if err := w.DB.Model(&model.Setting{}).Where("`key` = ?", AiSettingKey).Pluck("value", &value).Error; err != nil {
+			return &settings
+		}
+		if value == "" {
+			// 空配置可缓存，但不应初始化官方 AI；查询失败则仍需重试。
+			if w.Cache != nil {
+				w.Cache.Set("ai_setting", settings, 86400)
+			}
+			return &settings
+		}
 	}
 	if err := json.Unmarshal([]byte(value), &settings); err != nil {
 		return &settings
@@ -915,7 +959,9 @@ func (w *Website) LoadAiSetting(value string) *eino.Configs {
 		}
 	}
 
-	w.Cache.Set("ai_setting", settings, 86400)
+	if w.Cache != nil {
+		w.Cache.Set("ai_setting", settings, 86400)
+	}
 	return &settings
 }
 
@@ -971,7 +1017,16 @@ func (w *Website) SaveCommunicationSetting(setting *config.CommunicationConfig) 
 
 // Tr as Translate
 // 这是一个兼容函数，请使用 ctx.Tr
+// Tr 翻译并做品牌替换。
+//
+// 品牌名散落在 9 个语言的 locales 里（安装页标题、默认站点名、未登录提示等），
+// 逐个改文件既会漏、也会在升级覆盖 locales 时被冲掉。所以统一在出口替换：
+// 与凭据脱敏走同一套思路——集中一处，新增文案自动继承。
 func (w *Website) Tr(str string, args ...interface{}) string {
+	return config.Brandize(w.tr(str, args...))
+}
+
+func (w *Website) tr(str string, args ...interface{}) string {
 	if I18n == nil {
 		I18n = i18n.New()
 		err := I18n.Load(config.ExecPath+"locales/*/*.yml", config.LoadLocales()...)
@@ -1002,15 +1057,89 @@ func (w *Website) Tr(str string, args ...interface{}) string {
 	return str
 }
 
+// 模板翻译缓存。
+//
+// 为什么值得缓存：模板里每个 {% tr %} 都要走一次 iris 的 i18n.Tr，而它内部
+// 每次都会 language.Parse 一遍语言标签再做匹配（TryMatchString）。详情页模板
+// 有几十个 tr 标签，实测占渲染期 5% 左右的 CPU。
+// 无格式化参数时，结果是 (站点, 语言, 原文) 的纯函数，缓存完全等价。
+//
+// 失效时机：
+//   - 模板重载 / 切换模板（语言包可能一起换）→ view.LoadTemplates 末尾调 ResetTplTrCache
+//   - 全局 I18n 被替换 → SetI18n
+var (
+	tplTrMu sync.RWMutex
+	// 用结构体做键而不是拼字符串：tr 标签每页要命中几十次，
+	// 拼接键会多出两次分配（数字转字符串 + 连接），实测能把省下的 CPU 吃回去。
+	tplTrCache = make(map[tplTrKey]string, 256)
+)
+
+// tplTrKey 把站点 id 和当前语言编进键里：
+// 多站点共用同一份模板文件时，同一个原文在不同站点/语言下译文不同。
+type tplTrKey struct {
+	site uint
+	lang string
+	str  string
+}
+
+// tplTrCacheLimit 上限：键来自模板里的静态文案，正常收敛在几十到几百条，
+// 给个上限只是防止异常输入把内存顶起来；满了就不再写入，不做淘汰（避免抖动）。
+const tplTrCacheLimit = 4096
+
+// ResetTplTrCache 清空模板翻译缓存。模板包或全局 I18n 变化后必须调用。
+func ResetTplTrCache() {
+	tplTrMu.Lock()
+	if len(tplTrCache) > 0 {
+		tplTrCache = make(map[tplTrKey]string, 256)
+	}
+	tplTrMu.Unlock()
+}
+
 func (w *Website) TplTr(str string, args ...interface{}) string {
+	if len(args) == 0 {
+		key := w.tplTrCacheKey(str)
+		tplTrMu.RLock()
+		v, ok := tplTrCache[key]
+		tplTrMu.RUnlock()
+		if ok {
+			return v
+		}
+		// 注意这里仍然转发 args（长度为 0），不要改成 w.tplTr(str)：
+		// tplTr 是 printf 包装函数，go vet 会把「非常量格式串 + 无变参」判为错误。
+		v = w.tplTr(str, args...)
+		tplTrMu.Lock()
+		if len(tplTrCache) < tplTrCacheLimit {
+			tplTrCache[key] = v
+		}
+		tplTrMu.Unlock()
+		return v
+	}
+	return w.tplTr(str, args...)
+}
+
+// tplTrCacheKey 组装缓存键。lang 取站点当前语言，站点未初始化时为空串。
+func (w *Website) tplTrCacheKey(str string) tplTrKey {
+	lang := ""
+	if w.System != nil {
+		lang = w.System.Language
+	}
+	return tplTrKey{site: w.Id, lang: lang, str: str}
+}
+
+// tplTr 是未缓存的翻译实现，保持原有回退链不变。
+func (w *Website) tplTr(str string, args ...interface{}) string {
+	lang := ""
+	if w.System != nil {
+		lang = w.System.Language
+	}
 	if w.TplI18n != nil {
-		tmpStr := w.TplI18n.Tr(w.System.Language, str, args...)
+		tmpStr := w.TplI18n.Tr(lang, str, args...)
 		if tmpStr != "" {
 			return tmpStr
 		}
 	}
 	if I18n != nil {
-		tmpStr := I18n.Tr(w.System.Language, str, args...)
+		tmpStr := I18n.Tr(lang, str, args...)
 		if tmpStr != "" {
 			return tmpStr
 		}
@@ -1041,7 +1170,18 @@ func (w *Website) SaveSettingValue(key string, value interface{}) error {
 	}
 	setting.Value = string(buf)
 
-	return w.DB.Save(&setting).Error
+	if key == AiSettingKey {
+		lock := w.aiSettingLock()
+		lock.Lock()
+		defer lock.Unlock()
+	}
+	if err := w.DB.Save(&setting).Error; err != nil {
+		return err
+	}
+	if key == AiSettingKey && w.Cache != nil {
+		w.Cache.Delete("ai_setting")
+	}
+	return nil
 }
 
 func (w *Website) SaveSettingValueRaw(key string, value interface{}) error {
@@ -1053,14 +1193,27 @@ func (w *Website) SaveSettingValueRaw(key string, value interface{}) error {
 		Value: fmt.Sprint(value),
 	}
 
-	return w.DB.Save(&setting).Error
+	if key == AiSettingKey {
+		lock := w.aiSettingLock()
+		lock.Lock()
+		defer lock.Unlock()
+	}
+	if err := w.DB.Save(&setting).Error; err != nil {
+		return err
+	}
+	if key == AiSettingKey && w.Cache != nil {
+		w.Cache.Delete("ai_setting")
+	}
+	return nil
 }
 
 func (w *Website) DeleteCache() {
 	// todo, 清理缓存
 	w.Cache.CleanAll()
-	// 释放词典
-	DictClose()
+	// ⚠️ 这里过去有 DictClose()（"释放词典"）。词典现在是进程级共享的
+	// （provider/segmenter），而 sego 的 Close() 会把 dict.trie 置 nil ——
+	// 任何一个站点在后台点"清缓存"，都会让**所有站点**的下一次分词
+	// nil 解引用 panic。词典只在进程退出时随地址空间释放。
 	// 记录
 	filePath := w.CachePath + "cache_clear.log"
 	os.WriteFile(filePath, []byte(strconv.FormatInt(time.Now().Unix(), 10)), os.ModePerm)

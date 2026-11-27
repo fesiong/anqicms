@@ -48,6 +48,9 @@ type Service interface {
 	Delete(doc TinyArchive) error
 	Bulk(docs []TinyArchive) error
 	Search(keyword string, moduleId uint, page int, pageSize int) ([]TinyArchive, int64, error)
+	// Count 返回当前索引中的文档数量，用于后台展示"索引数量"。
+	// 引擎/客户端不支持统计时返回 0 且不返回错误。
+	Count() (int64, error)
 	Close()
 	Flush()
 }

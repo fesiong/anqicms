@@ -9,6 +9,8 @@ export default {
   'tool.upgrading': '正在升级中,请勿刷新页面',
   'tool.confirm-restart': '重启运行新版',
   'tool.restarting': '正在重新启动中',
+  'tool.upgrade-done': '升级完成，需要重启',
+  'tool.upgrade-failed': '升级失败',
   'tool.cache.confirm-migrate': '确认更新数据库表结构吗？',
   'tool.cache.temp-cache': '临时缓存',
   'tool.cache.never': '未曾更新',

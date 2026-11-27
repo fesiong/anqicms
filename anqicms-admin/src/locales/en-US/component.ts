@@ -49,6 +49,8 @@ export default {
   'component.editor.video.title': 'Insert video',
   'component.editor.video.required': 'Please enter the video URL',
   'component.editor.video.select': 'Select from media library',
+  'component.editor.video.iframe.invalid':
+    'The embed URL must start with http(s):// or /',
   'component.editor.placeholder': 'Enter content...',
   'component.editor.submit': 'Submit',
   'component.attachment.dialog.ok': 'OK',
@@ -116,6 +118,20 @@ export default {
   'component.right-content.password': 'Password',
   'component.right-content.password.required': 'Please enter your password!',
   'component.right-content.register': 'No account? Register for free',
+  'component.right-content.register.title': 'Create a free account',
+  'component.right-content.register.tips':
+    'After registering you can use cloud AI and other services right here in the admin panel. Provide at least one of email or phone.',
+  'component.right-content.register.email': 'Email',
+  'component.right-content.register.phone': 'Phone',
+  'component.right-content.register.contact.required':
+    'Provide at least one of email or phone',
+  'component.right-content.register.password.min':
+    'Password must be at least 6 characters',
+  'component.right-content.register.email.invalid': 'Invalid email address',
+  'component.right-content.register.submit': 'Register',
+  'component.right-content.register.success': 'Registered successfully',
+  'component.right-content.register.back':
+    'Already have an account? Back to sign in',
   'component.right-content.account': 'Account info',
   'component.right-content.hello': 'Hello, ',
   'component.right-content.friend': 'friend',
@@ -127,22 +143,43 @@ export default {
   'component.right-content.remain.suffix': 'posts/day',
   'component.right-content.vip-title': 'VIP member',
   'component.right-content.vip-tips':
-    'You are not a VIP member yet, so some features are limited. A membership unlocks more Anqi Box and AnQiCMS features.',
-  'component.right-content.download-prefix':
-    'This is an Anqi Box feature. For more VIP features, download ',
-  'component.right-content.download-name': 'Anqi Box',
+    'You are not a VIP member yet, so some features are limited. A membership unlocks the full feature set.',
   'component.right-content.update': 'Refresh account status',
   'component.right-content.order.confirm': 'Already purchased?',
-  'component.right-content.order': 'Go to purchase',
+  'component.right-content.order': 'Buy VIP',
+  'component.right-content.vip.modal.title': 'Buy VIP',
+  'component.right-content.vip.package': 'Choose a plan',
+  'component.right-content.vip.pay.way': 'Payment method',
+  'component.right-content.vip.pay.wechat': 'WeChat Pay',
+  'component.right-content.vip.pay.alipay': 'Alipay',
+  'component.right-content.vip.pay.now': 'Pay now',
+  'component.right-content.vip.pay.scan':
+    'Scan the QR code with WeChat to complete payment',
+  'component.right-content.vip.pay.amount': 'Amount due: ',
+  'component.right-content.vip.pay.waiting': 'Waiting for payment result…',
+  'component.right-content.vip.pay.success':
+    'Payment successful, VIP is active',
+  'component.right-content.vip.pay.timeout':
+    'Payment result not detected yet, check the account info later',
+  'component.right-content.vip.pay.done': 'Done',
+  'component.right-content.vip.empty': 'No plan available for purchase',
   'component.right-content.switch-account': 'Switch account',
   'component.right-content.invalid': 'Expired',
   'component.right-content.integral': 'Remaining points: ',
+  'component.right-content.integral.recharge': 'Top up',
+  'component.right-content.integral.modal.title': 'Top up points',
+  'component.right-content.integral.package': 'Points package',
+  'component.right-content.integral.price': 'Unit price: ',
+  'component.right-content.integral.arrive': 'Points per unit: ',
+  'component.right-content.integral.points': 'points',
+  'component.right-content.integral.quantity': 'Units',
+  'component.right-content.integral.total': 'Total',
+  'component.right-content.integral.pay.success':
+    'Payment successful, points added',
   'component.right-content.free-token': 'Remaining free tokens: ',
   'component.right-content.free_token.description':
     'Free and VIP users receive a daily allotment of tokens. Once the free tokens are used up, you need to top up to keep using the AI/translation features.',
   'component.right-content.total-token': 'Total tokens used: ',
-  'component.right-content.total-token.description':
-    'For token pricing rules, visit https://www.anqicms.com/account/token-price.html for details.',
   'component.right-content.un-pay-token': 'Unsettled tokens: ',
   'component.right-content.is-owe-fee':
     'Your account is in arrears. AI/translation is suspended; please top up to resume',

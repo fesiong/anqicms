@@ -144,6 +144,20 @@ const PluginFulltext: React.FC<any> = () => {
           style={{ marginBottom: 20 }}
           description={
             <div>
+              {task !== null && (
+                <p>
+                  <FormattedMessage
+                    id="plugin.fulltext.indexed"
+                    values={{ count: (task.indexed || 0).toLocaleString() }}
+                  />
+                  {task.status === 1 && task.total > 0 && (
+                    <span style={{ marginLeft: 8, color: '#999' }}>
+                      {task.current.toLocaleString()} /{' '}
+                      {task.total.toLocaleString()}
+                    </span>
+                  )}
+                </p>
+              )}
               <p>
                 <FormattedMessage id="plugin.fulltext.tips" />
               </p>

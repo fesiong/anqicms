@@ -118,20 +118,38 @@ func (w *Website) GetArchiveByOriginUrl(keyword string) (*model.Archive, error) 
 	})
 }
 
+// GetPreviousArchive 取「同一分类里 id 更小的上一篇」。
+//
+// ⚠️ 这里不能写成 `WHERE category_id = ? AND id < ? ORDER BY id DESC LIMIT 1`。
+// MySQL 5.7 没有反向索引扫描，这条 SQL 会退化成「把整个 category 区间扫完再过滤」：
+// 线上 archives 有 21 万行、category 6 占 18.6 万行时，慢日志实测一条要扫 17 万行、
+// 耗时 0.4~25 秒（Rows_sent=1）。详情页每次访问打两次（上一篇 + 下一篇），
+// 几十个并发就能把 2 核 / 1.6G 的机器磁盘打满（100MB/s 读、load 30、
+// systemd-logind 建会话超时），最终实例被硬复位——2026-11-23 线上就是这么反复崩的。
+//
+// 现在的形状是一条 SQL：`WHERE id = (SELECT MAX(id) ... )`。
+// 子查询是标量且不引用外层列，MySQL 会先执行一次（EXPLAIN 显示
+// "Rows fetched before execution" / "Select tables optimized away"），
+// 再按主键点查一行；8.0.45 实测 0.2ms、详情页总共 2 条 SQL。
+//
+// ⚠️ 它依赖 archives 上有 (category_id, id) 复合索引，**而且索引必须在库里真实存在**：
+// 只在 model tag 里登记不够（AutoMigrateDB 仅版本变化时跑，老站永远不建）。
+// 索引缺失时 MAX(id) 会退化成 covering skip scan 扫完整个分类区间——
+// 30 万行的库实测扫 29.99 万行 / 235ms，比正确计划慢 4000 倍。
+// 保障见 ensureArchiveNeighborIndex（InitModelData 每次启动幂等补建）。
 func (w *Website) GetPreviousArchive(categoryId, id int64) (*model.Archive, error) {
-	sql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
-		if categoryId > 0 {
-			tx = tx.Where("`category_id` = ?", categoryId)
-		}
-		return tx.Where("`id` < ?", id).Order("`id` DESC").Select("id").Limit(1).Find(&model.Archive{})
-	})
-	var archiveId int64
-	err := w.DB.Raw(sql).Take(&archiveId).Error
-	if archiveId == 0 {
-		return nil, err
-	}
-	archive, err := w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
-		return tx.Where("`id` = ?", archiveId)
+	return w.getNeighborArchive(categoryId, id, true)
+}
+
+// GetNextArchive 取「同一分类里 id 更大的下一篇」。取法见 GetPreviousArchive 的注释。
+func (w *Website) GetNextArchive(categoryId, id int64) (*model.Archive, error) {
+	return w.getNeighborArchive(categoryId, id, false)
+}
+
+// getNeighborArchive 按方向取相邻文章，一条 SQL 完成定位 + 取行。
+func (w *Website) getNeighborArchive(categoryId, id int64, prev bool) (*model.Archive, error) {
+	archive, err := w.takeArchive(func(tx *gorm.DB) *gorm.DB {
+		return neighborArchiveScope(tx, categoryId, id, prev)
 	})
 	if err != nil {
 		return nil, err
@@ -143,51 +161,60 @@ func (w *Website) GetPreviousArchive(categoryId, id int64) (*model.Archive, erro
 	return archive, nil
 }
 
-func (w *Website) GetNextArchive(categoryId, id int64) (*model.Archive, error) {
-	sql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
-		if categoryId > 0 {
-			tx = tx.Where("`category_id` = ?", categoryId)
-		}
-		return tx.Where("`id` > ?", id).Order("`id` ASC").Select("id").Limit(1).Find(&model.Archive{})
-	})
-	var archiveId int64
-	err := w.DB.Raw(sql).Take(&archiveId).Error
-	if archiveId == 0 {
+// neighborArchiveScope 构造「主键 = (SELECT MAX/MIN(id) ...)」的查询。
+//
+// 单独拆成纯函数（不碰 w）是为了让护栏能用 DryRun 直接断言 SQL 形状：
+// 这两个函数是全站最热的路径，形状一错就是扫全表，光靠端到端压测来不及发现。
+//
+// prev=true 取 id 更小的最大值（上一篇）；prev=false 取 id 更大的最小值（下一篇）。
+// categoryId=0 表示不限分类（此时子查询只带 id 条件，走主键）。
+func neighborArchiveScope(db *gorm.DB, categoryId, id int64, prev bool) *gorm.DB {
+	agg, cmp := "MIN(`id`)", "`id` > ?"
+	if prev {
+		agg, cmp = "MAX(`id`)", "`id` < ?"
+	}
+	sub := db.Session(&gorm.Session{NewDB: true}).Model(&model.Archive{}).Select(agg)
+	if categoryId > 0 {
+		sub = sub.Where("`category_id` = ?", categoryId)
+	}
+	sub = sub.Where(cmp, id)
+	return db.Where("`id` = (?)", sub)
+}
+
+// selectArchiveByFunc 按条件取一整行，不做缩略图/链接补全。
+//
+// 单独拆出来是为了让「这条路径发几条 SQL」能被测试直接断言：详情页是全站最热的
+// 路径，每页多一次 MySQL 往返就是多一次全表之外的开销。
+//
+// 历史坑：这里曾经用 ToSQL 先拼一条 `SELECT id ... LIMIT 1`、Raw 取回 id、再
+// `WHERE id = ?` 取整行——两次往返换来的「只读 id」毫无收益（紧接着就要读整行），
+// 而详情页要取 正文 + 上一篇 + 下一篇，一次请求白烧三次往返。
+// 现在走参数化链式 Take，天然免疫 issue #93 的反斜杠+引号注入。
+//
+// ⚠️ ops 只能加 Where/Order/Join 这类过滤，不能加 Select：整行是一次性取出来的，
+// 加了列裁剪拿到的就是半条记录（商品属性走 archive_products 的回调补全，别在这里裁）。
+func (w *Website) selectArchiveByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.Archive, error) {
+	var archive model.Archive
+	if err := ops(w.DB.WithContext(w.Ctx())).Take(&archive).Error; err != nil {
 		return nil, err
 	}
-	archive, err := w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
-		return tx.Where("`id` = ?", archiveId)
-	})
-	if err != nil {
-		return nil, err
-	}
-	if archive.Password != "" {
-		archive.HasPassword = true
-		archive.Password = ""
-	}
-	return archive, nil
+	return &archive, nil
 }
 
 func (w *Website) GetArchiveByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.Archive, error) {
-	// 参数化取 id：用 DryRun 拿到带 ? 的 SQL 和 Vars，再绑定执行，
-	// 不再像 ToSQL 那样把 Vars 内联成字面量（issue #93 反斜杠+引号注入）。
-	sql, vars := w.dryRunSQL(func(tx *gorm.DB) *gorm.DB {
-		return ops(tx.WithContext(w.Ctx())).Select("id").Limit(1).Find(&model.Archive{})
-	})
-	var archiveId int64
-	err := w.DB.Raw(sql, vars...).Take(&archiveId).Error
-	if archiveId == 0 {
-		return nil, err
-	}
+	return w.takeArchive(ops)
+}
 
-	var archive model.Archive
-	err = w.DB.Model(&model.Archive{}).Where("id = ?", archiveId).Take(&archive).Error
+// takeArchive 在 selectArchiveByFunc 之上补全缩略图与伪静态链接。
+// 上一篇/下一篇共用这段收尾，只是查询构造换成 neighborArchiveScope。
+func (w *Website) takeArchive(ops func(tx *gorm.DB) *gorm.DB) (*model.Archive, error) {
+	archive, err := w.selectArchiveByFunc(ops)
 	if err != nil {
 		return nil, err
 	}
 	archive.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(archive.Id)))
-	archive.Link = w.GetUrl("archive", &archive, 0)
-	return &archive, nil
+	archive.Link = w.GetUrl("archive", archive, 0)
+	return archive, nil
 }
 
 func (w *Website) GetArchiveDraftById(id int64) (*model.ArchiveDraft, error) {
@@ -306,8 +333,8 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 	}
 
 	if currentPage > 0 {
-		// 缓存 count。缓存 key 继续用内联 SQL 做 hash（仅参与 Md5、从不执行），
-		// 但真正拿去执行的 EXPLAIN 必须用参数化 SQL + Vars，杜绝注入。
+		// 缓存 count。缓存 key 参与 Md5、从不执行；真正拿去执行的 EXPLAIN
+		// 用参数化 SQL + Vars，杜绝 ToSQL 内联导致的反斜杠+引号注入（issue #93）。
 		sqlCount, countVars := w.dryRunSQL(func(tx *gorm.DB) *gorm.DB {
 			tx = tx.Model(&model.Archive{})
 			if ops != nil {
@@ -319,9 +346,14 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		err := w.Cache.Get(cacheKeyCount, &total)
 		if err != nil {
 			// 如果使用explain分析行数大于10万，则不再使用count统计行数
-			total = w.GetExplainCountParams(sqlCount, countVars...)
+			total, err = w.getExplainCountParams(sqlCount, countVars...)
+			if err != nil {
+				return nil, 0, err
+			}
 			if total < 100000 {
-				builder.Count(&total)
+				if err := builder.Count(&total).Error; err != nil {
+					return nil, 0, err
+				}
 			}
 			_ = w.Cache.Set(cacheKeyCount, total, 300)
 		}
@@ -333,9 +365,13 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		}
 		if len(archiveIds) > 0 {
 			if draft {
-				w.DB.Table("`archive_drafts` as archives").Where("id IN (?)", archiveIds).Order(order).Find(&archives)
+				if err := w.DB.Table("`archive_drafts` as archives").Where("id IN (?)", archiveIds).Order(order).Find(&archives).Error; err != nil {
+					return nil, 0, err
+				}
 			} else {
-				w.DB.Model(&model.Archive{}).Where("id IN (?)", archiveIds).Order(order).Find(&archives)
+				if err := w.DB.Model(&model.Archive{}).Where("id IN (?)", archiveIds).Order(order).Find(&archives).Error; err != nil {
+					return nil, 0, err
+				}
 			}
 		}
 		for i := range archives {
@@ -346,24 +382,38 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		wg := &sync.WaitGroup{}
 		wg.Add(1)
 		w.Cache.AddPending(cacheKey, wg)
+		defer func() {
+			w.Cache.DelPending(cacheKey)
+			wg.Done()
+		}()
 		if strings.Contains(order, "rand") {
 			// 如果文章总量大于10万，则使用下面的方法处理
-			totalArchive := w.GetExplainCount("SELECT id FROM archives")
+			totalArchive, err := w.getExplainCount("SELECT id FROM archives")
+			if err != nil {
+				return nil, 0, err
+			}
 			if totalArchive > 100000 {
 				var minMax struct {
 					MinId int `json:"min_id"`
 					MaxId int `json:"max_id"`
 				}
-				builder.WithContext(context.Background()).Select("MIN(archives.id) as min_id, MAX(archives.id) as max_id").Scan(&minMax)
+				if err := builder.WithContext(context.Background()).Select("MIN(archives.id) as min_id, MAX(archives.id) as max_id").Scan(&minMax).Error; err != nil {
+					return nil, 0, err
+				}
 				if minMax.MinId == 0 || minMax.MaxId == 0 {
 					return nil, 0, errors.New("empty archive")
 				}
 				var existIds []int64
 				randId := rand.New(rand.NewSource(time.Now().UnixNano()))
 				for i := 0; i < pageSize; i++ {
-					tmpId := randId.Intn(minMax.MaxId-minMax.MinId) + minMax.MinId
+					tmpId := minMax.MinId
+					if minMax.MaxId > minMax.MinId {
+						tmpId = randId.Intn(minMax.MaxId-minMax.MinId) + minMax.MinId
+					}
 					var findId int64
-					builder.WithContext(context.Background()).Where("archives.id >= ?", tmpId).Select("archives.id").Limit(1).Pluck("id", &findId)
+					if err := builder.WithContext(context.Background()).Where("archives.id >= ?", tmpId).Select("archives.id").Limit(1).Pluck("id", &findId).Error; err != nil {
+						return nil, 0, err
+					}
 					if findId > 0 {
 						existIds = append(existIds, findId)
 					}
@@ -378,15 +428,17 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		// 直接走参数化 Pluck，不再 ToSQL 内联后 Raw 执行
 		var archiveIds []int64
 		if err := builder.Limit(pageSize).Offset(offset).Order(order).Select("archives.id").Pluck("archives.id", &archiveIds).Error; err != nil {
-			w.Cache.DelPending(cacheKey)
-			wg.Done()
 			return nil, 0, err
 		}
 		if len(archiveIds) > 0 {
 			if draft {
-				w.DB.Table("`archive_drafts` as archives").Where("id IN (?)", archiveIds).Order(order).Find(&archives)
+				if err := w.DB.Table("`archive_drafts` as archives").Where("id IN (?)", archiveIds).Order(order).Find(&archives).Error; err != nil {
+					return nil, 0, err
+				}
 			} else {
-				w.DB.Model(&model.Archive{}).Where("id IN (?)", archiveIds).Order(order).Find(&archives)
+				if err := w.DB.Model(&model.Archive{}).Where("id IN (?)", archiveIds).Order(order).Find(&archives).Error; err != nil {
+					return nil, 0, err
+				}
 			}
 		}
 		for i := range archives {
@@ -397,8 +449,6 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		if !draft {
 			_ = w.Cache.Set(cacheKey, archives, 600)
 		}
-		w.Cache.DelPending(cacheKey)
-		wg.Done()
 	}
 
 	return archives, total, nil
@@ -408,9 +458,20 @@ type ExplainCount struct {
 	Rows string
 }
 
+func (w *Website) GetExplainCount(sql string) int64 {
+	count, _ := w.getExplainCount(sql)
+	return count
+}
+
+// getExplainCount 估算固定 SQL（无外部参数）的行数，保留 (值, 错误) 语义供
+// prev/next 等调用点判断 EXPLAIN 是否真的返回了行。SQL 里若含外部输入，
+// 必须改用 getExplainCountParams，绝不拼接字符串（issue #93）。
+func (w *Website) getExplainCount(sql string) (int64, error) {
+	return w.getExplainCountParams(sql)
+}
+
 // explainCountSafe 对 EXPLAIN 用的 SQL 做结构校验，挡住明显的多语句/危险操作。
-// 注意：这只是纵深防御，真正的注入防护靠参数化（GetExplainCountParams 的 vars），
-// 绝不能把用户输入内联进 sql 再传进来。
+// 这只是纵深防御，真正的注入防护靠 vars 参数化，绝不把用户输入内联进 sql。
 func explainCountSafe(sql string) bool {
 	trimmed := strings.TrimSpace(sql)
 	if !strings.HasPrefix(strings.ToUpper(trimmed), "SELECT") {
@@ -429,20 +490,30 @@ func explainCountSafe(sql string) bool {
 	return true
 }
 
-// GetExplainCount 估算一条「固定 SQL」（不含用户参数）的行数。
-// 调用方若 SQL 里带外部输入，必须改用 GetExplainCountParams，绝不拼接字符串。
-func (w *Website) GetExplainCount(sql string) int64 {
-	return w.GetExplainCountParams(sql)
+// GetExplainCountParams 与 getExplainCountParams 的参数化便捷版（吞掉错误）。
+func (w *Website) GetExplainCountParams(sql string, vars ...interface{}) int64 {
+	count, _ := w.getExplainCountParams(sql, vars...)
+	return count
 }
 
-// GetExplainCountParams 用参数化方式执行 EXPLAIN，sql 须为带占位符的 SQL，
-// 外部输入一律走 vars 传给驱动，杜绝「反斜杠 + 引号」击穿字符串字面量。
-func (w *Website) GetExplainCountParams(sql string, vars ...interface{}) int64 {
+// getExplainCountParams 用参数化方式执行 EXPLAIN：sql 须带 ? 占位符，
+// 外部输入一律走 vars 绑定，杜绝「反斜杠 + 引号」击穿字符串字面量（issue #93）。
+// 完整保留 oem 原有的错误检查语义（空结果 / EXPLAIN 失败 / 负数估算）。
+func (w *Website) getExplainCountParams(sql string, vars ...interface{}) (int64, error) {
 	var result ExplainCount
-	if !explainCountSafe(sql) {
-		return 0
+	if !strings.HasPrefix(strings.ToUpper(strings.TrimSpace(sql)), "SELECT") {
+		return 0, errors.New("estimate requires a SELECT query")
 	}
-	w.DB.Session(&gorm.Session{PrepareStmt: false}).Raw("EXPLAIN "+sql, vars...).Scan(&result)
+	if !explainCountSafe(sql) {
+		return 0, nil
+	}
+	tx := w.DB.Session(&gorm.Session{PrepareStmt: false}).Raw("EXPLAIN "+sql, vars...).Scan(&result)
+	if tx.Error != nil {
+		return 0, tx.Error
+	}
+	if tx.RowsAffected == 0 {
+		return 0, errors.New("EXPLAIN returned no rows")
+	}
 
 	// MySQL EXPLAIN rows may contain extras like "3 (0%)" for partitioned tables;
 	// extract the leading numeric value.
@@ -450,10 +521,14 @@ func (w *Website) GetExplainCountParams(sql string, vars ...interface{}) int64 {
 	if idx := strings.Index(rowsStr, " "); idx > 0 {
 		rowsStr = rowsStr[:idx]
 	}
-	if n, err := strconv.ParseInt(rowsStr, 10, 64); err == nil {
-		return n
+	n, err := strconv.ParseInt(rowsStr, 10, 64)
+	if err != nil {
+		return 0, err
 	}
-	return 0
+	if n < 0 {
+		return 0, errors.New("negative EXPLAIN row estimate")
+	}
+	return n, nil
 }
 
 func (w *Website) GetArchiveExtraFromCache(archiveId int64) (extra map[string]*config.CustomField) {
@@ -513,11 +588,8 @@ func (w *Website) GetArchiveExtra(moduleId uint, id int64, loadCache bool) map[s
 							result[v.FieldName] = images
 						}
 					} else if v.Type == config.CustomFieldTypeTexts {
-						var texts []config.CustomFieldTexts
-						err := json.Unmarshal([]byte(value), &texts)
-						if err == nil {
-							result[v.FieldName] = texts
-						}
+						// 条目可能带自己的 type，解析与规整统一走 FormatCustomFieldTexts
+						result[v.FieldName] = w.FormatCustomFieldTexts(value, true)
 					} else if v.Type == config.CustomFieldTypeTimeline {
 						var val config.TimelineField
 						err := json.Unmarshal([]byte(value), &val)
@@ -639,6 +711,9 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		req.ModuleId = module.Id
 		req.UrlToken = w.VerifyArchiveUrlToken(req.UrlToken, req.Title, draft.Id)
 	}
+	// 写路径自己保证商品属性读到了：读闸门关掉时（内容模式 / 文章模型）上面拿到的
+	// 现值里商品字段全是零值，PATCH 未传的字段会被零值覆盖，侧表行随后被删。
+	w.loadArchiveProducts(&draft.Archive)
 	// createdTime
 	if req.CreatedTime > 0 {
 		draft.CreatedTime = req.CreatedTime
@@ -973,7 +1048,13 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 						} else if v.Type == config.CustomFieldTypeNumber || v.Type == config.CustomFieldTypeCategory {
 							//只有这个类型的数据是数字，转成数字
 							extraFields[v.FieldName], _ = strconv.ParseInt(fmt.Sprint(extraValue["value"]), 10, 64)
-						} else if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeTexts || v.Type == config.CustomFieldTypeArchive {
+						} else if v.Type == config.CustomFieldTypeTexts {
+							// texts 的每个条目可能带自己的 type：先按类型校验，再规整后存 JSON。
+							if err := w.ValidateCustomFieldTexts(extraValue["value"], &v); err != nil {
+								return nil, err
+							}
+							extraFields[v.FieldName] = w.StringifyCustomFieldTexts(extraValue["value"])
+						} else if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeArchive {
 							// 存 json
 							if val, ok := extraValue["value"].([]interface{}); ok {
 								for j, v2 := range val {
@@ -1840,7 +1921,17 @@ func (w *Website) GetFixedLinkFromCache(fixedLink string) int64 {
 }
 
 // PublishPlanArchives 发布计划文章，单次最多处理100篇
+var plannedArchiveReleaseLocks sync.Map
+
 func (w *Website) PublishPlanArchives() {
+	value, _ := plannedArchiveReleaseLocks.LoadOrStore(w.Id, &sync.Mutex{})
+	mu := value.(*sync.Mutex)
+	if !mu.TryLock() {
+		log.Printf("site %d: skipping overlapping planned archive release", w.Id)
+		return
+	}
+	defer mu.Unlock()
+
 	timeStamp := time.Now().Unix()
 
 	var drafts []*model.ArchiveDraft

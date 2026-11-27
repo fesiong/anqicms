@@ -494,6 +494,10 @@ var partialUpdateEndpoints = map[string]bool{
 // 拿不到现值时必须**报错拒绝**，不能放行：
 // 放行的后果是把掩码写进配置，而回执依然是成功——这是我们最不想要的
 // 「假成功」。报错至少让调用方知道要显式给新值。
+//
+// 例外：回查到的现值**本身也是掩码**时不算「拿不到」——那说明该端点的 GET
+// 自带脱敏（短信、发信配置都是），库里确有值，只是读侧不肯给。此时把该键从
+// 参数里删掉（见 fillMaskedFromCurrent），交由端点写侧沿用现值。
 func restoreMaskedParams(site *Website, adminID uint, method, path string, params map[string]any) (map[string]any, error) {
 	if !intent.ContainsMaskedSecret(params) {
 		return params, nil
@@ -517,6 +521,19 @@ func restoreMaskedParams(site *Website, adminID uint, method, path string, param
 }
 
 // fillMaskedFromCurrent 用现值递归替换掩码，返回替换后的副本与仍然残留掩码的字段名。
+//
+// 三种「现值」必须分开处理，否则「读全量 → 改一个 → 整包写回」的标准流程会失败：
+//  1. 现值是真值：替换成真值。
+//  2. 现值本身也是掩码（该端点的 GET 自带脱敏，如短信 PluginSmsSetting 与
+//     发信 PluginSendmailSetting）：**从参数里删除该键**。删键 = 未改动，是唯一
+//     既安全又能让标准流程跑通的语义——端点写侧要么把掩码当哨兵沿用真值，要么
+//     按部分更新落库、未出现的键保留现值；若在这里报错，调用方无论怎么做都写不
+//     回去，而放行掩码又会被真的写进配置。
+//  3. 现值缺失或为空串：这才是真的拿不到可沿用的值，继续报 leftover，要求
+//     调用方显式提供真值。
+//
+// 嵌套对象里所有键都被删空时，父对象也一并删除：否则会往端点传一个空对象，
+// 对 map / 切片类型的字段等于整体替换成空值，静默清空配置。
 func fillMaskedFromCurrent(params map[string]any, current any) (map[string]any, []string) {
 	cur, _ := current.(map[string]any)
 	out := make(map[string]any, len(params))
@@ -528,7 +545,12 @@ func fillMaskedFromCurrent(params map[string]any, current any) (map[string]any, 
 				out[k] = v
 				continue
 			}
-			if s, ok := cur[k].(string); ok && s != "" && s != intent.MaskedSecret {
+			s, ok := cur[k].(string)
+			if ok && s == intent.MaskedSecret {
+				// 现值也是掩码：删键表示「未改动」。
+				continue
+			}
+			if ok && s != "" {
 				out[k] = s
 				continue
 			}
@@ -536,6 +558,10 @@ func fillMaskedFromCurrent(params map[string]any, current any) (map[string]any, 
 			leftover = append(leftover, k)
 		case map[string]any:
 			sub, subLeft := fillMaskedFromCurrent(t, cur[k])
+			if len(sub) == 0 && len(t) > 0 {
+				// 子对象里的键全被删空：父对象也不传，避免空对象整体覆盖。
+				continue
+			}
 			out[k] = sub
 			for _, f := range subLeft {
 				leftover = append(leftover, k+"."+f)

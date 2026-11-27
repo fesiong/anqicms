@@ -242,6 +242,11 @@ export default {
   'content.param.extra-fields': '自定义参数',
   'content.param.other': '其他参数',
   'content.param.add-line': '添加一行',
+  'content.param.item-type': '类型',
+  'content.param.item-value': '值',
+  'content.param.add-value': '添加值',
+  'content.param.no-options': '请先在字段配置里设置可选项',
+  'content.param.delete-item': '确定要删除这一行吗？',
   'content.origin-url.name': '原文地址',
   'content.field.default': '默认不用填写',
   'content.origin-url.description': '文章的原文地址，默认不用管',
@@ -456,7 +461,7 @@ export default {
   'content.module.field.isfilter.description':
     '只有字段类型是单选、多选、下拉类型并且不是跟随文档阅读等级的时候，才有效',
   'content.module.field.default.description':
-    '如果是：单选、多选、下拉的多个值，一行一个。',
+    '如果是：单选、多选、下拉的多个值，一行一个。文本列表内的单选/多选/下拉条目同样使用这里的可选项。',
   'content.module.delete.confirm': '确定要删除选中的模型吗？',
   'content.module.delete.content':
     '该模型下的分类、文档也会一并被删除，请谨慎操作。',

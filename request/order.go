@@ -1,6 +1,10 @@
 package request
 
-import "kandaoni.com/anqicms/model"
+import (
+	"encoding/json"
+
+	"kandaoni.com/anqicms/model"
+)
 
 type OrderRequest struct {
 	Id                int64                `json:"id"`
@@ -35,9 +39,33 @@ type OrderRequest struct {
 	GoodsId    int64 `json:"goods_id"`
 	GoodsSkuId int64 `json:"goods_sku_id"`
 	Quantity   int   `json:"quantity"`
+	// QuantityProvided 与 OrderDetail 同义：区分「没传 quantity」和「传了 0」
+	QuantityProvided bool `json:"-"`
 	// 重置密码
 	Password string `json:"password"`
 	Code     string `json:"code"`
+}
+
+// UnmarshalJSON 记录顶层 quantity 是否出现（单商品下单入口用）。
+func (r *OrderRequest) UnmarshalJSON(data []byte) error {
+	type alias OrderRequest
+	var a alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	*r = OrderRequest(a)
+	r.QuantityProvided = jsonHasKey(data, "quantity")
+	return nil
+}
+
+// jsonHasKey 判断 JSON 对象里有没有出现某个键（值可以为 null/0）。
+func jsonHasKey(data []byte, key string) bool {
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return false
+	}
+	_, ok := probe[key]
+	return ok
 }
 
 type OrderDeliveryRequest struct {
@@ -58,7 +86,7 @@ type PaymentRequest struct {
 
 type PaymentAccountRequest struct {
 	Id                 int64           `json:"id"`                   // 账户 ID
-	PayWay             string          `json:"pay_way"`              // 支付方式：wechat=微信网页支付，weapp=微信小程序支付，alipay=支付宝支付，offline=线下支付，balance=余额支付，paypal=paypal
+	PayWay             string          `json:"pay_way"`              // 支付方式：wechat=微信网页支付，weapp=微信小程序支付，alipay=支付宝支付，offline=线下支付，balance=余额支付，paypal=paypal，stripe=stripe，xunhupay=虎皮椒，nowpayment=NOWPayments（加密货币）
 	AccountName        string          `json:"account_name"`         // 账户名称
 	Status             uint            `json:"status"`               // 状态 (1启用, 0停用, 2风控暂停)
 	HealthScore        int             `json:"health_score"`         // 健康度评分 (0-100)
@@ -90,6 +118,23 @@ type OrderDetail struct {
 	Status      int                        `json:"status"`
 	SkuValues   []model.ArchiveOptionValue `json:"sku_values"` // SKU 组合字段
 	OrderExtra  map[string]interface{}     `json:"order_extra"`
+
+	// QuantityProvided 记录请求体里是否**显式**出现过 quantity。
+	// 解码后「没传」和「传 0」都是 0，只能在这里区分：没传可以默认买 1 件，
+	// 显式传 0 必须当成非法数量拒绝（见 provider.NormalizeOrderQuantity）。
+	QuantityProvided bool `json:"-"`
+}
+
+// UnmarshalJSON 在正常解码之外记录 quantity 是否出现。
+func (d *OrderDetail) UnmarshalJSON(data []byte) error {
+	type alias OrderDetail
+	var a alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	*d = OrderDetail(a)
+	d.QuantityProvided = jsonHasKey(data, "quantity")
+	return nil
 }
 
 type OrderRefundRequest struct {

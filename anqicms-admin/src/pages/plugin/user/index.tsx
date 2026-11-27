@@ -15,6 +15,7 @@ import { FormattedMessage, useIntl } from '@umijs/max';
 import { Button, Modal, Space, Tag, message } from 'antd';
 import dayjs from 'dayjs';
 import React, { useEffect, useRef, useState } from 'react';
+import BalanceForm from './components/balanceForm';
 import UserFieldSetting from './components/setting';
 import UserForm from './components/userForm';
 

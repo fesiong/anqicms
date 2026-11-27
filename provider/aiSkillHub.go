@@ -105,7 +105,7 @@ func skillHubDo(ctx context.Context, url string) ([]byte, int, error) {
 		return nil, 0, fmt.Errorf("创建请求失败: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "AnQiCMS-SkillHub-Client/1.0")
+	req.Header.Set("User-Agent", config.CurrentOEMID()+"-SkillHub-Client/1.0")
 
 	resp, err := skillHubHTTPClient.Do(req)
 	if err != nil {

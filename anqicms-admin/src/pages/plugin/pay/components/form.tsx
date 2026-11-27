@@ -55,6 +55,14 @@ const PaymentAccountForm: React.FC<PayFormProps> = (props) => {
       label: intl.formatMessage({ id: 'plugin.pay.stripe' }),
     },
     {
+      value: 'xunhupay',
+      label: intl.formatMessage({ id: 'plugin.pay.xunhupay' }),
+    },
+    {
+      value: 'nowpayment',
+      label: intl.formatMessage({ id: 'plugin.pay.nowpayment' }),
+    },
+    {
       value: 'balance',
       label: intl.formatMessage({ id: 'plugin.pay.balance' }),
     },
@@ -487,27 +495,98 @@ const PaymentAccountForm: React.FC<PayFormProps> = (props) => {
               />
             </>
           )}
-          <ProFormRadio.Group
-            label={intl.formatMessage({ id: 'plugin.pay.sandbox' })}
-            name={['pay_config', 'sandbox']}
-            options={[
-              {
-                label: intl.formatMessage({
-                  id: 'plugin.pay.sandbox.yes',
-                }),
-                value: true,
-              },
-              {
-                label: intl.formatMessage({
-                  id: 'plugin.pay.sandbox.no',
-                }),
-                value: false,
-              },
-            ]}
-            extra={intl.formatMessage({
-              id: 'plugin.pay.sandbox.description',
-            })}
-          />
+          {payWay === 'xunhupay' && (
+            <>
+              <ProFormText
+                name={['pay_config', 'app_id']}
+                label={intl.formatMessage({
+                  id: 'plugin.pay.xunhupay.appid',
+                })}
+                width="lg"
+              />
+              <ProFormText
+                name={['pay_config', 'app_secret']}
+                label={intl.formatMessage({
+                  id: 'plugin.pay.xunhupay.appsecret',
+                })}
+                width="lg"
+              />
+              <ProFormText
+                name={['pay_config', 'api_url']}
+                label={intl.formatMessage({
+                  id: 'plugin.pay.xunhupay.api-url',
+                })}
+                width="lg"
+                placeholder="https://api.xunhupay.com"
+                extra={intl.formatMessage({
+                  id: 'plugin.pay.api-url.description',
+                })}
+              />
+            </>
+          )}
+          {payWay === 'nowpayment' && (
+            <>
+              <ProFormText
+                name={['pay_config', 'app_id']}
+                label={intl.formatMessage({
+                  id: 'plugin.pay.nowpayment.api-key',
+                })}
+                width="lg"
+              />
+              <ProFormText
+                name={['pay_config', 'webhook_id']}
+                label={intl.formatMessage({
+                  id: 'plugin.pay.nowpayment.ipn-secret',
+                })}
+                width="lg"
+                extra={intl.formatMessage({
+                  id: 'plugin.pay.nowpayment.ipn-secret.description',
+                })}
+              />
+              <ProFormText
+                name={['pay_config', 'price_currency']}
+                label={intl.formatMessage({
+                  id: 'plugin.pay.nowpayment.price-currency',
+                })}
+                width="lg"
+                placeholder="usd"
+              />
+              <ProFormText
+                name={['pay_config', 'api_url']}
+                label={intl.formatMessage({
+                  id: 'plugin.pay.nowpayment.api-url',
+                })}
+                width="lg"
+                placeholder="https://api.nowpayments.io"
+                extra={intl.formatMessage({
+                  id: 'plugin.pay.api-url.description',
+                })}
+              />
+            </>
+          )}
+          {payWay !== 'xunhupay' && (
+            <ProFormRadio.Group
+              label={intl.formatMessage({ id: 'plugin.pay.sandbox' })}
+              name={['pay_config', 'sandbox']}
+              options={[
+                {
+                  label: intl.formatMessage({
+                    id: 'plugin.pay.sandbox.yes',
+                  }),
+                  value: true,
+                },
+                {
+                  label: intl.formatMessage({
+                    id: 'plugin.pay.sandbox.no',
+                  }),
+                  value: false,
+                },
+              ]}
+              extra={intl.formatMessage({
+                id: 'plugin.pay.sandbox.description',
+              })}
+            />
+          )}
         </>
       )}
     </ModalForm>

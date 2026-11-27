@@ -211,28 +211,39 @@ func buildAPICatalogFromSource() (*APICatalog, error) {
 		return nil, fmt.Errorf("控制器源码目录不可用: %w", statErr)
 	}
 
-	bindings, err := collectHandlerBindings(ctrlDir)
+	bindings, err := collectHandlerBindings(
+		filepath.Join(root, "controller"),
+		ctrlDir, // manageController 后扫，同名时覆盖 controller 的实现
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	// 只解析真正被引用的结构体，避免把 request/config 整包遍历一遍。
-	// 切片类型（[]config.CustomField）剥掉 "[]" 前缀后查表。
+	// 只解析真正被后台路由引用的结构体，避免把 request/config 整包遍历一遍。
+	// 同时避免把 controller 包中未被后台路由使用的 handler 结构体带进 want。
+	referenced := make(map[string]bool, len(endpoints))
+	for _, ep := range endpoints {
+		referenced[ep.Handler] = true
+	}
 	want := map[string]bool{}
-	for _, b := range bindings {
+	for name, b := range bindings {
+		if !referenced[name] {
+			continue
+		}
 		if b.structType == "" {
 			continue
 		}
-		name := strings.TrimPrefix(b.structType, "[]")
-		want[name] = true
+		// 切片类型（[]config.CustomField）剥掉 "[]" 前缀后查表。
+		typeName := strings.TrimPrefix(b.structType, "[]")
+		want[typeName] = true
 		// 同包定义的结构体在 handler 里写作裸标识符（var req SkillEditRequest），
 		// namedType 拿不到包名，而 collectStructSchemas 的键是 "包名.类型名"。
 		// 不补这一份就会查不到，mergeParams 只能返回空字段表，
 		// 端点于是顶着 struct 标签却给出空 schema（api_schema 无从展示、
 		// 意图层参数门禁还会误报幽灵参数）。
 		// 2026-10-03 实测：/anqi/skill/edit 的 7 个字段就是这么丢的。
-		if !strings.Contains(name, ".") {
-			want["manageController."+name] = true
+		if !strings.Contains(typeName, ".") {
+			want["manageController."+typeName] = true
 		}
 	}
 	schemas, arrayTypes, touched, err := collectStructSchemas(root, want)
@@ -516,26 +527,31 @@ func parseGoFilesInDir(fset *token.FileSet, dir string, mode parser.Mode) ([]*as
 
 // collectHandlerBindings 用 AST 解析控制器目录下每个 handler 的取参方式。
 //
+// 支持传入多个目录：先扫 controller（前台/共享 handler），再扫 manageController，
+// 同名函数后者覆盖前者 —— 保证后台路由用的 manageController 实现优先。
+//
 // 必须用 parser.ParseComments：URLParam/PostValue/FormFile 这类参数的说明只存在于
 // 源码注释里，不带注释解析会让它们的 Desc 永远为空。
-func collectHandlerBindings(dir string) (map[string]handlerBinding, error) {
-	fset := token.NewFileSet()
-	files, err := parseGoFilesInDir(fset, dir, parser.ParseComments)
-	if err != nil {
-		return nil, fmt.Errorf("解析控制器源码失败: %w", err)
-	}
-
+func collectHandlerBindings(dirs ...string) (map[string]handlerBinding, error) {
 	out := map[string]handlerBinding{}
-	for _, file := range files {
-		for _, decl := range file.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Body == nil {
-				continue
+	for _, dir := range dirs {
+		fset := token.NewFileSet()
+		files, err := parseGoFilesInDir(fset, dir, parser.ParseComments)
+		if err != nil {
+			return nil, fmt.Errorf("解析控制器源码失败（%s）: %w", dir, err)
+		}
+
+		for _, file := range files {
+			for _, decl := range file.Decls {
+				fn, ok := decl.(*ast.FuncDecl)
+				if !ok || fn.Body == nil {
+					continue
+				}
+				b := analyzeHandlerBody(fset, file, fn.Body)
+				b.doc = docText(fn.Doc)
+				b.paramDoc = parseParamDocSection(fn.Doc)
+				out[fn.Name.Name] = b
 			}
-			b := analyzeHandlerBody(fset, file, fn.Body)
-			b.doc = docText(fn.Doc)
-			b.paramDoc = parseParamDocSection(fn.Doc)
-			out[fn.Name.Name] = b
 		}
 	}
 	return out, nil

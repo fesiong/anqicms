@@ -34,7 +34,24 @@ import (
 	"kandaoni.com/anqicms/response"
 )
 
-const AnqiApi = "https://auth.anqicms.com/auth"
+// AnqiApi 是账号/授权/AI 网关的根地址，随 OEM 品牌在编译期固化。
+//
+// 官方版的值与历史上硬编码的地址完全一致，因此改造不改变官方行为；
+// OEM 版把它指向自己的网关（或代理到官网并带 oem 头）。
+var AnqiApi = config.Brand().AuthBase
+
+// oemHeader 是出站请求携带的品牌标识头。
+// 服务端据此区分是哪个 OEM 的客户端在请求（授权、升级包、AI 配额都按它分发），
+// 与查询参数 oem 同源，避免两处各写一遍。
+func oemHeader() string {
+	return config.CurrentOEMID()
+}
+
+// userAgent 形如 anqicms/3.8.0，标识由品牌 ID 决定。
+// 用 ID 而不是品牌展示名，是为了让官方版的 UA 与改造前逐字节一致。
+func userAgent() string {
+	return config.CurrentOEMID() + "/" + config.Version
+}
 
 var ErrDoing = errors.New("doing")
 
@@ -42,6 +59,61 @@ type AnqiLoginResult struct {
 	Code int                    `json:"code"`
 	Msg  string                 `json:"msg"`
 	Data *config.AnqiUserConfig `json:"data"`
+}
+
+// AnqiPackage 是官网下发的一个充值套餐。price 单位是分，有效期单位由 unit 描述。
+// 价格与档位完全由官网配置决定，客户端不得写死或缓存过久——官网调价后本地还显示
+// 老价格，付完就对不上账。
+type AnqiPackage struct {
+	GoodsId   uint   `json:"goods_id"`
+	Title     string `json:"title"`
+	Price     int64  `json:"price"`
+	ExpireDay int64  `json:"expire_day"`
+	Total     int64  `json:"total"`
+	Unit      string `json:"unit"`
+}
+
+type AnqiPackages struct {
+	Vip      []AnqiPackage `json:"vip"`
+	Integral AnqiPackage   `json:"integral"`
+	PayWays  []string      `json:"pay_ways"`
+}
+
+type AnqiPackagesResult struct {
+	Code int          `json:"code"`
+	Msg  string       `json:"msg"`
+	Data AnqiPackages `json:"data"`
+}
+
+// AnqiRechargeOrder 是下单后的支付参数。
+// 微信返回 code_url（可直接放进 img src 的 data URI），支付宝返回 jump_url。
+type AnqiRechargeOrder struct {
+	OrderId   string  `json:"order_id"`
+	Amount    float64 `json:"amount"`
+	AmountFen int64   `json:"amount_fen"`
+	PayWay    string  `json:"pay_way"`
+	CodeUrl   string  `json:"code_url"`
+	JumpUrl   string  `json:"jump_url"`
+}
+
+type AnqiRechargeResult struct {
+	Code int               `json:"code"`
+	Msg  string            `json:"msg"`
+	Data AnqiRechargeOrder `json:"data"`
+}
+
+type AnqiRechargeStatus struct {
+	OrderId string                 `json:"order_id"`
+	Status  int                    `json:"status"`
+	Paid    bool                   `json:"paid"`
+	Amount  float64                `json:"amount"`
+	User    *config.AnqiUserConfig `json:"user"`
+}
+
+type AnqiRechargeStatusResult struct {
+	Code int                `json:"code"`
+	Msg  string             `json:"msg"`
+	Data AnqiRechargeStatus `json:"data"`
 }
 
 type AnqiTemplateResult struct {
@@ -255,6 +327,125 @@ func (w *Website) AnqiLogin(req *request.AnqiLoginRequest) error {
 	return nil
 }
 
+// AnqiRegister 在后台内嵌完成官网账号注册。
+//
+// 官网 /register 注册成功即返回 token（见 docs/oem-account-api.md），
+// 所以这里不需要再走一次 /login；直接把返回的账号信息写成登录态。
+// oem 放在请求体里：官网 AuthRegister 优先读 body.oem，header 是兜底。
+func (w *Website) AnqiRegister(req *request.AnqiRegisterRequest) error {
+	defaultSite := CurrentSite(nil)
+	if w.Id == 1 {
+		defaultSite = w
+	}
+	payload := map[string]string{
+		"user_name": req.UserName,
+		"password":  req.Password,
+		"email":     req.Email,
+		"phone":     req.Phone,
+		"oem":       oemHeader(),
+	}
+	var result AnqiLoginResult
+	_, body, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/register").Send(payload).EndStruct(&result)
+
+	if len(errs) > 0 {
+		library.DebugLog(config.ExecPath+"cache/", "error.log", string(body))
+		return errs[0]
+	}
+
+	if result.Code != 0 {
+		return errors.New(result.Msg)
+	}
+
+	if result.Data == nil || result.Data.Token == "" {
+		// 官网契约里 data 必带 token；缺失说明协议变了，不能当成功处理。
+		return errors.New(w.Tr("RegisterFailedPleaseTryAgain"))
+	}
+
+	config.AnqiUser = *result.Data
+	config.AnqiUser.LoginTime = time.Now().Unix()
+	config.AnqiUser.CheckTime = config.AnqiUser.LoginTime
+	if err := defaultSite.SaveSettingValue(AnqiSettingKey, config.AnqiUser); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// AnqiPackages 拉取官网充值套餐，供后台内嵌的购买弹窗展示。
+func (w *Website) AnqiPackages() (*AnqiPackages, error) {
+	var result AnqiPackagesResult
+	_, body, errs := w.NewAuthReq(gorequest.TypeJSON).Get(AnqiApi + "/packages").EndStruct(&result)
+
+	if len(errs) > 0 {
+		library.DebugLog(config.ExecPath+"cache/", "error.log", string(body))
+		return nil, errs[0]
+	}
+
+	if result.Code != 0 {
+		return nil, errors.New(result.Msg)
+	}
+
+	return &result.Data, nil
+}
+
+// AnqiRecharge 在官网下单并取回支付参数。
+//
+// 资金流是官网代收：本地只拿到二维码或跳转地址，不接触任何支付凭据。
+func (w *Website) AnqiRecharge(req *request.AnqiRechargeRequest) (*AnqiRechargeOrder, error) {
+	if config.AnqiUser.AuthId == 0 || config.AnqiUser.Token == "" {
+		return nil, errors.New(w.Tr("PleaseLogInToAnqicmsAccountFirst"))
+	}
+
+	var result AnqiRechargeResult
+	_, body, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/recharge").Send(req).EndStruct(&result)
+
+	if len(errs) > 0 {
+		library.DebugLog(config.ExecPath+"cache/", "error.log", string(body))
+		return nil, errs[0]
+	}
+
+	if result.Code != 0 {
+		return nil, errors.New(result.Msg)
+	}
+
+	return &result.Data, nil
+}
+
+// AnqiRechargeStatus 轮询订单状态，已付款时把最新账号信息同步回本地登录态。
+//
+// 走轮询而不是回调：OEM 客户大量内网部署，官网打不进去，只能客户端主动问。
+func (w *Website) AnqiRechargeStatus(orderId string) (*AnqiRechargeStatus, error) {
+	var result AnqiRechargeStatusResult
+	_, body, errs := w.NewAuthReq(gorequest.TypeJSON).Get(AnqiApi + "/recharge/status").Query("order_id=" + orderId).EndStruct(&result)
+
+	if len(errs) > 0 {
+		library.DebugLog(config.ExecPath+"cache/", "error.log", string(body))
+		return nil, errs[0]
+	}
+
+	if result.Code != 0 {
+		return nil, errors.New(result.Msg)
+	}
+
+	if result.Data.Paid && result.Data.User != nil {
+		// ⚠️ 官网在这条响应里**故意把 token 清空**（不复用支付通道下发凭据）。
+		// 整体覆盖会把本地 token 抹掉，之后所有 /auth 请求都会 401，所以这里必须
+		// 先留存再回填——与 AnqiCheckLogin 的字段级合并是同一个原因。
+		token := config.AnqiUser.Token
+		config.AnqiUser = *result.Data.User
+		config.AnqiUser.Token = token
+		config.AnqiUser.CheckTime = time.Now().Unix()
+
+		defaultSite := CurrentSite(nil)
+		if w.Id == 1 {
+			defaultSite = w
+		}
+		_ = defaultSite.SaveSettingValue(AnqiSettingKey, config.AnqiUser)
+	}
+
+	return &result.Data, nil
+}
+
 func (w *Website) AnqiCheckLogin(force bool) {
 	if config.AnqiUser.AuthId == 0 {
 		return
@@ -366,7 +557,7 @@ func (w *Website) AnqiSendFeedback(req *request.AnqiFeedbackRequest) error {
 	req.Return = "json"
 	// 开始提交数据
 	var result AnqiDownloadTemplateResult
-	_, body, errs := w.NewAuthReq(gorequest.TypeMultipart).SetDebug(true).Post("https://www.anqicms.com/guestbook.html").Send(req).EndStruct(&result)
+	_, body, errs := w.NewAuthReq(gorequest.TypeMultipart).SetDebug(true).Post(config.Brand().Website + "/guestbook.html").Send(req).EndStruct(&result)
 	if len(errs) > 0 {
 		library.DebugLog(config.ExecPath+"cache/", "error.log", string(body))
 		return errs[0]
@@ -996,7 +1187,8 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 			return "", err
 		}
 		anqiReq.Header.Add("token", config.AnqiUser.Token)
-		anqiReq.Header.Add("User-Agent", "anqicms/"+config.Version)
+		anqiReq.Header.Add("User-Agent", userAgent())
+		anqiReq.Header.Add("oem", oemHeader())
 		anqiReq.Header.Add("domain", w.System.BaseUrl)
 		resp, err := client.Do(anqiReq)
 		if err != nil {
@@ -1359,7 +1551,8 @@ func (w *Website) NewAuthReq(contentType string) *gorequest.SuperAgent {
 		//set key header
 		Set("domain", w.System.BaseUrl).
 		//set oem header
-		Set("User-Agent", "anqicms/"+config.Version)
+		Set("oem", oemHeader()).
+		Set("User-Agent", userAgent())
 
 	return req
 }
@@ -1370,9 +1563,11 @@ func Restart() error {
 	if err != nil {
 		return err
 	}
-	// if the file is old
-	if strings.HasSuffix(self, ".old") {
-		self = strings.TrimRight(self, ".old")
+	// 升级换主程序后，/proc/self/exe 会指向被改名或已删除的 inode（甚至带 " (deleted)"），
+	// 直接 exec 会失败把服务留在已退出状态。归一化 + 回落见 resolveRestartTarget。
+	self, err = resolveRestartTarget(self)
+	if err != nil {
+		return err
 	}
 	args := os.Args
 	env := os.Environ()
@@ -1395,16 +1590,33 @@ func Restart() error {
 func Shutdown() {
 	sites := GetWebsites()
 	for _, w := range sites {
-		// 关闭数据库
-		if w.DB != nil {
-			db, err := w.DB.DB()
-			if err == nil {
-				_ = db.Close()
-			}
+		shutdownWebsite(w)
+	}
+}
+
+// shutdownWebsite 是单个站点的停机序列：停渠道长连接 → 停通知工作者 → 关库 → 关日志。
+//
+// 顺序不能换：两个后台循环都会周期性读写数据库（续租、扫表、UPDATE 投递行），
+// 关库之后再停就是让它们对着已关闭的连接打空转。
+func shutdownWebsite(w *Website) {
+	if w == nil {
+		return
+	}
+	// 先取消渠道长连接并等待 worker 退出，再关闭数据库：
+	// 反过来 worker 的续租会打到已关闭的连接上。
+	w.StopChannelManager()
+	// 通知工作者与渠道管理器同生命周期，同样必须先停。
+	w.StopNotifyWorker()
+	w.StopVideoWorker()
+	// 关闭数据库
+	if w.DB != nil {
+		db, err := w.DB.DB()
+		if err == nil {
+			_ = db.Close()
 		}
-		// 关闭日志文件
-		if w.StatisticLog != nil {
-			w.StatisticLog.Close()
-		}
+	}
+	// 关闭日志文件
+	if w.StatisticLog != nil {
+		w.StatisticLog.Close()
 	}
 }

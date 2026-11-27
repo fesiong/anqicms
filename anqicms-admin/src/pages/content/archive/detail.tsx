@@ -2,8 +2,11 @@ import NewContainer from '@/components/NewContainer';
 import AiGenerate from '@/components/aiGenerate';
 import AiGetTdk from '@/components/aitdk';
 import ArchiveSearch from '@/components/archiveSearch';
+import ArchivePicker from '@/components/archiveSearch/ArchivePicker';
 import AttachmentSelect from '@/components/attachment';
 import ImageItem from '@/components/attachment/image';
+import CustomFieldTextsEditor from '@/components/customFieldTexts';
+import { serializeFilledTextsItems } from '@/components/customFieldTexts/types';
 import CollapseItem from '@/components/collaspeItem';
 import Keywords from '@/components/keywords';
 import SelectColor from '@/components/selectColor';
@@ -52,7 +55,7 @@ import {
   ProFormTextArea,
   ProFormTimePicker,
 } from '@ant-design/pro-components';
-import { FormattedMessage, history, injectIntl } from '@umijs/max';
+import { FormattedMessage, history, injectIntl, useIntl } from '@umijs/max';
 import {
   Badge,
   Button,
@@ -68,9 +71,12 @@ import {
 } from 'antd';
 import dayjs from 'dayjs';
 import React from 'react';
-import { IntlShape } from 'react-intl';
 import { getRuntimeShopMode } from '@/utils/shopMode';
 import './index.less';
+
+// react-intl 不是本项目的直接依赖（pnpm 严格布局下业务侧根本解析不到），
+// 为一个类型去引一份带 Context 的运行时库不划算，直接从 umi 的 useIntl 推导。
+type IntlShape = ReturnType<typeof useIntl>;
 const MarkdownEditor = React.lazy(() => import('@/components/markdown'));
 const NewAiEditor = React.lazy(() => import('@/components/newAiEditor'));
 const SimpleEditor = React.lazy(() => import('@/components/simpleEditor'));
@@ -801,15 +807,8 @@ class ArchiveForm extends React.Component<intlProps> {
       if (!postData.extra[field]) {
         postData.extra[field] = {};
       }
-      postData.extra[field].value = extraTexts[field]
-        .map((item: any) => {
-          return {
-            key: item.key || '',
-            value: (item.values || [''])[0],
-            values: item.values || [''],
-          };
-        })
-        .filter((item: any) => item.key);
+      // 走共享序列化，保留每条目的 type（历史纯文本条目不带 type 字段）
+      postData.extra[field].value = serializeFilledTextsItems(extraTexts[field]);
     }
     // eslint-disable-next-line guard-for-in
     for (let field in extraTimelines) {
@@ -999,150 +998,14 @@ class ArchiveForm extends React.Component<intlProps> {
     });
   };
 
-  onAddExtraTextsField = (field: string) => {
-    const { extraTexts } = this.state;
-    if (!extraTexts[field]) {
-      extraTexts[field] = [];
-    }
-    extraTexts[field].push({
-      key: '',
-      value: '',
-      values: [''],
-    });
+  // texts 字段的统一入口：子组件回传序列化后的条目数组，这里同时写 state 与表单，
+  // 提交时 postData.extra[field].value 用的是 state 里的这份。
+  onChangeExtraTexts = (field: string, list: any[]) => {
+    const extraTexts = { ...this.state.extraTexts, [field]: list };
     const extra: any = {};
-    extra[field] = { value: extraTexts[field] };
+    extra[field] = { value: list };
     this.formRef?.current?.setFieldsValue({ extra });
-    this.setState({
-      extraTexts,
-    });
-  };
-
-  onChangeExtraTextsField = (
-    field: string,
-    idx: number,
-    keyName: any,
-    value: any,
-  ) => {
-    const { extraTexts } = this.state;
-    if (!extraTexts[field][idx]) {
-      extraTexts[field][idx] = {};
-    }
-    extraTexts[field][idx][keyName] = value;
-
-    const extra: any = {};
-    extra[field] = { value: { idx: { keyName: value } } };
-    this.formRef?.current?.setFieldsValue({ extra });
-    this.setState({
-      extraTexts,
-    });
-  };
-
-  onChangeExtraTextsFieldValue = (
-    field: string,
-    idx: number,
-    valueIdx: number,
-    value: any,
-  ) => {
-    const { extraTexts } = this.state;
-    if (!extraTexts[field][idx]) {
-      extraTexts[field][idx] = {};
-    }
-    extraTexts[field][idx].values[valueIdx] = value;
-
-    const extra: any = {};
-    extra[field] = {
-      value: { idx: { values: extraTexts[field][idx].values } },
-    };
-    this.formRef?.current?.setFieldsValue({ extra });
-    this.setState({
-      extraTexts,
-    });
-  };
-
-  onMoveUpExtraTextsField = (field: string, idx: number) => {
-    const { extraTexts } = this.state;
-    // 移动
-    if (idx > 0) {
-      const tmp = extraTexts[field][idx];
-      extraTexts[field][idx] = extraTexts[field][idx - 1];
-      extraTexts[field][idx - 1] = tmp;
-      const extra: any = {};
-      extra[field] = { value: extraTexts[field] };
-      this.formRef?.current?.setFieldsValue({ extra });
-      this.setState({
-        extraTexts,
-      });
-    }
-  };
-
-  onMoveDownExtraTextsField = (field: string, idx: number) => {
-    const { extraTexts } = this.state;
-    // 移动
-    if (idx < extraTexts[field].length - 1) {
-      const tmp = extraTexts[field][idx];
-      extraTexts[field][idx] = extraTexts[field][idx + 1];
-      extraTexts[field][idx + 1] = tmp;
-      const extra: any = {};
-      extra[field] = { value: extraTexts[field] };
-      this.formRef?.current?.setFieldsValue({ extra });
-      this.setState({
-        extraTexts,
-      });
-    }
-  };
-
-  onRemoveExtraTextsField = (field: string, idx: number) => {
-    const { extraTexts } = this.state;
-    Modal.confirm({
-      title: this.props.intl.formatMessage({
-        id: 'content.module.field.delete.confirm',
-      }),
-      content: this.props.intl.formatMessage({
-        id: 'content.module.field.delete.content',
-      }),
-      onOk: () => {
-        if (extraTexts[field].length === 1) {
-          extraTexts[field] = [];
-        } else {
-          extraTexts[field].splice(idx, 1);
-        }
-        const extra: any = {};
-        extra[field] = { value: extraTexts[field] };
-        this.formRef?.current?.setFieldsValue({ extra });
-        this.setState({
-          extraTexts,
-        });
-      },
-    });
-  };
-
-  onAddExtraTextsFieldValue = (field: string, idx: number) => {
-    const { extraTexts } = this.state;
-    extraTexts[field][idx].values.push('');
-    const extra: any = {};
-    extra[field] = { value: extraTexts[field] };
-    this.formRef?.current?.setFieldsValue({ extra });
-    this.setState({
-      extraTexts,
-    });
-  };
-
-  onReduceExtraTextsFieldValue = (
-    field: string,
-    idx: number,
-    valueIdx: number,
-  ) => {
-    const { extraTexts } = this.state;
-    if (extraTexts[field][idx].values.length <= 1) {
-      return;
-    }
-    extraTexts[field][idx].values.splice(valueIdx, 1);
-    const extra: any = {};
-    extra[field] = { value: extraTexts[field] };
-    this.formRef?.current?.setFieldsValue({ extra });
-    this.setState({
-      extraTexts,
-    });
+    this.setState({ extraTexts });
   };
 
   //////////
@@ -2230,182 +2093,23 @@ class ArchiveForm extends React.Component<intlProps> {
                                     )}
                                   </ProFormText>
                                 ) : item.type === 'texts' ? (
-                                  <ProFormText label={item.name}>
-                                    <div className="text-groups">
-                                      <div className="text-group">
-                                        <div className="text-key">Key</div>
-                                        <div className="text-value">Values</div>
-                                        <div className="text-action"></div>
-                                      </div>
-                                      {extraTexts?.[item.field_name]?.length
-                                        ? extraTexts[item.field_name].map(
-                                            (inner: any, idx: number) => (
-                                              <div
-                                                className="text-group"
-                                                key={idx}
-                                              >
-                                                <div className="text-key">
-                                                  <ProFormText
-                                                    name={[
-                                                      'extra',
-                                                      item.field_name,
-                                                      'value',
-                                                      idx,
-                                                      'key',
-                                                    ]}
-                                                    fieldProps={{
-                                                      onChange: (e: any) => {
-                                                        this.onChangeExtraTextsField(
-                                                          item.field_name,
-                                                          idx,
-                                                          'key',
-                                                          e.target.value,
-                                                        );
-                                                      },
-                                                    }}
-                                                  />
-                                                </div>
-                                                <div className="text-value">
-                                                  <Space
-                                                    size={16}
-                                                    direction="vertical"
-                                                    style={{ width: '100%' }}
-                                                  >
-                                                    {inner.values?.map(
-                                                      (
-                                                        value: string,
-                                                        valueIdx: number,
-                                                      ) => (
-                                                        <ProFormText
-                                                          key={valueIdx}
-                                                          name={[
-                                                            'extra',
-                                                            item.field_name,
-                                                            'value',
-                                                            idx,
-                                                            'values',
-                                                            valueIdx,
-                                                          ]}
-                                                          fieldProps={{
-                                                            onChange: (
-                                                              e: any,
-                                                            ) => {
-                                                              this.onChangeExtraTextsFieldValue(
-                                                                item.field_name,
-                                                                idx,
-                                                                valueIdx,
-                                                                e.target.value,
-                                                              );
-                                                            },
-                                                            prefix: inner.values
-                                                              .length > 1 && (
-                                                              <span>
-                                                                {valueIdx + 1}.
-                                                              </span>
-                                                            ),
-                                                            addonAfter: (
-                                                              <Tag
-                                                                onClick={() =>
-                                                                  this.onReduceExtraTextsFieldValue(
-                                                                    item.field_name,
-                                                                    idx,
-                                                                    valueIdx,
-                                                                  )
-                                                                }
-                                                              >
-                                                                <DeleteOutlined />
-                                                              </Tag>
-                                                            ),
-                                                          }}
-                                                        />
-                                                      ),
-                                                    )}
-                                                  </Space>
-                                                </div>
-                                                <div className="text-action">
-                                                  <Tag
-                                                    onClick={() =>
-                                                      this.onAddExtraTextsFieldValue(
-                                                        item.field_name,
-                                                        idx,
-                                                      )
-                                                    }
-                                                  >
-                                                    <PlusOutlined />
-                                                  </Tag>
-                                                  <Tag
-                                                    onClick={() =>
-                                                      this.onMoveUpExtraTextsField(
-                                                        item.field_name,
-                                                        idx,
-                                                      )
-                                                    }
-                                                  >
-                                                    <UpOutlined />
-                                                  </Tag>
-                                                  <Tag
-                                                    onClick={() =>
-                                                      this.onMoveDownExtraTextsField(
-                                                        item.field_name,
-                                                        idx,
-                                                      )
-                                                    }
-                                                  >
-                                                    <DownOutlined />
-                                                  </Tag>
-                                                  <Tag
-                                                    color="red"
-                                                    onClick={() =>
-                                                      this.onRemoveExtraTextsField(
-                                                        item.field_name,
-                                                        idx,
-                                                      )
-                                                    }
-                                                  >
-                                                    <DeleteOutlined />
-                                                  </Tag>
-                                                </div>
-                                              </div>
-                                            ),
-                                          )
-                                        : null}
-                                      <div className="text-group">
-                                        <div className="text-key">
-                                          <Tag
-                                            color="blue"
-                                            className="add-line"
-                                            onClick={() =>
-                                              this.onAddExtraTextsField(
-                                                item.field_name,
-                                              )
-                                            }
-                                          >
-                                            {this.props.intl.formatMessage({
-                                              id: 'content.param.add-line',
-                                            })}
-                                          </Tag>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </ProFormText>
+                                  <CustomFieldTextsEditor
+                                    field={item}
+                                    value={extraTexts?.[item.field_name] || []}
+                                    onChange={(list: any[]) =>
+                                      this.onChangeExtraTexts(
+                                        item.field_name,
+                                        list,
+                                      )
+                                    }
+                                  />
                                 ) : item.type === 'archive' ? (
-                                  <ProFormText label={item.name}>
-                                    <ProFormSelect
-                                      name={['extra', item.field_name, 'value']}
-                                      showSearch
-                                      mode="multiple"
-                                      options={searchArchives.map((a: any) => ({
-                                        title: a.title,
-                                        label: a.title,
-                                        value: a.id,
-                                      }))}
-                                      fieldProps={{
-                                        onSearch: (e) => {
-                                          this.onSearchArchives(e);
-                                        },
-                                      }}
-                                    />
-                                  </ProFormText>
+                                  <ProForm.Item
+                                    label={item.name}
+                                    name={['extra', item.field_name, 'value']}
+                                  >
+                                    <ArchivePicker />
+                                  </ProForm.Item>
                                 ) : item.type === 'category' ? (
                                   <ProFormText label={item.name}>
                                     <ProFormSelect
@@ -3300,6 +3004,7 @@ class ArchiveForm extends React.Component<intlProps> {
                       <AttachmentSelect
                         onSelect={this.handleSelectImages}
                         open={false}
+                        type={1}
                         multiple={true}
                       >
                         <div className="ant-upload-item">

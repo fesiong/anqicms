@@ -203,9 +203,6 @@ const AiGenerate: React.FC<AiGenerateProps> = (props) => {
               </Tag>
             )}
           </Space>
-          <div>
-            <FormattedMessage id="component.right-content.total-token.description" />
-          </div>
         </div>
       </div>
       <ProForm layout="horizontal" submitter={false}>

@@ -11,6 +11,7 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/provider/sms"
 	"kandaoni.com/anqicms/request"
 )
 
@@ -48,6 +49,29 @@ func ApiRegister(ctx iris.Context) {
 	if req.UserName == "" && req.Email != "" {
 		req.UserName = strings.Split(req.Email, "@")[0]
 	}
+	// R90：传了 phone 就必须先按 §6.2 六道闸门归一化校验（含 ITU 区号成员），
+	// 拒绝伪造区号；成功后回填已校验的区号/号码并置内部标记 PhoneNormalized。
+	// 短信渠道已开启（Provider 非空）时再强制校验 register 场景码，失败整单拒；
+	// code 为空也不得旁路（空码会在 HMAC 比对处落错码错误）。后台未开启短信
+	// （PluginSms 为 nil 或 Provider 为空）时没有发码/验码链路，只跳过短信码校验，
+	// 归一化照常执行、注册继续往下走，否则用户永远收不到码、注册无法完成。
+	// 不传 phone 时整段不进入，行为与 BASE 逐字一致。
+	if req.Phone != "" {
+		p, e := sms.NormalizePhone(req.PhoneCountry, req.Phone)
+		if e != nil {
+			respondSmsError(ctx, currentSite, e)
+			return
+		}
+		req.PhoneCountry = p.Country
+		req.Phone = p.Local
+		req.PhoneNormalized = true
+		if currentSite.PluginSms != nil && currentSite.PluginSms.Provider != "" {
+			if e = currentSite.VerifySmsCode(p.Country, p.Local, sms.SceneRegister, req.Code); e != nil {
+				respondSmsError(ctx, currentSite, e)
+				return
+			}
+		}
+	}
 	user, err := currentSite.RegisterUser(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -58,19 +82,11 @@ func ApiRegister(ctx iris.Context) {
 	}
 
 	if user.EmailVerified == false {
-		//提示验证
+		// 提示验证，并且不登录。
+		// 验证邮件已由 RegisterUser 发给用户；这里不能再发一次给管理员，
+		// 否则注册记录里会多出一封与用户无关的“请验证邮箱”。
 		template, exist := currentSite.GetEmailTemplateInfo("register")
 		if exist && template.Open {
-			// 提示正在验证, 并且不登录
-			data := map[string]interface{}{
-				"website": currentSite,
-				"user":    user,
-			}
-			var err error
-			template, err = currentSite.RenderEmailTemplate(template, data)
-			if err == nil {
-				currentSite.SendMail(template.Subject, template.Content, nil)
-			}
 			ctx.JSON(iris.Map{
 				"code": config.StatusOK,
 				"msg":  ctx.Tr("PleaseVerifyEmail"),
@@ -150,6 +166,14 @@ func ApiLogin(ctx iris.Context) {
 				"code": config.StatusFailed,
 				"msg":  err.Error(),
 			})
+			return
+		}
+	} else if req.Platform == config.PlatformSms {
+		// 短信验证码登录（未注册自动注册，规格 §7.1 / §6.5）。
+		// 统一走 respondSmsError（R81）：不得把审核/封禁提示吞成 TplTr("LoginFailed")。
+		user, err = currentSite.LoginViaSms(&req)
+		if err != nil {
+			respondSmsError(ctx, currentSite, err)
 			return
 		}
 	} else {
@@ -484,6 +508,12 @@ func ApiGetUserDetail(ctx iris.Context) {
 		})
 		return
 	}
+	// 带上所属用户组及其「可投稿栏目」，前台投稿页据此只渲染有权限的栏目，
+	// 而不是让用户选完再被打回一个权限错误。
+	if userGroup, err := currentSite.GetUserGroupInfo(user.GroupId); err == nil {
+		currentSite.AttachUserGroupPublishCategories(userGroup)
+		user.Group = userGroup
+	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -625,6 +655,9 @@ func ApiGetUserGroupDetail(ctx iris.Context) {
 			}
 		}
 	}
+	// 与后台详情接口口径一致：默认不查授权（GetUserGroupInfo 在登录中间件热路径上），
+	// 这里是页面要用的详情，补一次。
+	currentSite.AttachUserGroupPublishCategories(group)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

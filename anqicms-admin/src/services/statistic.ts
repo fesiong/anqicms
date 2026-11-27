@@ -175,3 +175,14 @@ export async function getStatisticSearchDetail(
     options,
   });
 }
+
+export async function getStatisticArchive(
+  params?: any,
+  options?: { [key: string]: any },
+) {
+  return get({
+    url: '/statistic/archive',
+    params,
+    options,
+  });
+}

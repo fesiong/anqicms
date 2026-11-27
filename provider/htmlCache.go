@@ -106,6 +106,32 @@ func (w *Website) BuildHtmlCache(ctx iris.Context) {
 	_ = w.SyncHtmlCacheToStorage("", "")
 }
 
+// newCacheRenderContext 准备一个「与触发请求生命周期解绑」的渲染用 ctx。
+//
+// 为什么必须解绑：Build*Cache 系列都由后台 handler 以 `go w2.BuildXxx(ctx)` 触发，
+// handler 一返回，原请求的 context 就被 cancel；而 view.DjangoEngine.ExecuteWriter
+// 第一件事就是检查 ctx.Request().Context().Err()，一旦已取消就直接返回、
+// 模板一个字都不渲染。Build*Cache 恰恰靠「渲染一次模板」的副作用拿 webInfo.TotalPages，
+// 于是分页数恒为 0 —— 列表页只写第一页，而且错误被 `_ =` 吞掉，日志里毫无痕迹
+// （2026-11-19 实测：viewErr=context canceled，totalPages=0）。
+func newCacheRenderContext(ctx iris.Context) iris.Context {
+	newCtx := ctx.Clone()
+	if req := newCtx.Request(); req != nil {
+		// WithoutCancel 去掉 Done/Err/Deadline，但保留 context 上的值（trace、logger 等）。
+		newCtx.ResetRequest(req.WithContext(context.WithoutCancel(req.Context())))
+	}
+	newCtx.ResetResponseWriter(&responseWriter{ResponseWriter: newResponseWriter()})
+	return newCtx
+}
+
+// renderCacheTemplate 渲染一次模板，只为让标签把分页数写回 webInfo。
+// 渲染失败必须留痕：失败时 webInfo.TotalPages 保持 0，列表页会静默地只生成第一页。
+func (w *Website) renderCacheTemplate(ctx iris.Context, tplName string) {
+	if err := ctx.Application().View(ctx, tplName, "", ctx.GetViewData()); err != nil {
+		log.Printf("[htmlCache] 模板渲染失败，分页将缺失 site=%d tpl=%s err=%v", w.Id, tplName, err)
+	}
+}
+
 func (w *Website) BuildIndexCache() {
 	if w.PluginHtmlCache.Open == false {
 		return
@@ -162,6 +188,11 @@ func (w *Website) BuildModuleCache(ctx iris.Context) {
 		// 模型只生成第一页
 		link := w.GetUrl("archiveIndex", module, 0)
 		link = strings.TrimPrefix(link, frontUrl)
+		// firstLink 必须在分页循环之前固定下来：循环会把 link 改写成最后一页，
+		// 而移动端第一页只有用第一页链接去请求，才会落到 cache/mobile/<path>/index.html。
+		// 之前移动端第一页直接复用了 link，导致手机端首页始终没有静态文件，
+		// 只有末页被反复写入（护栏见 TestMobileCacheUsesFirstPageLink）。
+		firstLink := link
 		err := w.GetAndCacheHtmlData(link, false)
 		if err != nil {
 			w.HtmlCacheStatus.ErrorMsg = w.Tr("GenerateModelFailed", module.Title, err.Error())
@@ -169,10 +200,7 @@ func (w *Website) BuildModuleCache(ctx iris.Context) {
 		}
 		w.HtmlCacheStatus.FinishedCount += 1
 		// 检查模型是否有分页，如果有，则继续生成分页
-		newCtx := ctx.Clone()
-		writer := newResponseWriter()
-		respWriter := &responseWriter{ResponseWriter: writer}
-		newCtx.ResetResponseWriter(respWriter)
+		newCtx := newCacheRenderContext(ctx)
 		newCtx.ViewData("module", module)
 		newCtx.ViewData("pageName", "archiveIndex")
 		webInfo := &response.WebInfo{
@@ -186,7 +214,7 @@ func (w *Website) BuildModuleCache(ctx iris.Context) {
 		if ViewExists(newCtx, tplName2) {
 			tplName = tplName2
 		}
-		_ = newCtx.Application().View(newCtx, tplName, "", newCtx.GetViewData())
+		w.renderCacheTemplate(newCtx, tplName)
 		if webInfo.TotalPages > 1 {
 			w.HtmlCacheStatus.Total += webInfo.TotalPages - 1
 			// 当存在多页的时候，则循环生成
@@ -204,12 +232,14 @@ func (w *Website) BuildModuleCache(ctx iris.Context) {
 		// mobile
 		if w.System.TemplateType != config.TemplateTypeAuto {
 			w.HtmlCacheStatus.Total += 1
-			err = w.GetAndCacheHtmlData(link, true)
+			err = w.GetAndCacheHtmlData(firstLink, true)
 			if err == nil {
 				w.HtmlCacheStatus.FinishedCount += 1
 			}
+			// 移动端模板的分页数可能与 PC 不同，重置后重新渲染取一次
 			tplName = "mobile/" + tplName
-			_ = newCtx.View(tplName)
+			webInfo.TotalPages = 0
+			w.renderCacheTemplate(newCtx, tplName)
 			if webInfo.TotalPages > 1 {
 				w.HtmlCacheStatus.Total += webInfo.TotalPages - 1
 				// 当存在多页的时候，则循环生成
@@ -262,6 +292,8 @@ func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Cat
 	// 栏目只生成第一页
 	link := w.GetUrl("category", category, 0)
 	link = strings.TrimPrefix(link, frontUrl)
+	// firstLink 固定第一页链接，供移动端第一页使用（分页循环会改写 link）
+	firstLink := link
 	err := w.GetAndCacheHtmlData(link, false)
 	if err != nil {
 		if w.HtmlCacheStatus != nil {
@@ -277,10 +309,7 @@ func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Cat
 	if module == nil {
 		return
 	}
-	newCtx := ctx.Clone()
-	writer := newResponseWriter()
-	respWriter := &responseWriter{ResponseWriter: writer}
-	newCtx.ResetResponseWriter(respWriter)
+	newCtx := newCacheRenderContext(ctx)
 	newCtx.ViewData("category", category)
 	newCtx.ViewData("pageName", "archiveList")
 	webInfo := &response.WebInfo{
@@ -309,7 +338,7 @@ func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Cat
 	if !strings.HasSuffix(tplName, ".html") {
 		tplName += ".html"
 	}
-	_ = newCtx.Application().View(newCtx, tplName, "", newCtx.GetViewData())
+	w.renderCacheTemplate(newCtx, tplName)
 	if webInfo.TotalPages > 1 {
 		if w.HtmlCacheStatus != nil {
 			w.HtmlCacheStatus.Total += webInfo.TotalPages - 1
@@ -335,7 +364,7 @@ func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Cat
 		if w.HtmlCacheStatus != nil {
 			w.HtmlCacheStatus.Total += 1
 		}
-		err = w.GetAndCacheHtmlData(link, true)
+		err = w.GetAndCacheHtmlData(firstLink, true)
 		if err == nil {
 			if w.HtmlCacheStatus != nil {
 				w.HtmlCacheStatus.FinishedCount += 1
@@ -343,7 +372,7 @@ func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Cat
 		}
 		tplName = "mobile/" + tplName
 		webInfo.TotalPages = 0
-		err = newCtx.View(tplName)
+		w.renderCacheTemplate(newCtx, tplName)
 		if webInfo.TotalPages > 1 {
 			if w.HtmlCacheStatus != nil {
 				w.HtmlCacheStatus.Total += webInfo.TotalPages - 1
@@ -389,10 +418,7 @@ func (w *Website) BuildSinglePlaceCache(ctx iris.Context, place *model.Place) {
 	if w.HtmlCacheStatus != nil {
 		w.HtmlCacheStatus.FinishedCount += 1
 	}
-	newCtx := ctx.Clone()
-	writer := newResponseWriter()
-	respWriter := &responseWriter{ResponseWriter: writer}
-	newCtx.ResetResponseWriter(respWriter)
+	newCtx := newCacheRenderContext(ctx)
 	newCtx.ViewData("place", place)
 	newCtx.ViewData("pageName", "placeDetail")
 	webInfo := &response.WebInfo{
@@ -422,7 +448,7 @@ func (w *Website) BuildSinglePlaceCache(ctx iris.Context, place *model.Place) {
 	if _, ok := w.TemplateExist(tplName); !ok {
 		return
 	}
-	_ = newCtx.Application().View(newCtx, tplName, "", newCtx.GetViewData())
+	w.renderCacheTemplate(newCtx, tplName)
 
 	// mobile
 	if w.System.TemplateType != config.TemplateTypeAuto {
@@ -437,7 +463,7 @@ func (w *Website) BuildSinglePlaceCache(ctx iris.Context, place *model.Place) {
 		}
 		tplName = "mobile/" + tplName
 		webInfo.TotalPages = 0
-		err = newCtx.View(tplName)
+		w.renderCacheTemplate(newCtx, tplName)
 	}
 }
 
@@ -502,6 +528,8 @@ func (w *Website) BuildTagIndexCache(ctx iris.Context) {
 	w.HtmlCacheStatus.Current = w.Tr("StartGeneratingTagHomepage")
 	w.HtmlCacheStatus.Total += 1
 	link := w.GetUrl("tagIndex", nil, 0)
+	// firstLink 固定第一页链接，供移动端第一页使用（分页循环会改写 link）
+	firstLink := link
 	// 先生成首页
 	err := w.GetAndCacheHtmlData(link, false)
 	if err != nil {
@@ -514,10 +542,7 @@ func (w *Website) BuildTagIndexCache(ctx iris.Context) {
 		frontUrl = w.System.FrontUrl
 	}
 	// 检查模型是否有分页，如果有，则继续生成分页
-	newCtx := ctx.Clone()
-	writer := newResponseWriter()
-	respWriter := &responseWriter{ResponseWriter: writer}
-	newCtx.ResetResponseWriter(respWriter)
+	newCtx := newCacheRenderContext(ctx)
 	newCtx.ViewData("pageName", "tagIndex")
 	webInfo := &response.WebInfo{
 		Title:    w.Tr("TagList"),
@@ -528,7 +553,7 @@ func (w *Website) BuildTagIndexCache(ctx iris.Context) {
 	if ViewExists(newCtx, "tag_index.html") {
 		tplName = "tag_index.html"
 	}
-	_ = newCtx.Application().View(newCtx, tplName, "", newCtx.GetViewData())
+	w.renderCacheTemplate(newCtx, tplName)
 	if webInfo.TotalPages > 1 {
 		w.HtmlCacheStatus.Total += webInfo.TotalPages - 1
 		// 当存在多页的时候，则循环生成
@@ -546,14 +571,14 @@ func (w *Website) BuildTagIndexCache(ctx iris.Context) {
 	// mobile
 	if w.System.TemplateType != config.TemplateTypeAuto {
 		w.HtmlCacheStatus.Total += 1
-		err = w.GetAndCacheHtmlData(link, true)
+		err = w.GetAndCacheHtmlData(firstLink, true)
 		if err == nil {
 			w.HtmlCacheStatus.FinishedCount += 1
 		}
 		// 检查模型是否有分页，如果有，则继续生成分页
 		tplName = "mobile/" + tplName
 		webInfo.TotalPages = 0
-		_ = newCtx.View(tplName)
+		w.renderCacheTemplate(newCtx, tplName)
 		if webInfo.TotalPages > 1 {
 			w.HtmlCacheStatus.Total += webInfo.TotalPages - 1
 			// 当存在多页的时候，则循环生成
@@ -616,6 +641,8 @@ func (w *Website) BuildSingleTagCache(ctx iris.Context, tag *model.Tag) {
 	}
 	link := w.GetUrl("tag", tag, 0)
 	link = strings.TrimPrefix(link, frontUrl)
+	// firstLink 固定第一页链接，供移动端第一页使用（分页循环会改写 link）
+	firstLink := link
 	err := w.GetAndCacheHtmlData(link, false)
 	if err != nil {
 		if w.HtmlCacheStatus != nil {
@@ -627,10 +654,7 @@ func (w *Website) BuildSingleTagCache(ctx iris.Context, tag *model.Tag) {
 		w.HtmlCacheStatus.FinishedCount += 1
 	}
 	// 检查模型是否有分页，如果有，则继续生成分页
-	newCtx := ctx.Clone()
-	writer := newResponseWriter()
-	respWriter := &responseWriter{ResponseWriter: writer}
-	newCtx.ResetResponseWriter(respWriter)
+	newCtx := newCacheRenderContext(ctx)
 	newCtx.ViewData("tag", tag)
 	newCtx.ViewData("pageName", "tag")
 	webInfo := &response.WebInfo{
@@ -643,7 +667,7 @@ func (w *Website) BuildSingleTagCache(ctx iris.Context, tag *model.Tag) {
 	if ViewExists(ctx, "tag_list.html") {
 		tplName = "tag_list.html"
 	}
-	_ = newCtx.Application().View(newCtx, tplName, "", newCtx.GetViewData())
+	w.renderCacheTemplate(newCtx, tplName)
 	if webInfo.TotalPages > 1 {
 		if w.HtmlCacheStatus != nil {
 			w.HtmlCacheStatus.Total += webInfo.TotalPages - 1
@@ -669,7 +693,7 @@ func (w *Website) BuildSingleTagCache(ctx iris.Context, tag *model.Tag) {
 		if w.HtmlCacheStatus != nil {
 			w.HtmlCacheStatus.Total += 1
 		}
-		err = w.GetAndCacheHtmlData(link, true)
+		err = w.GetAndCacheHtmlData(firstLink, true)
 		if err == nil {
 			if w.HtmlCacheStatus != nil {
 				w.HtmlCacheStatus.FinishedCount += 1
@@ -677,7 +701,7 @@ func (w *Website) BuildSingleTagCache(ctx iris.Context, tag *model.Tag) {
 		}
 		tplName = "mobile/" + tplName
 		webInfo.TotalPages = 0
-		_ = newCtx.View(tplName)
+		w.renderCacheTemplate(newCtx, tplName)
 		if webInfo.TotalPages > 1 {
 			if w.HtmlCacheStatus != nil {
 				w.HtmlCacheStatus.Total += webInfo.TotalPages - 1

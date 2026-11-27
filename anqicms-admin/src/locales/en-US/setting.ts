@@ -316,7 +316,7 @@ export default {
     'Prevents excessive calls from third-party AI from overloading the service. 0 means unlimited',
   'setting.ai.mcp-exposed-tools': 'Allowed tools',
   'setting.ai.mcp-exposed-tools-placeholder':
-    'Leave empty to allow all common tools; enter * to allow everything (including risky tools); or list only the ones you want, separated with commas',
+    'Leave empty to allow every default-visible tool (including host-level ones such as shell_exec, fs_* and web); channel chats inherit this list. Enter * to also open gated tools (including risky ones), or list only the intents you need, separated by commas',
   'setting.ai.mcp-exposed-tools-extra':
     'Risky tools such as backup, upgrade, and delete are not enabled by default — add them here to allow. You can also enter a category name (e.g. content, seo) to allow a whole group',
   'setting.ai.mcp-available-tools':

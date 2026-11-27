@@ -18,20 +18,26 @@ import (
 func TestNoToSQLInUserFacingListQueries(t *testing.T) {
 	const srcFile = "archive.go"
 
-	forbiddenFn := mustFindProviderFunc(t, srcFile, "GetArchiveByFunc")
-	if callName(forbiddenFn, "ToSQL") != "" {
-		t.Errorf("GetArchiveByFunc 不得调用 ToSQL（issue #93）：filename 等外部输入会经此查询")
+	// filename 经 GetArchiveByFunc → takeArchive → selectArchiveByFunc 取整行。
+	// 这条路径用参数化链式 Take，天然无 ToSQL 内联，正向锚点是
+	// selectArchiveByFunc 的参数化 Take；三个函数体内都不得出现 ToSQL。
+	for _, name := range []string{"GetArchiveByFunc", "takeArchive", "selectArchiveByFunc"} {
+		fn := mustFindProviderFunc(t, srcFile, name)
+		if callName(fn, "ToSQL") != "" {
+			t.Errorf("%s 不得调用 ToSQL（issue #93）：filename 等外部输入会经此查询", name)
+		}
 	}
-	if callName(forbiddenFn, "dryRunSQL") == "" {
-		t.Error("GetArchiveByFunc 应调用 dryRunSQL 保留占位符，否则反向对照失效")
+	selectFn := mustFindProviderFunc(t, srcFile, "selectArchiveByFunc")
+	if callName(selectFn, "Take") == "" {
+		t.Error("selectArchiveByFunc 应以参数化 Take 取整行，否则反向对照失效")
 	}
 
 	listFn := mustFindProviderFunc(t, srcFile, "GetArchiveList")
 	if callName(listFn, "ToSQL") != "" {
 		t.Error("GetArchiveList 不得调用 ToSQL（issue #93）：search/module/archives 的 q 经此查询")
 	}
-	if callName(listFn, "GetExplainCountParams") == "" {
-		t.Error("GetArchiveList 应使用 GetExplainCountParams 做参数化 EXPLAIN")
+	if callName(listFn, "getExplainCountParams") == "" {
+		t.Error("GetArchiveList 应使用参数化 getExplainCountParams 做 EXPLAIN 估算")
 	}
 }
 
@@ -47,10 +53,10 @@ func TestTagListUsesParameterizedExplain(t *testing.T) {
 	}
 }
 
-// TestExplainExecUsesVars 断言 GetExplainCountParams 的 EXPLAIN 执行把 vars 传给 Raw，
-// 而不是字符串拼接 —— 这是整个根治方案能成立的关键一行。
+// TestExplainExecUsesVars 断言 EXPLAIN 执行把 vars 传给 Raw，而不是字符串拼接
+// —— 这是整个根治方案能成立的关键一行。oem 分支中真正执行的是 getExplainCountParams。
 func TestExplainExecUsesVars(t *testing.T) {
-	fn := mustFindProviderFunc(t, "archive.go", "GetExplainCountParams")
+	fn := mustFindProviderFunc(t, "archive.go", "getExplainCountParams")
 	rawOK := false
 	ast.Inspect(fn, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
@@ -68,7 +74,7 @@ func TestExplainExecUsesVars(t *testing.T) {
 		return true
 	})
 	if !rawOK {
-		t.Error("GetExplainCountParams 必须以 Raw(sql, vars...) 参数化执行 EXPLAIN")
+		t.Error("getExplainCountParams 必须以 Raw(sql, vars...) 参数化执行 EXPLAIN")
 	}
 }
 

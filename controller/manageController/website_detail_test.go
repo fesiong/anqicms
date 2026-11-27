@@ -3,6 +3,7 @@ package manageController
 import (
 	"encoding/json"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -38,8 +39,13 @@ func TestWebsiteDetailNoPasswordField(t *testing.T) {
 	}
 	// 结构体里可以有 Password 字段（用于输出掩码），但绝不能复用
 	// config.MysqlConfig——那个带真值。断言 Mysql 用的是脱敏类型。
-	if !strings.Contains(seg, "Mysql     WebsiteMysqlSafe") &&
-		!strings.Contains(seg, "Mysql WebsiteMysqlSafe") {
+	//
+	// ⚠️ 断言必须**忽略对齐空格**：gofmt 的对齐宽度随最长字段名变化，
+	// 早期版本把 "Mysql     WebsiteMysqlSafe"（5 空格）写死，后来
+	// request/website.go 里出现了更长的字段名，对齐变成 7 空格，
+	// 断言就误报「实际用的不是脱敏类型」——测试自身脆弱，
+	// 与产品无关（该类型本来就正确）。改用 \s+ 匹配（2026-11-15，裁决 R108）。
+	if !regexp.MustCompile(`Mysql\s+WebsiteMysqlSafe`).MatchString(seg) {
 		t.Errorf("Mysql 字段必须用脱敏类型 WebsiteMysqlSafe，实际：\n%s", seg)
 	}
 	if strings.Contains(seg, "config.MysqlConfig") {
@@ -58,7 +64,10 @@ func TestWebsiteDetailNoPasswordField(t *testing.T) {
 		t.Errorf("只读结构体应能正常反序列化：%v", err)
 	}
 
-	// 控制器必须用它而不是 WebsiteRequest
+	// 控制器必须用它而不是 WebsiteRequest。
+	// 2026-11-15 起 GetWebsiteInfo 只负责取数据，响应由 buildWebsiteDetailResponse
+	// 组装（抽出来的原因是详情接口在 System == nil 的站点上空指针 → 500）。
+	// 所以断言改为：handler 走构造函数 + 构造函数用只读结构体。
 	c, err := os.ReadFile("website.go")
 	if err != nil {
 		t.Fatalf("读 website.go 失败: %v", err)
@@ -72,11 +81,24 @@ func TestWebsiteDetailNoPasswordField(t *testing.T) {
 	if n := strings.Index(fn, "\n}\n"); n > 0 {
 		fn = fn[:n]
 	}
-	if !strings.Contains(fn, "request.WebsiteDetailResponse{") {
-		t.Error("GetWebsiteInfo 必须用 WebsiteDetailResponse，不能复用写请求结构体")
+	if !strings.Contains(fn, "buildWebsiteDetailResponse(") {
+		t.Error("GetWebsiteInfo 必须经 buildWebsiteDetailResponse 组装响应（nil System 保护也在这里）")
 	}
-	if strings.Contains(fn, "request.WebsiteRequest{") {
-		t.Error("GetWebsiteInfo 仍复用 WebsiteRequest，会把 admin_password 带进响应")
+	k := strings.Index(cs, "func buildWebsiteDetailResponse")
+	if k < 0 {
+		t.Fatal("未找到 buildWebsiteDetailResponse")
+	}
+	builder := cs[k:]
+	if n := strings.Index(builder, "\n}\n"); n > 0 {
+		builder = builder[:n]
+	}
+	if !strings.Contains(builder, "request.WebsiteDetailResponse") {
+		t.Error("buildWebsiteDetailResponse 必须用 WebsiteDetailResponse，不能复用写请求结构体")
+	}
+	for _, seg := range []string{fn, builder} {
+		if strings.Contains(seg, "request.WebsiteRequest{") {
+			t.Error("站点读接口仍复用 WebsiteRequest，会把 admin_password 带进响应")
+		}
 	}
 }
 

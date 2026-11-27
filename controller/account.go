@@ -20,7 +20,7 @@ func LoginPage(ctx iris.Context) {
 		webInfo.Title = currentSite.TplTr("Login")
 		ctx.ViewData("webInfo", webInfo)
 	}
-	err := ctx.View(GetViewPath(ctx, "login.html"))
+	err := renderView(ctx, GetViewPath(ctx, "login.html"))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
 	}
@@ -32,7 +32,7 @@ func RegisterPage(ctx iris.Context) {
 		webInfo.Title = currentSite.TplTr("Register")
 		ctx.ViewData("webInfo", webInfo)
 	}
-	err := ctx.View(GetViewPath(ctx, "register.html"))
+	err := renderView(ctx, GetViewPath(ctx, "register.html"))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
 	}
@@ -73,7 +73,7 @@ func AccountPasswordResetPage(ctx iris.Context) {
 	ctx.ViewData("email", email)
 	ctx.ViewData("code", code)
 
-	err = ctx.View(GetViewPath(ctx, "account/password_reset.html"))
+	err = renderView(ctx, GetViewPath(ctx, "account/password_reset.html"))
 	if err != nil {
 		ctx.StatusCode(404)
 		ctx.Values().Set("message", err.Error())
@@ -110,7 +110,7 @@ func AccountIndexPage(ctx iris.Context) {
 
 	ctx.ViewData("currentRoute", route)
 
-	err := ctx.View(GetViewPath(ctx, tpl))
+	err := renderView(ctx, GetViewPath(ctx, tpl))
 	if err != nil {
 		ctx.StatusCode(404)
 		ctx.Values().Set("message", err.Error())

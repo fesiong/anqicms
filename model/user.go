@@ -32,6 +32,7 @@ type User struct {
 	Email         string `json:"email" gorm:"column:email;type:varchar(100) not null;default:'';index:idx_email"`
 	EmailVerified bool   `json:"email_verified" gorm:"column:email_verified;type:tinyint(1) not null;default:0"`
 	Phone         string `json:"phone" gorm:"column:phone;type:varchar(20) not null;default:'';index"`
+	PhoneCountry  string `json:"phone_country" gorm:"column:phone_country;type:varchar(8);not null;default:'86'"`
 	GroupId       uint   `json:"group_id" gorm:"column:group_id;type:int(10) unsigned not null;default:0"`
 	GoogleId      string `json:"google_id" gorm:"column:google_id;type:varchar(255) not null;default:''"`
 	Password      string `json:"-" gorm:"column:password;type:varchar(255) not null;default:''"`
@@ -66,6 +67,26 @@ type UserGroup struct {
 	Price          int64            `json:"price" gorm:"column:price;type:bigint(20) not null;default:0"`
 	Setting        UserGroupSetting `json:"setting" gorm:"setting;type:text DEFAULT NULL; COMMENT '配置信息'"` //配置
 	FavorablePrice int64            `json:"favorable_price" gorm:"-"`
+
+	// PublishCategoryIds 该用户组被授权「前台投稿」的栏目 ID。
+	//
+	// 不是 user_groups 表的列（`gorm:"-"`），而是关系表 user_group_categories 的投影，
+	// 由 Website.AttachUserGroupPublishCategories 在读接口里批量填充。
+	// 不做成 Setting 里的 JSON：栏目被删除时要能清理授权、也要能按栏目反查用户组，
+	// JSON 列两件都做不到。
+	//
+	// 空切片 = 该用户组不能在前台投稿（fail closed，产品要求「默认不选中」）。
+	PublishCategoryIds []uint `json:"publish_category_ids" gorm:"-"`
+}
+
+// UserGroupCategory 用户组 ↔ 可投稿栏目 的授权关系（多对多）。
+//
+// 与 model.ArchiveCategory 同构：唯一键保证同一对关系不会重复，删除用户组/
+// 栏目时按 group_id / category_id 清理。
+type UserGroupCategory struct {
+	Id         uint `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	GroupId    uint `json:"group_id" gorm:"column:group_id;type:int(10) unsigned not null;default:0;uniqueIndex:uk_group_category,priority:1"`
+	CategoryId uint `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;uniqueIndex:uk_group_category,priority:2;index:idx_category_id"`
 }
 
 type LoginLog struct {

@@ -37,6 +37,7 @@ import (
 	"time"
 
 	"github.com/kataras/iris/v12"
+	"kandaoni.com/anqicms"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/pkg/ai/eino"
@@ -81,7 +82,7 @@ func main() {
 	provider.SetI18n(app.I18n)
 	// route.Register 现为单参数签名（bootstrap.go:105 同款）；后台静态资源
 	// 由 route/manage.go 的 system.HandleDir 从磁盘读取，不再需要 embed FS。
-	route.Register(app)
+	route.Register(app, anqicms.SystemFiles)
 	if err := app.Build(); err != nil {
 		logger.Fatalf("路由 Build 失败: %v", err)
 	}
@@ -345,7 +346,7 @@ func main() {
 	var before int64
 	db.Raw("SELECT COUNT(*) FROM keywords WHERE title = ?", testKeyword).Scan(&before)
 
-	if _, wErr := k.Execute(ctx, "seo_keyword", fmt.Sprintf(`{"action":"create","title":%q,"link":"/__mcp_test__"}`, testKeyword)); wErr != nil {
+	if _, wErr := k.Execute(ctx, "seo_keyword", fmt.Sprintf(`{"action":"create","title":%q}`, testKeyword)); wErr != nil {
 		logger.Printf("  ✘ seo_keyword create 失败: %v", wErr)
 	} else {
 		// 直接用 DB 定位 id（不依赖 list 返回结构，更稳），再通过意图发起删除，保证可逆。

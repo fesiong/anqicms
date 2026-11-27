@@ -13,8 +13,10 @@ import setting from './zh-CN/setting';
 import statistic from './zh-CN/statistic';
 import tool from './zh-CN/tool';
 import website from './zh-CN/website';
+import video from './zh-CN/video';
+import { brandizeMessages } from '../oem/brandize';
 
-export default {
+export default brandizeMessages({
   'site.title': '安企CMS',
   ...pages,
   ...menu,
@@ -24,6 +26,7 @@ export default {
   ...dashboard,
   ...tool,
   ...website,
+  ...video,
   ...account,
   ...ai,
   ...statistic,
@@ -31,4 +34,4 @@ export default {
   ...content,
   ...plugin,
   ...common,
-};
+});

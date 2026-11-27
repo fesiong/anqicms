@@ -440,10 +440,18 @@ func (w *Website) GetCouponCodeById(id int64) (*model.CouponCode, error) {
 	return &couponCode, nil
 }
 
-func (w *Website) UseCouponCode(couponCode *model.CouponCode) error {
+// UseCouponCode 标记优惠券已使用。
+//
+// tx 传下单事务：优惠券核销必须和订单同生共死，否则订单回滚了券却被吃掉。
+func (w *Website) UseCouponCode(tx *gorm.DB, couponCode *model.CouponCode) error {
 	couponCode.UseTime = time.Now().Unix()
 	couponCode.Status = 2
-	_ = w.DB.Save(couponCode).Error
+	if tx == nil {
+		tx = w.DB
+	}
+	if err := tx.Save(couponCode).Error; err != nil {
+		return err
+	}
 	_ = w.ShopCountLog.Write(&request.LogStatisticRequest{Action: request.LogActionOrder, Type: request.LogTypeCouponUse, Id: couponCode.Id})
 
 	return nil

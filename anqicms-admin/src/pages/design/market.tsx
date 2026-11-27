@@ -1,5 +1,6 @@
 import NewContainer from '@/components/NewContainer';
 import { anqiDownloadTemplate } from '@/services';
+import { brand } from '@/oem/brand';
 import { history, useIntl, useModel } from '@umijs/max';
 import { Card, message } from 'antd';
 import React, { useEffect, useRef, useState } from 'react';
@@ -11,6 +12,15 @@ const DesignMarket: React.FC = () => {
   const [height, setHeight] = useState(0);
   const [newKey, setNewKey] = useState<string>('');
   const intl = useIntl();
+
+  // 设计市场是官方模板市场的入口，页面用 iframe 嵌入 anqicms.com。
+  // OEM 品牌不应露出官方市场，路由虽保留（hideInMenu 已隐藏菜单），
+  // 但直接敲 URL 进来也要拦回去，避免泄漏官方品牌。
+  useEffect(() => {
+    if (!brand.official) {
+      history.replace('/design/index');
+    }
+  }, []);
 
   const receiveDownload = (e: any) => {
     const data = e.data || {};

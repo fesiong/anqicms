@@ -3,6 +3,7 @@ export * from './aigenerate';
 export * from './akismet';
 export * from './anchor';
 export * from './backup';
+export * from './channels';
 export * from './comment';
 export * from './commission';
 export * from './communication';

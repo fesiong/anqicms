@@ -139,6 +139,10 @@ type OrderRefund struct {
 	ErrorTimes  int    `json:"error_times" gorm:"column:error_times;type:int(10) not null;default:0"` // 执行错误次数
 	LastTime    int64  `json:"last_time" gorm:"column:last_time;type:bigint(20) not null;default:0"`  // 上次执行时间
 	Remark      string `json:"remark" gorm:"column:remark;type:varchar(255) default null"`            //备注
+	// TerraceId 网关侧的退款单号（PayPal 的 /v2/payments/refunds/{refund_id}）。
+	// PayPal 退款可能是 PENDING，只有拿到这个 id 才能回查「最终退了没有」；
+	// 留空表示还没向网关发起，或网关没有返回退款单号。
+	TerraceId string `json:"terrace_id" gorm:"column:terrace_id;type:varchar(64) not null;default:''"`
 }
 
 func (o *OrderRefund) AfterCreate(tx *gorm.DB) (err error) {
@@ -169,6 +173,10 @@ type Payment struct {
 	Remark           string `json:"remark" gorm:"column:remark;type:varchar(255) default null"`                          //备注
 	BuyerId          string `json:"buyer_id" gorm:"column:buyer_id;type:varchar(64) not null;default:''"`                //用户标识
 	BuyerInfo        string `json:"buyer_info" gorm:"column:buyer_info;type:varchar(255) not null;default:''"`           //买家信息，PayPal有返回
+	// CaptureId 网关侧的「扣款凭证」id。PayPal 的 terrace_id 存的是下单时的 order id，
+	// 而退款接口 /v2/payments/captures/{capture_id}/refund 只认 capture id——
+	// 拿 order id 去退会得到 "The specified resource does not exist"。
+	CaptureId string `json:"capture_id" gorm:"column:capture_id;type:varchar(64) not null;default:''"`
 }
 
 func (p *Payment) AfterCreate(tx *gorm.DB) (err error) {

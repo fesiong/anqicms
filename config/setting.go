@@ -32,28 +32,29 @@ type SystemConfig struct {
 }
 
 type ContentConfig struct {
-	RemoteDownload   int      `json:"remote_download"`       // 下载远程图片：0=否，1=是
-	FilterOutlink    int      `json:"filter_outlink"`        // 外部链接处理：0=保留链接，1=移除链接，2=添加 Nofollow
-	UrlTokenType     int      `json:"url_token_type"`        // URL 别名生成格式：0=全拼音/单词，1=拼音/单词首字母
-	UseWebp          int      `json:"use_webp"`              // 是否启用webp格式：0=否，1=是
-	MatchTag         int      `json:"match_tag"`             // 是否在文章创建时，自动匹配标签：0=否，1=是
-	ConvertGif       int      `json:"convert_gif"`           // 在转换成webp的时候，是否转换gif：0=否，1=是
-	Quality          int      `json:"quality"`               // 图片质量：10-100
-	ResizeImage      int      `json:"resize_image"`          // 是否启用大图片压缩：0=否，1=是
-	ResizeWidth      int      `json:"resize_width"`          // 图片压缩宽度：默认1200
-	ThumbCrop        int      `json:"thumb_crop"`            // 缩略图裁剪方式：0 = 按最长边等比缩放, 1 = 按最长边补白，2 = 按最短边裁剪
-	ThumbWidth       int      `json:"thumb_width"`           // 缩略图宽度：默认250
-	ThumbHeight      int      `json:"thumb_height"`          // 缩略图高度：默认250
-	DefaultThumbType int      `json:"default_thumb_type"`    // 如果文档没有缩略图，则可以使用默认缩略图：0 = 从选定的图片中随机选择, 3 = 从指定图片分类中随机选择
-	DefaultThumb     string   `json:"default_thumb" ast:"-"` // 默认缩略图
-	DefaultThumbs    []string `json:"default_thumbs"`        // 默认缩略图列表
-	ThumbCategoryId  int      `json:"thumb_category_id"`     // 默认缩略图分类ID
-	MultiCategory    int      `json:"multi_category"`        // 是否启用多分类支持：0=否，1=是
-	Editor           string   `json:"editor"`                // 使用的editor，默认为空，支持 空值|default=富文本编辑器，markdown=Markdown编辑器，simple=简易编辑器
-	UseSort          int      `json:"use_sort"`              // 启用文档排序：0=否，1=是
-	ImgAltAuto       int      `json:"img_alt_auto"`          // 图片Alt优化：保存文档时为正文里没有 alt 的图片自动填充文档标题（已有 alt 的不覆盖）：0=否，1=是
-	MaxPage          int      `json:"max_page"`              // 最大显示页码：默认1000
-	MaxLimit         int      `json:"max_limit"`             // 每页最大显示条数：默认100
+	RemoteDownload   int                   `json:"remote_download"`       // 下载远程图片：0=否，1=是
+	FilterOutlink    int                   `json:"filter_outlink"`        // 外部链接处理：0=保留链接，1=移除链接，2=添加 Nofollow
+	UrlTokenType     int                   `json:"url_token_type"`        // URL 别名生成格式：0=全拼音/单词，1=拼音/单词首字母
+	UseWebp          int                   `json:"use_webp"`              // 是否启用webp格式：0=否，1=是
+	MatchTag         int                   `json:"match_tag"`             // 是否在文章创建时，自动匹配标签：0=否，1=是
+	ConvertGif       int                   `json:"convert_gif"`           // 在转换成webp的时候，是否转换gif：0=否，1=是
+	Quality          int                   `json:"quality"`               // 图片质量：10-100
+	ResizeImage      int                   `json:"resize_image"`          // 是否启用大图片压缩：0=否，1=是
+	ResizeWidth      int                   `json:"resize_width"`          // 图片压缩宽度：默认1200
+	ThumbCrop        int                   `json:"thumb_crop"`            // 缩略图裁剪方式：0 = 按最长边等比缩放, 1 = 按最长边补白，2 = 按最短边裁剪
+	ThumbWidth       int                   `json:"thumb_width"`           // 缩略图宽度：默认250
+	ThumbHeight      int                   `json:"thumb_height"`          // 缩略图高度：默认250
+	DefaultThumbType int                   `json:"default_thumb_type"`    // 如果文档没有缩略图，则可以使用默认缩略图：0 = 从选定的图片中随机选择, 3 = 从指定图片分类中随机选择
+	DefaultThumb     string                `json:"default_thumb" ast:"-"` // 默认缩略图
+	DefaultThumbs    []string              `json:"default_thumbs"`        // 默认缩略图列表
+	ThumbCategoryId  int                   `json:"thumb_category_id"`     // 默认缩略图分类ID
+	MultiCategory    int                   `json:"multi_category"`        // 是否启用多分类支持：0=否，1=是
+	Editor           string                `json:"editor"`                // 使用的editor，默认为空，支持 空值|default=富文本编辑器，markdown=Markdown编辑器，simple=简易编辑器
+	UseSort          int                   `json:"use_sort"`              // 启用文档排序：0=否，1=是
+	ImgAltAuto       int                   `json:"img_alt_auto"`          // 图片Alt优化：保存文档时为正文里没有 alt 的图片自动填充文档标题（已有 alt 的不覆盖）：0=否，1=是
+	MaxPage          int                   `json:"max_page"`              // 最大显示页码：默认1000
+	MaxLimit         int                   `json:"max_limit"`             // 每页最大显示条数：默认100
+	Video            VideoProcessingConfig `json:"video"`
 }
 
 type IndexConfig struct {

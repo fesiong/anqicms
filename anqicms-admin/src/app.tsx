@@ -1,4 +1,5 @@
 import Footer from '@/components/Footer';
+import { brand } from '@/oem/brand';
 import RightContent from '@/components/RightContent';
 import { LinkOutlined } from '@ant-design/icons';
 import type {
@@ -20,6 +21,7 @@ import {
   removeStore,
   setStore,
 } from './utils/store';
+import { normalizeListData } from './utils/listData';
 import {
   isShopMenuPath,
   isShopMode,
@@ -123,7 +125,7 @@ export const layout: RunTimeLayoutConfig = ({ initialState }) => {
     links: [
       <a
         key="anqicms"
-        href="https://www.anqicms.com/"
+        href={brand.website}
         target="_blank"
         rel="noreferrer"
       >
@@ -264,7 +266,10 @@ export const request: RuntimeConfig['request'] = {
   responseInterceptors: [
     [
       async function (response: any) {
-        const { data } = response;
+        const data = normalizeListData(response.data);
+        if (data !== response.data) {
+          response.data = data;
+        }
         if (data.code === 1001) {
           removeStore('adminToken');
           message.warning({

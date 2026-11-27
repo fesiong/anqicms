@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cloudwego/eino/schema"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/pkg/ai/eino"
 )
 
@@ -470,7 +471,7 @@ func endsWithPathSegment(haystack, suffix string) bool {
 func buildSubagentSystemPrompt(task *SubagentTask) string {
 	var sb strings.Builder
 
-	sb.WriteString("你是一个 AnQiCMS AI 子任务执行器。\n\n")
+	sb.WriteString("你是一个 " + config.Brand().Name + " AI 子任务执行器。\n\n")
 	sb.WriteString(fmt.Sprintf("## 子任务类型\n%s\n\n", task.Type))
 	sb.WriteString(fmt.Sprintf("## 任务描述\n%s\n\n", task.Description))
 

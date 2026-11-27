@@ -1,3 +1,4 @@
+import { brand } from '@/oem/brand';
 import {
   anqiRestart,
   checkVersion,
@@ -35,6 +36,24 @@ const ToolUpgradeForm: React.FC<any> = () => {
     getSetting();
   }, []);
 
+  // 重启是升级的必做步骤，不是可选项：
+  // 升级会在磁盘上把主程序 rename 成 xxx.old，而进程还跑在旧 inode 上。不重启就再点升级，
+  // 后端会把它当成备份程序拒绝（并提示先重启），否则就会把备份再备份成 xxx.old.old。
+  const restartNow = () => {
+    const hide = message.loading(
+      intl.formatMessage({ id: 'tool.restarting' }),
+      0,
+    );
+    anqiRestart({})
+      .catch(() => {})
+      .finally(() => {
+        setTimeout(() => {
+          hide();
+          window.location.reload();
+        }, 3000);
+      });
+  };
+
   const upgradeSubmit = async () => {
     if (loading) {
       return;
@@ -48,25 +67,25 @@ const ToolUpgradeForm: React.FC<any> = () => {
           0,
         );
         upgradeVersion({ version: newVersion.version })
-          .then((res) => {
+          .then((res: any) => {
+            // code !== 0 时后端并没有换掉主程序，此时提示"重启运行新版"是在骗人。
+            if (res?.code !== 0) {
+              Modal.error({
+                title: intl.formatMessage({ id: 'tool.upgrade-failed' }),
+                content: res?.msg,
+              });
+              getSetting();
+              return;
+            }
             Modal.info({
+              title: intl.formatMessage({ id: 'tool.upgrade-done' }),
               content: res.msg,
               okText: intl.formatMessage({ id: 'tool.confirm-restart' }),
-              onOk() {
-                const hide2 = message.loading(
-                  intl.formatMessage({ id: 'tool.restarting' }),
-                  0,
-                );
-                anqiRestart({})
-                  .then(() => {})
-                  .catch(() => {})
-                  .finally(() => {
-                    setTimeout(() => {
-                      hide2();
-                      window.location.reload();
-                    }, 3000);
-                  });
-              },
+              // 不允许绕开：ESC / 点遮罩 / 右上角关闭都会让用户停在旧进程上。
+              closable: false,
+              maskClosable: false,
+              keyboard: false,
+              onOk: restartNow,
             });
             getSetting();
           })
@@ -136,8 +155,8 @@ const ToolUpgradeForm: React.FC<any> = () => {
             ) : (
               <div>
                 <FormattedMessage id="tool.version.tips.before" />{' '}
-                <a href="https://www.anqicms.com/download" target={'_blank'}>
-                  https://www.anqicms.com/download
+                <a href={`${brand.website}/download`} target={'_blank'}>
+                  {`${brand.website}/download`}
                 </a>{' '}
                 <FormattedMessage id="tool.version.tips.after" />
               </div>

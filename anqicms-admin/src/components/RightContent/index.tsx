@@ -1,7 +1,16 @@
-import { anqiLogin, anqiRestart, checkAnqiInfo, getSiteInfo } from '@/services';
+import {
+  anqiLogin,
+  anqiRegister,
+  anqiRestart,
+  checkAnqiInfo,
+  getSiteInfo,
+} from '@/services';
+import { brand } from '@/oem/brand';
 import {
   GlobalOutlined,
   LockOutlined,
+  MailOutlined,
+  PhoneOutlined,
   QuestionCircleOutlined,
   UserOutlined,
 } from '@ant-design/icons';
@@ -16,6 +25,7 @@ import { Badge, Button, Modal, Space, Tag, Tooltip, message } from 'antd';
 import dayjs from 'dayjs';
 import React, { useEffect, useState } from 'react';
 import HeaderSearch from '../HeaderSearch';
+import VipPurchase from '../vipPurchase';
 import Avatar from './AvatarDropdown';
 import './index.less';
 
@@ -24,8 +34,10 @@ export type SiderTheme = 'light' | 'dark';
 const GlobalHeaderRight: React.FC = () => {
   const { initialState, setInitialState } = useModel('@@initialState');
   const [visible, setVisible] = useState<boolean>(false);
+  const [registerVisible, setRegisterVisible] = useState<boolean>(false);
   const [detailVisible, setDetailVisible] = useState<boolean>(false);
   const [orderVisible, setOrderVisible] = useState<boolean>(false);
+  const [integralVisible, setIntegralVisible] = useState<boolean>(false);
   const [code] = useState<number>(0);
   const [errorMsg] = useState<string>('');
   const [siteInfo, setSiteInfo] = useState<any>({});
@@ -53,6 +65,16 @@ const GlobalHeaderRight: React.FC = () => {
     className = `right  dark`;
   }
 
+  const refreshAnqiUser = async () => {
+    const user = await initialState.fetchAnqiUser?.();
+    if (user) {
+      await setInitialState((s) => ({
+        ...s,
+        anqiUser: user,
+      }));
+    }
+  };
+
   const handleSubmit = async (values: any) => {
     const res = await anqiLogin(values);
     if (res.code !== 0) {
@@ -64,13 +86,30 @@ const GlobalHeaderRight: React.FC = () => {
         intl.formatMessage({ id: 'component.right-content.login.success' }),
     );
     setVisible(false);
-    const user = await initialState.fetchAnqiUser?.();
-    if (user) {
-      await setInitialState((s) => ({
-        ...s,
-        anqiUser: user,
-      }));
+    await refreshAnqiUser();
+  };
+
+  // 注册在后台内完成：成功后后端已写入登录态，这里只需刷新前端账号信息。
+  const handleRegister = async (values: any) => {
+    if (!values.email && !values.phone) {
+      message.error(
+        intl.formatMessage({
+          id: 'component.right-content.register.contact.required',
+        }),
+      );
+      return;
     }
+    const res = await anqiRegister(values);
+    if (res.code !== 0) {
+      message.error(res.msg);
+      return;
+    }
+    message.success(
+      res.msg ||
+        intl.formatMessage({ id: 'component.right-content.register.success' }),
+    );
+    setRegisterVisible(false);
+    await refreshAnqiUser();
   };
 
   const showDetail = () => {
@@ -84,7 +123,6 @@ const GlobalHeaderRight: React.FC = () => {
 
   const handleOrderVip = () => {
     setOrderVisible(true);
-    window.open('https://www.anqicms.com/account/vip');
   };
 
   const reloadAccount = async () => {
@@ -162,7 +200,7 @@ const GlobalHeaderRight: React.FC = () => {
           style={{ fontSize: 18 }}
           className="action"
           onClick={() => {
-            window.open('https://www.anqicms.com/');
+            window.open(`${brand.website}`);
           }}
         >
           <QuestionCircleOutlined />
@@ -245,11 +283,127 @@ const GlobalHeaderRight: React.FC = () => {
             }}
           >
             <a
-              href="https://www.anqicms.com/register"
-              target={'_blank'}
-              rel="nofollow noreferrer"
+              onClick={() => {
+                setVisible(false);
+                setRegisterVisible(true);
+              }}
             >
               <FormattedMessage id="component.right-content.register" />
+            </a>
+          </div>
+        </LoginForm>
+      </Modal>
+      <Modal
+        open={registerVisible}
+        onCancel={() => {
+          setRegisterVisible(false);
+        }}
+        maskClosable={false}
+        footer={null}
+      >
+        <LoginForm
+          title={intl.formatMessage({
+            id: 'component.right-content.register.title',
+          })}
+          subTitle={
+            <div>
+              <FormattedMessage id="component.right-content.register.tips" />
+            </div>
+          }
+          submitter={{
+            searchConfig: {
+              submitText: intl.formatMessage({
+                id: 'component.right-content.register.submit',
+              }),
+            },
+          }}
+          onFinish={async (values) => {
+            await handleRegister(values);
+          }}
+        >
+          <ProFormText
+            name="user_name"
+            fieldProps={{
+              size: 'large',
+              prefix: <UserOutlined />,
+            }}
+            placeholder={intl.formatMessage({
+              id: 'component.right-content.username',
+            })}
+            rules={[
+              {
+                required: true,
+                message: intl.formatMessage({
+                  id: 'component.right-content.username.required',
+                }),
+              },
+            ]}
+          />
+          <ProFormText.Password
+            name="password"
+            fieldProps={{
+              size: 'large',
+              prefix: <LockOutlined />,
+            }}
+            placeholder={intl.formatMessage({
+              id: 'component.right-content.password',
+            })}
+            rules={[
+              {
+                required: true,
+                message: intl.formatMessage({
+                  id: 'component.right-content.password.required',
+                }),
+              },
+              {
+                min: 6,
+                message: intl.formatMessage({
+                  id: 'component.right-content.register.password.min',
+                }),
+              },
+            ]}
+          />
+          <ProFormText
+            name="email"
+            fieldProps={{
+              size: 'large',
+              prefix: <MailOutlined />,
+            }}
+            placeholder={intl.formatMessage({
+              id: 'component.right-content.register.email',
+            })}
+            rules={[
+              {
+                type: 'email',
+                message: intl.formatMessage({
+                  id: 'component.right-content.register.email.invalid',
+                }),
+              },
+            ]}
+          />
+          <ProFormText
+            name="phone"
+            fieldProps={{
+              size: 'large',
+              prefix: <PhoneOutlined />,
+            }}
+            placeholder={intl.formatMessage({
+              id: 'component.right-content.register.phone',
+            })}
+          />
+          <div
+            style={{
+              paddingBottom: 24,
+              textAlign: 'right',
+            }}
+          >
+            <a
+              onClick={() => {
+                setRegisterVisible(false);
+                setVisible(true);
+              }}
+            >
+              <FormattedMessage id="component.right-content.register.back" />
             </a>
           </div>
         </LoginForm>
@@ -290,78 +444,6 @@ const GlobalHeaderRight: React.FC = () => {
                 intl.formatMessage({ id: 'component.right-content.friend' })}
               <FormattedMessage id="component.right-content.welcome" />
             </p>
-            <div className="account-info">
-              <div className="item">
-                <label>
-                  <FormattedMessage id="component.right-content.auth-id" />
-                </label>
-                <div>{anqiUser.auth_id}</div>
-              </div>
-              <div className="item">
-                <label>
-                  <FormattedMessage id="component.right-content.account-name" />
-                </label>
-                <div>{anqiUser.user_name}</div>
-              </div>
-              <div className="item">
-                <label>
-                  <FormattedMessage id="component.right-content.expire-time" />
-                </label>
-                <Space>
-                  <span>
-                    {dayjs(anqiUser.expire_time * 1000).format('YYYY-MM-DD')}
-                  </span>
-                  {anqiUser.valid === false && (
-                    <Tag color="red">
-                      {intl.formatMessage({
-                        id: 'component.right-content.invalid',
-                      })}
-                    </Tag>
-                  )}
-                </Space>
-              </div>
-              <div className="item">
-                <label>
-                  <FormattedMessage id="component.right-content.integral" />
-                </label>
-                <div>{anqiUser.integral}</div>
-              </div>
-              <div className="item">
-                <label>
-                  <FormattedMessage id="component.right-content.free-token" />
-                </label>
-                <Space direction="vertical">
-                  <div>{anqiUser.free_token}</div>
-                  <div className="text-muted">
-                    <FormattedMessage id="component.right-content.free_token.description" />
-                  </div>
-                </Space>
-              </div>
-              <div className="item">
-                <label>
-                  <FormattedMessage id="component.right-content.total-token" />
-                </label>
-                <Space direction="vertical">
-                  <div>{anqiUser.total_token}</div>
-                  <div className="text-muted">
-                    <FormattedMessage id="component.right-content.total-token.description" />
-                  </div>
-                </Space>
-              </div>
-              <div className="item">
-                <label>
-                  <FormattedMessage id="component.right-content.un-pay-token" />
-                </label>
-                <Space>
-                  <span>{anqiUser.un_pay_token}</span>
-                  {anqiUser.is_owe_fee === 1 && (
-                    <Tag color="red">
-                      <FormattedMessage id="component.right-content.is-owe-fee" />
-                    </Tag>
-                  )}
-                </Space>
-              </div>
-            </div>
           </div>
         ) : (
           <div>
@@ -369,25 +451,8 @@ const GlobalHeaderRight: React.FC = () => {
               <FormattedMessage id="component.right-content.vip-tips" />
             </p>
             <p>
-              <span className="optional">*</span>
-              <FormattedMessage id="component.right-content.download-prefix" />
-              <a
-                href="https://www.anqicms.com/anqibox.html"
-                target="_blank"
-                rel="noreferrer"
-              >
-                <FormattedMessage id="component.right-content.download-name" />
-              </a>
-            </p>
-            <p>
               <FormattedMessage id="component.right-content.vip-prefix" />
-              <a
-                href="https://www.anqicms.com/account/vip"
-                target="_blank"
-                rel="noreferrer"
-              >
-                <FormattedMessage id="component.right-content.vip-name" />
-              </a>
+              <FormattedMessage id="component.right-content.vip-name" />
               <FormattedMessage id="component.right-content.vip-suffix" />
             </p>
           </div>
@@ -431,7 +496,19 @@ const GlobalHeaderRight: React.FC = () => {
               <label>
                 <FormattedMessage id="component.right-content.integral" />
               </label>
-              <div>{anqiUser.integral}</div>
+              <div>
+                <Space>
+                  <span>{anqiUser.integral}</span>
+                  <Button
+                    type="link"
+                    size="small"
+                    style={{ padding: 0 }}
+                    onClick={() => setIntegralVisible(true)}
+                  >
+                    <FormattedMessage id="component.right-content.integral.recharge" />
+                  </Button>
+                </Space>
+              </div>
             </div>
             <div className="item">
               <label>
@@ -450,9 +527,6 @@ const GlobalHeaderRight: React.FC = () => {
               </label>
               <Space direction="vertical">
                 <div>{anqiUser.total_token}</div>
-                <div className="text-muted">
-                  <FormattedMessage id="component.right-content.total-token.description" />
-                </div>
               </Space>
             </div>
             <div className="item">
@@ -491,21 +565,44 @@ const GlobalHeaderRight: React.FC = () => {
           setOrderVisible(false);
         }}
         title={intl.formatMessage({
-          id: 'component.right-content.order.confirm',
+          id: 'component.right-content.vip.modal.title',
         })}
         maskClosable={false}
         footer={null}
+        width={520}
       >
-        <div className="order-control">
-          <Space align="center">
-            <Button onClick={reloadAccount}>
-              <FormattedMessage id="component.close" />
-            </Button>
-            <Button type="primary" onClick={reloadAccount}>
-              <FormattedMessage id="component.right-content.update" />
-            </Button>
-          </Space>
-        </div>
+        {/* 关闭即卸载，购买状态自然重置；打开时重新拉最新套餐 */}
+        {orderVisible && (
+          <VipPurchase
+            onClose={async () => {
+              setOrderVisible(false);
+              await reloadAccount();
+            }}
+          />
+        )}
+      </Modal>
+      <Modal
+        open={integralVisible}
+        onCancel={() => {
+          setIntegralVisible(false);
+        }}
+        title={intl.formatMessage({
+          id: 'component.right-content.integral.modal.title',
+        })}
+        maskClosable={false}
+        footer={null}
+        width={520}
+      >
+        {/* 与 VIP 共用一个面板，只是 type 不同：数量可填、金额按份累计 */}
+        {integralVisible && (
+          <VipPurchase
+            type="integral"
+            onClose={async () => {
+              setIntegralVisible(false);
+              await reloadAccount();
+            }}
+          />
+        )}
       </Modal>
     </>
   );
