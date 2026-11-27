@@ -1037,7 +1037,6 @@ func (w *Website) SuccessPaidOrder(order *model.Order, payment *model.Payment) e
 			w.DB.Model(communicationOrder).UpdateColumn("status", config.CommunicationStatusFinished)
 		}
 	}
-	w.SendPayOrderEmail(user, order)
 
 	if w.PluginOrder.NoProcess || order.Type == config.OrderTypeVip {
 		// 如果订单自动完成，则在这里处理
