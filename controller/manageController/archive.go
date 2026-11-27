@@ -252,6 +252,9 @@ func ArchiveList(ctx iris.Context) {
 		}
 	}
 
+	// 空结果必须返回 []，否则前端会因 data:null 抛错并保留旧 total。
+	archives = ensureNonNilArchives(archives)
+
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
 		"msg":   "",
@@ -1324,4 +1327,16 @@ func ArchiveFillImgAlt(ctx iris.Context) {
 			"imgs": imgs,
 		},
 	})
+}
+
+// ensureNonNilArchives 保证空结果序列化为 [] 而不是 null。
+//
+// 前端 ProTable 在 total=0 且 data=null 时会求值 null.length，
+// 抛 "Cannot read properties of null (reading 'length')"，
+// 并且 total 不会从上一页的值更新为 0。
+func ensureNonNilArchives(list []*model.ArchiveDraft) []*model.ArchiveDraft {
+	if list == nil {
+		return make([]*model.ArchiveDraft, 0)
+	}
+	return list
 }

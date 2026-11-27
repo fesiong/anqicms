@@ -21,6 +21,7 @@ import {
   removeStore,
   setStore,
 } from './utils/store';
+import { normalizeListData } from './utils/listData';
 import {
   isShopMenuPath,
   isShopMode,
@@ -265,7 +266,10 @@ export const request: RuntimeConfig['request'] = {
   responseInterceptors: [
     [
       async function (response: any) {
-        const { data } = response;
+        const data = normalizeListData(response.data);
+        if (data !== response.data) {
+          response.data = data;
+        }
         if (data.code === 1001) {
           removeStore('adminToken');
           message.warning({
