@@ -50,9 +50,12 @@ func ApiRegister(ctx iris.Context) {
 		req.UserName = strings.Split(req.Email, "@")[0]
 	}
 	// R90：传了 phone 就必须先按 §6.2 六道闸门归一化校验（含 ITU 区号成员），
-	// 拒绝伪造区号；成功后回填已校验的区号/号码并置内部标记 PhoneNormalized，
-	// 再强制校验 register 场景短信码，失败整单拒。code 为空也不得旁路（空码
-	// 会在 HMAC 比对处落错码错误）。不传 phone 时整段不进入，行为与 BASE 逐字一致。
+	// 拒绝伪造区号；成功后回填已校验的区号/号码并置内部标记 PhoneNormalized。
+	// 短信渠道已开启（Provider 非空）时再强制校验 register 场景码，失败整单拒；
+	// code 为空也不得旁路（空码会在 HMAC 比对处落错码错误）。后台未开启短信
+	// （PluginSms 为 nil 或 Provider 为空）时没有发码/验码链路，只跳过短信码校验，
+	// 归一化照常执行、注册继续往下走，否则用户永远收不到码、注册无法完成。
+	// 不传 phone 时整段不进入，行为与 BASE 逐字一致。
 	if req.Phone != "" {
 		p, e := sms.NormalizePhone(req.PhoneCountry, req.Phone)
 		if e != nil {
@@ -62,9 +65,11 @@ func ApiRegister(ctx iris.Context) {
 		req.PhoneCountry = p.Country
 		req.Phone = p.Local
 		req.PhoneNormalized = true
-		if e = currentSite.VerifySmsCode(p.Country, p.Local, sms.SceneRegister, req.Code); e != nil {
-			respondSmsError(ctx, currentSite, e)
-			return
+		if currentSite.PluginSms != nil && currentSite.PluginSms.Provider != "" {
+			if e = currentSite.VerifySmsCode(p.Country, p.Local, sms.SceneRegister, req.Code); e != nil {
+				respondSmsError(ctx, currentSite, e)
+				return
+			}
 		}
 	}
 	user, err := currentSite.RegisterUser(&req)

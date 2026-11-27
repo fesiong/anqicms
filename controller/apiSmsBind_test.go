@@ -25,7 +25,9 @@ func s11Require(src string, patterns ...string) error {
 }
 
 // s11CheckRegisterForcesSmsCode（R90 ②）：传 phone 时先归一化、回填、
-// 置 PhoneNormalized=true，并强制校验 register 场景码；code == "" 不得旁路。
+// 置 PhoneNormalized=true；短信渠道开启时强制校验 register 场景码，
+// code == "" 不得旁路（后台未开启短信时跳过验码由
+// TestApiRegisterSkipsSmsCodeWhenSmsDisabled 单独护栏，不在此处放行）。
 func s11CheckRegisterForcesSmsCode(src string) error {
 	if err := s11Require(src,
 		`if\s+req\.Phone\s*!=\s*""`,
