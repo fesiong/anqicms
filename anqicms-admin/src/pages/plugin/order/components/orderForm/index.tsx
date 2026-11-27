@@ -16,6 +16,7 @@ import { FormattedMessage, useIntl } from '@umijs/max';
 import { AutoComplete, Divider, Image, Modal, Space, message } from 'antd';
 import dayjs from 'dayjs';
 import React, { useEffect, useState } from 'react';
+import { orderLogisticsFields } from './logistics';
 import './index.less';
 
 export type OrderFormProps = {
@@ -248,6 +249,15 @@ const OrderForm: React.FC<OrderFormProps> = (props) => {
               ? dayjs(order.deliver_time * 1000).format('YYYY-MM-DD HH:mm:ss')
               : '-'}
           </ProFormText>
+          {orderLogisticsFields(order).map((field) => (
+            <ProFormText
+              key={field.labelKey}
+              label={intl.formatMessage({ id: field.labelKey })}
+              readonly
+            >
+              {field.value}
+            </ProFormText>
+          ))}
           <ProFormText
             label={intl.formatMessage({ id: 'plugin.order.finished-time' })}
             readonly
