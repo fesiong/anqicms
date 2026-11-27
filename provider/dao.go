@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	"gorm.io/gorm/schema"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
@@ -270,6 +273,13 @@ func AutoMigrateDB(db *gorm.DB, force bool) error {
 		//自动迁移数据库
 		err := db.Set("gorm:table_options", "DEFAULT CHARSET=utf8mb4").AutoMigrate(models...)
 
+		// 1061「Duplicate key name」在目标唯一索引已被建好时是"意图已达成"，
+		// 不该让整站迁移失败并留下半初始化站点。详见 isBenignDuplicateUniqueIndex。
+		if isBenignDuplicateUniqueIndex(db, models, err) {
+			log.Printf("唯一索引已存在，忽略重复创建：%v", err)
+			err = nil
+		}
+
 		if err != nil {
 			log.Println("migrate table error ", err)
 			return err
@@ -340,6 +350,78 @@ func AutoMigrateDB(db *gorm.DB, force bool) error {
 	}
 
 	return nil
+}
+
+var duplicateKeyNameRe = regexp.MustCompile(`Duplicate key name '([^']+)'`)
+
+// duplicateKeyName 从 MySQL 1061 报错里取出索引名；不是 1061 返回空串。
+func duplicateKeyName(err error) string {
+	if err == nil {
+		return ""
+	}
+	m := duplicateKeyNameRe.FindStringSubmatch(err.Error())
+	if len(m) != 2 {
+		return ""
+	}
+	return m[1]
+}
+
+// expectedUniqueColumnForName 判断报错里的索引名是否为某模型 unique 字段的期望约束名
+// （gorm 命名策略：uni_<表名>_<列名>）。纯计算，不查库，便于反向对照测试。
+func expectedUniqueColumnForName(namer schema.Namer, models []interface{}, name string) (interface{}, string, bool) {
+	if name == "" {
+		return nil, "", false
+	}
+	var cache sync.Map
+	for _, m := range models {
+		s, err := schema.ParseWithSpecialTableName(m, &cache, namer, "")
+		if err != nil || s == nil {
+			continue
+		}
+		for _, f := range s.Fields {
+			if !f.Unique || f.PrimaryKey {
+				continue
+			}
+			if namer.UniqueName(s.Table, f.DBName) == name {
+				return m, f.DBName, true
+			}
+		}
+	}
+	return nil, "", false
+}
+
+// isBenignDuplicateUniqueIndex 判断 AutoMigrate 抛出的 1061 是否只是「目标唯一索引已存在」。
+//
+// gorm.io/driver/mysql v1.6.0 的 MigrateColumnUnique 在
+// information_schema.columns.COLUMN_KEY 不报 UNI 时会走没有 HasConstraint 保护的分支，
+// 直接 ADD CONSTRAINT。多站点并发迁移或元数据滞后时，同名索引可能已被另一连接建好，
+// 这时报 1061 但目标其实已达成。放行前必须同时确认：名字是某个 unique 字段的期望约束名，
+// 且库里该索引确实唯一、且只覆盖该列 —— 避免把真正的索引冲突误吞掉。
+func isBenignDuplicateUniqueIndex(db *gorm.DB, models []interface{}, err error) bool {
+	name := duplicateKeyName(err)
+	if name == "" || db == nil {
+		return false
+	}
+	m, column, ok := expectedUniqueColumnForName(db.NamingStrategy, models, name)
+	if !ok {
+		return false
+	}
+	indexes, ierr := db.Migrator().GetIndexes(m)
+	if ierr != nil {
+		return false
+	}
+	for _, idx := range indexes {
+		if idx.Name() != name {
+			continue
+		}
+		unique, ok := idx.Unique()
+		if !ok || !unique {
+			return false
+		}
+		cols := idx.Columns()
+		return len(cols) == 1 && cols[0] == column
+	}
+	return false
 }
 
 func (w *Website) InitModelData() {
