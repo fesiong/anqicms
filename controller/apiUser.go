@@ -82,19 +82,11 @@ func ApiRegister(ctx iris.Context) {
 	}
 
 	if user.EmailVerified == false {
-		//提示验证
+		// 提示验证，并且不登录。
+		// 验证邮件已由 RegisterUser 发给用户；这里不能再发一次给管理员，
+		// 否则注册记录里会多出一封与用户无关的“请验证邮箱”。
 		template, exist := currentSite.GetEmailTemplateInfo("register")
 		if exist && template.Open {
-			// 提示正在验证, 并且不登录
-			data := map[string]interface{}{
-				"website": currentSite,
-				"user":    user,
-			}
-			var err error
-			template, err = currentSite.RenderEmailTemplate(template, data)
-			if err == nil {
-				currentSite.SendMail(template.Subject, template.Content, nil)
-			}
 			ctx.JSON(iris.Map{
 				"code": config.StatusOK,
 				"msg":  ctx.Tr("PleaseVerifyEmail"),
