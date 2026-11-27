@@ -11,6 +11,7 @@ import (
 
 const PlaceApi = "https://places.anqicms.com/v1"
 
+// ApiPlaceCountries 获取国家列表，供前台地址级联与后台运费设置使用。
 func ApiPlaceCountries(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	resp, err := library.GetURLData(PlaceApi+"/countries", currentSite.System.BaseUrl, 10)
@@ -32,6 +33,11 @@ func ApiPlaceCountries(ctx iris.Context) {
 	})
 }
 
+// ApiPlaceCountryStates 按国家获取州/省列表。
+//
+// 参数说明：
+//   - 查询参数 "country_code": 国家 ISO2 代码，例如 CN。
+//   - 查询参数 "country_name": 国家名称；与 country_code 至少传一个。
 func ApiPlaceCountryStates(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	countryCode := ctx.URLParam("country_code")
@@ -68,6 +74,13 @@ func ApiPlaceCountryStates(ctx iris.Context) {
 	})
 }
 
+// ApiPlaceCountryCities 按国家/州获取城市列表。
+//
+// 参数说明：
+//   - 查询参数 "country_code": 国家 ISO2 代码，例如 CN。
+//   - 查询参数 "state_code": 州/省代码，可选。
+//   - 查询参数 "country_name": 国家名称；与 country_code 至少传一个。
+//   - 查询参数 "state_name": 州/省名称，可选。
 func ApiPlaceCountryCities(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	countryCode := ctx.URLParam("country_code")

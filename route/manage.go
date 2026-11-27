@@ -4,6 +4,7 @@ import (
 	"embed"
 
 	"github.com/kataras/iris/v12"
+	"kandaoni.com/anqicms/controller"
 	"kandaoni.com/anqicms/controller/manageController"
 	"kandaoni.com/anqicms/middleware"
 )
@@ -728,6 +729,11 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 				place.Get("/detail", manageController.PlaceDetail)
 				place.Post("/detail", manageController.PlaceDetailForm)
 				place.Post("/delete", manageController.PlaceDelete)
+				// 后台运费设置的国家/州/城市级联。这三个 handler 同时服务前台
+				// /api/place/*，后台过去没有注册同路径，导致 PlaceCascader 404。
+				place.Get("/countries", controller.ApiPlaceCountries)
+				place.Get("/country/states", controller.ApiPlaceCountryStates)
+				place.Get("/country/cities", controller.ApiPlaceCountryCities)
 			}
 
 			shipping := plugin.Party("/shipping")

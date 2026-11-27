@@ -1,6 +1,8 @@
 package manageController
 
 import (
+	"strings"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
@@ -26,6 +28,13 @@ func PluginSaveShippingSetting(ctx iris.Context) {
 	if !readJSONPayload(ctx, &req) {
 		return
 	}
+	if shippingDeliveryPlaceMissing(&req) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("PleaseSelectTheDeliveryPlace"),
+		})
+		return
+	}
 
 	currentSite.Shipping.Units = req.Units
 	currentSite.Shipping.VolumetricDivisor = req.VolumetricDivisor
@@ -49,4 +58,13 @@ func PluginSaveShippingSetting(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("SaveSuccessfully"),
 	})
+}
+
+// shippingDeliveryPlaceMissing 判断自定义运费是否缺少发货地。
+// 包邮时发货地不参与运费计算，允许为空；自定义运费必须选择国家/地区。
+func shippingDeliveryPlaceMissing(cfg *config.ShippingConfig) bool {
+	if cfg == nil || cfg.IsFreeShipping {
+		return false
+	}
+	return strings.TrimSpace(cfg.DeliveryPlace.CountryCode) == ""
 }

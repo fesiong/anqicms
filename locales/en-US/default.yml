@@ -651,6 +651,7 @@
 "PaymentTime:": "Payment time:"
 "PayingMemberId:": "Paying member ID:"
 "PleaseSelectTheProduct": "Please select the product"
+"PleaseSelectTheDeliveryPlace": "Please select the delivery place"
 "InvalidQuantity": "Quantity must be greater than 0"
 "CrossStoreOrderingIsNotSupported": "Cross-store ordering is not supported"
 "Wait": "etc."
