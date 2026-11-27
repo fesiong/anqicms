@@ -184,7 +184,7 @@ func (w *Website) GetSubscriber(id int64) (*model.Subscriber, error) {
 
 func (w *Website) GetSubscriberByEmail(email string) (*model.Subscriber, error) {
 	var subscriber model.Subscriber
-	err := w.DB.Where("email = ?", email).First(&subscriber).Error
+	err := w.DB.Where("email = ?", normalizeEmail(email)).First(&subscriber).Error
 	if err != nil {
 		return nil, err
 	}
@@ -205,6 +205,7 @@ func (w *Website) DeleteSubscriber(subscriber *model.Subscriber) error {
 
 func (w *Website) SaveSubscriber(req *request.SubscriberRequest) (*model.Subscriber, error) {
 	var err error
+	req.Email = normalizeEmail(req.Email)
 	var subscriber = &model.Subscriber{}
 	if req.Id > 0 {
 		subscriber, err = w.GetSubscriber(req.Id)
@@ -339,6 +340,7 @@ func (w *Website) SendSubscriberMail(req *request.SubscriberMailRequest) string 
 	} else if len(req.Emails) > 0 {
 		result := newSendMailResult("email", len(req.Emails))
 		for _, email := range req.Emails {
+			email = normalizeEmail(email)
 			subscriber, _ := w.GetSubscriberByEmail(email)
 			if subscriber == nil {
 				subscriber = &model.Subscriber{

@@ -86,9 +86,15 @@ func (w *Website) GetUserInfoByUserName(userName string) (*model.User, error) {
 	})
 }
 
+// normalizeEmail 统一邮箱的存储与查重口径：去首尾空格 + 转小写。
+// 邮箱本身大小写不敏感；不归一化会让 " A@x.com " 与 "a@x.com" 落成两个账号。
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
 func (w *Website) GetUserInfoByEmail(email string) (*model.User, error) {
 	return w.GetUserByFunc(func(tx *gorm.DB) *gorm.DB {
-		return tx.Where("`email` = ?", email)
+		return tx.Where("`email` = ?", normalizeEmail(email))
 	})
 }
 
@@ -618,6 +624,8 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 	if len(req.Password) < 6 {
 		return nil, errors.New(w.Tr("PleaseEnterAPasswordOfMoreThan6Digits"))
 	}
+	// 邮箱查重与落库统一口径：去空格 + 小写，避免同一邮箱的不同写法绕过唯一性。
+	req.Email = normalizeEmail(req.Email)
 	template, tplExist := w.GetEmailTemplateInfo("register")
 	exist, err := w.GetUserInfoByUserName(req.UserName)
 	if err == nil {
@@ -937,7 +945,8 @@ func (w *Website) LoginViaGoogle(req *request.ApiLoginRequest) (*model.User, err
 		log.Println(err)
 		return nil, err
 	}
-	// 直接对接 users 表的 email
+	// 直接对接 users 表的 email；与注册共用同一套归一化口径。
+	googleUser.Email = normalizeEmail(googleUser.Email)
 	user, err := w.GetUserInfoByEmail(googleUser.Email)
 	if err != nil {
 		// 用户不存在，新建
@@ -1138,16 +1147,17 @@ func (w *Website) UpdateUserInfo(userId uint, req *request.UserRequest) error {
 		user.PhoneCountry = *req.PhoneCountry
 	}
 	if req.Email != nil {
-		if *req.Email != "" {
-			if !w.VerifyEmailFormat(*req.Email) {
+		email := normalizeEmail(*req.Email)
+		if email != "" {
+			if !w.VerifyEmailFormat(email) {
 				return errors.New(w.Tr("IncorrectEmail"))
 			}
-			exist, err := w.GetUserInfoByEmail(*req.Email)
+			exist, err := w.GetUserInfoByEmail(email)
 			if err == nil && exist.Id != user.Id {
 				return errors.New(w.Tr("TheEmailHasBeenRegistered"))
 			}
 		}
-		user.Email = *req.Email
+		user.Email = email
 	}
 	if req.UserName != "" {
 		user.UserName = req.UserName

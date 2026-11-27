@@ -1342,7 +1342,7 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		user = &model.User{}
 		if req.Address != nil {
 			user.UserName = req.Address.Name + " " + req.Address.LastName
-			user.Email = req.Address.Email
+			user.Email = normalizeEmail(req.Address.Email)
 			// 匿名下单的号码必须先归一化再用于「按手机号复用用户」与建号：
 			// 直接写回原始串会落出 phone_country='' 的重复账号（该账号既不能短信
 			// 登录，也进不了换绑流程），带分隔符/全角数字的输入还会查重查不到。
