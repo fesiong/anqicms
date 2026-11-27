@@ -134,6 +134,7 @@ func CommentPraise(ctx iris.Context) {
 		})
 		return
 	}
+	comment = provider.SanitizePublicComment(comment)
 	// 检查是否点赞过
 	_, err = currentSite.AddCommentPraise(uint(userId), int64(comment.Id), comment.ArchiveId)
 	if err != nil {

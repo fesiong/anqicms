@@ -500,6 +500,7 @@ func resolveComments(p graphql.ResolveParams) (interface{}, error) {
 	}
 
 	comments, total, _ := currentSite.GetCommentList(int64(itemId), uint(userId), order, page, limit, offset)
+	comments = provider.SanitizePublicComments(comments)
 
 	return iris.Map{
 		"items": comments,
@@ -532,6 +533,7 @@ func resolveReviews(p graphql.ResolveParams) (interface{}, error) {
 		}
 		return tx.Where("status = ?", 1)
 	}, order, page, limit, offset)
+	reviews = provider.SanitizePublicReviews(reviews)
 
 	return iris.Map{
 		"items": reviews,

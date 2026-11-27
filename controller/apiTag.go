@@ -487,6 +487,7 @@ func ApiCommentList(ctx iris.Context) {
 	}
 
 	commentList, total, _ := currentSite.GetCommentList(archiveId, userId, order, currentPage, limit, offset)
+	commentList = provider.SanitizePublicComments(commentList)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
@@ -1247,6 +1248,7 @@ func ApiCommentPraise(ctx iris.Context) {
 		})
 		return
 	}
+	comment = provider.SanitizePublicComment(comment)
 	// 检查是否点赞过
 	_, err = currentSite.AddCommentPraise(uint(userId), int64(comment.Id), comment.ArchiveId)
 	if err != nil {
@@ -1575,6 +1577,7 @@ func ApiReviewList(ctx iris.Context) {
 		}
 		return tx.Where("status = ?", 1)
 	}, order, currentPage, limit, offset)
+	reviewList = provider.SanitizePublicReviews(reviewList)
 
 	ctx.JSON(iris.Map{
 		"code":          config.StatusOK,

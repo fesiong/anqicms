@@ -1902,6 +1902,7 @@ func ApiReviewPraise(ctx iris.Context) {
 		})
 		return
 	}
+	review = provider.SanitizePublicReview(review)
 	// 检查是否点赞过
 	_, err = currentSite.AddReviewPraise(uint(userId), int64(review.Id), review.ArchiveId)
 	if err != nil {
