@@ -117,7 +117,7 @@ func startupPage(snap provider.StartupSnapshot) string {
 		current = `<p class="meta">当前：` + html.EscapeString(snap.Current) + `</p>`
 	}
 
-	hint := "本页每 10 秒自动刷新。已完成升级的站点不受影响，升级期间请勿重启服务。"
+	hint := "本页每 5 秒自动刷新。已完成升级的站点不受影响，升级期间请勿重启服务。"
 	if snap.Phase == provider.StartupPhaseFailed.String() {
 		hint = "请查看服务端日志（进程输出或 cache/error.log），修复后重启服务；已完成的站点不会重复迁移。"
 	}
@@ -127,7 +127,7 @@ func startupPage(snap provider.StartupSnapshot) string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="refresh" content="10">
+<meta http-equiv="refresh" content="5">
 <title>` + html.EscapeString(title) + ` · ` + brand + `</title>
 <style>
 *{box-sizing:border-box}
